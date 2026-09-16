@@ -203,7 +203,7 @@ definitions.
     },
     {
       "id": "n-01J8Z3M",
-      "type": "excerpt",
+      "type": "chunk",
       "position": { "x": 24, "y": 40 },
       "parentId": "n-01J8Z3K",
       "extent": "parent",
@@ -211,7 +211,7 @@ definitions.
       "data": {
         "tags": ["t-claim", "t-pass1"],
         "collapsed": false,
-        "anchor": { "...": "see section 5" },
+        "region": { "...": "see section 5.1, a chunk anchor" },
         "text": "Attention mechanisms have become an integral part ...",
         "user_sized": true
       }
@@ -243,18 +243,51 @@ definitions.
     {
       "id": "e-01J8Z3R",
       "source": "n-01J8Z3M",
+      "sourceHandle": "h-01J8Z3S",
       "target": "n-01J8Z3Q",
       "data": { "tags": ["t-supports"] }
+    }
+  ],
+  "highlights": [
+    {
+      "id": "h-01J8Z3S",
+      "tags": ["t-question"],
+      "note": null,
+      "anchor": { "...": "see section 5.1, a highlight anchor" }
     }
   ]
 }
 ```
 
+### 4.0 Chunks and highlights
+
+SPEC.md section 4 puts highlights on the paper and chunks on the board. In the file:
+
+- A **chunk** is a node of type `chunk` (or `figure`) whose `data.region` is a chunk anchor,
+  section 5.1. It has no list of highlights.
+- A **highlight** is an entry in the top-level `highlights` array, not a node. It has an
+  id prefixed `h-`, tags, an optional `note` (a note node id, or `null`), and a highlight
+  anchor. It has no position: it is drawn where its anchor says, in both views.
+- **Containment is geometry.** A chunk shows every highlight whose anchor rectangle lies
+  inside the chunk's region on the same page. Nothing stores the relation, so a highlight
+  made before its chunk was cut appears on the chunk the moment it exists, and overlapping
+  chunks share highlights. The check is `Rect.contains`, computed on load and on every
+  change to either list; it is cheap at the scale of one paper.
+- **An edge can end on a highlight.** React Flow edges connect nodes, so an edge to a
+  highlight has the containing chunk as `source` or `target` and the highlight id as
+  `sourceHandle` or `targetHandle`. The chunk node renders one handle per highlight it
+  contains, at the mark's position. If a highlight lies in no chunk, edges to it are
+  stored but not drawn, and the paper view draws them in the margin instead.
+- **A note on a highlight** is a note node connected to it by an edge; `highlights[].note`
+  is a cache of that edge's note id so the paper view and the question list need not
+  walk the edge list.
+
 ### 4.1 Persisted fields, exhaustively
 
+Highlights: `id`, `tags`, `note`, `anchor`.
 Nodes: `id`, `type`, `position`, `data`, `parentId`, `extent`, `width`, `height`,
 `initialWidth`, `initialHeight`, `hidden`, `zIndex`.
-Edges: `id`, `type`, `source`, `target`, `data`.
+Edges: `id`, `type`, `source`, `sourceHandle`, `target`, `targetHandle`, `data`.
 Plus top-level `viewport`.
 
 **Never persisted, and stripped on every write:** `selected`, `dragging`, `resizing`,
@@ -341,7 +374,7 @@ files if you wanted the notes directory to be independently browsable and meanin
 
 ### 4.5 Ids
 
-All ids are minted client-side as ULIDs, prefixed by kind: `n-` node, `e-` edge, `t-` tag.
+All ids are minted client-side as ULIDs, prefixed by kind: `n-` node, `e-` edge, `h-` highlight, `t-` tag.
 Client-side because the reader must be able to place a piece without waiting on a round
 trip. ULID rather than UUIDv4 because ULIDs sort by creation time, which makes a
 `board.json` diff readable.
@@ -385,12 +418,31 @@ whose PDF anchoring is the mature reference implementation.
 A figure or equation excerpt has the same shape, with `quote.exact` holding up to 256
 characters of the text found inside the rectangle. That gives a figure a text fallback
 rather than pure geometry. Equations are not extracted separately: a highlighted equation
-is a rectangle like any other excerpt, and `source.json` has no formula list.
+is a rectangle like any other chunk, and `source.json` has no formula list.
 
-A section piece made by the split command anchors on the section's `heading_rect`, with
-`quote.exact` holding the heading text. The section's `extent` is copied into the node's
-`data` so the piece can show its full text and jump to its first page without consulting
-`source.json` again.
+The shape above is the **highlight anchor**. A **chunk anchor** (`data.region` on a chunk
+node) covers a region that may cross pages and headings:
+
+```json
+{
+  "rects": [
+    { "page": 2, "rect": [108.0, 280.1, 504.0, 720.0] },
+    { "page": 3, "rect": [108.0, 72.0, 504.0, 410.2] }
+  ],
+  "start": { "exact": "The Transformer follows this overall", "prefix": "...", "suffix": "..." },
+  "end":   { "exact": "described in section 3.2.", "prefix": "...", "suffix": "..." },
+  "position": 14027,
+  "state": "anchored"
+}
+```
+
+`rects` is one rectangle per page crossed, in reading order. `start` and `end` are
+quote selectors for the first and last few words, anchored independently by the algorithm
+in 5.2; the region is rebuilt as the span between them, one rectangle per page. If only
+one of the two anchors, the chunk is `relocated` with the found end and the stored
+rectangle for the other; if neither, `orphaned`. A chunk made by split takes its `rects`
+from the section's `extent` and its quotes from the heading and the section's last line.
+A figure chunk has a single rectangle and `start` holding the caption.
 
 ### 5.2 The re-anchoring algorithm
 
@@ -427,6 +479,15 @@ excerpts the whole paragraph". The rule:
 > whose rectangle contains the selection's midpoint. If the selection covers **60% or more**
 > of that region's characters, the excerpt is the whole region. Otherwise it is exactly
 > what was selected.
+>
+> **A modifier key held during the drag skips this entirely** (`snap: false`) and keeps
+> exactly what was selected, whatever the coverage. Use Alt: no browser claims it during a
+> text drag on macOS, Windows or Linux.
+
+The modifier is the escape hatch a threshold alone cannot provide. Without it a reader who
+wants a precise half-sentence inside a paragraph is overruled by the snap every time with
+no way to say "I meant that" — and it makes the threshold safe to tune, because being
+wrong about the number becomes an annoyance rather than a wall.
 
 Snapping is therefore invisible when you are being precise and automatic when you are
 being rough, which is GatherReader's "relaxed precision" as a rule rather than a feeling.
@@ -437,6 +498,7 @@ text block. Layout regions are already computed and are what the reader sees as 
 unit. You would prefer a lower threshold if snapping feels reluctant in use; this is the
 one number here I would expect to change after a day of real reading, so it should be easy
 to change and covered by a test that asserts behaviour at 0.5 and 0.7 rather than at 0.6.
+The modifier makes this choice low-stakes, which is the point of having it.
 
 ---
 
@@ -455,7 +517,7 @@ FastAPI, bound to localhost only. All geometry per section 2.
 | `PUT` | `/api/papers/{id}/board` | `board.json` + `If-Match: <version>` | `{version}` |
 | `GET` | `/api/papers/{id}/notes/{node_id}` | — | `{markdown}` |
 | `PUT` | `/api/papers/{id}/notes/{node_id}` | `{markdown}` | `204` |
-| `POST` | `/api/papers/{id}/text` | `{page, rect, snap}` | `{text, snapped_rect, region_label}` |
+| `POST` | `/api/papers/{id}/text` | `{rects: [{page, rect}], snap}` | `{text, rects, start, end, region_label}` |
 | `GET` | `/api/papers/{id}/clip` | `?page=&rect=&dpi=` | `image/png` |
 | `GET` | `/api/papers/{id}/questions` | — | `[{node_id, text}]` |
 | `POST` | `/api/papers/{id}/export` | `{tags: [tag_id]}` | `{path}` |
@@ -467,11 +529,14 @@ failure with the extractor's message passed through.
 
 `snap` defaults to true; the browser sends false while a modifier key is held, which is
 SPEC.md's "exact selection when you want it". `POST /text` is where the forgiving-highlight rule of section 5.3 is applied — the browser
-sends the raw drag rectangle and receives the snapped one back, so the rule has exactly
-one implementation and it is the testable one.
+sends the raw selection, one rectangle per page it touches, and receives the snapped
+rectangles back with the `start` and `end` quote selectors already built, so the rule has
+exactly one implementation and it is the testable one. A highlight and a cut send the same
+request; the browser decides afterwards whether the result becomes a `highlights` entry
+or a chunk node.
 
-The question list is a server-side filter, defined precisely as: every node carrying the
-`question` tag that has no edge connecting it to a node of type `note`.
+The question list is a server-side filter, defined precisely as: every highlight or node
+carrying the `question` tag that has no edge connecting it to a node of type `note`.
 
 ---
 
@@ -507,7 +572,9 @@ under 5 MB.
   known quote, then perturb the page text — insert a word, change whitespace, reflow a
   ligature, delete the sentence — and assert the resulting `state` and score. This is the
   suite that protects SPEC.md section 7.
-- Snapping: assert whole-region at 0.7 coverage and exact at 0.5.
+- Snapping: assert whole-region at 0.7 coverage, exact at 0.5, and exact at 0.9 with
+  `snap: false`. Asserting either side of the threshold rather than at it means tuning
+  `SNAP_THRESHOLD` does not break the suite.
 - Atomic write: kill between `tmp` and `replace`, assert the old file survives intact.
 - API: FastAPI `TestClient` over a temp board folder.
 
@@ -579,6 +646,11 @@ And two inconsistencies in the companion documents, unrelated to this addendum:
 ---
 
 ## 11. Decisions taken, 16 September 2026
+
+**Grain, decided after the review.** Highlights live on the paper and are not nodes;
+chunks are the pieces on the board and find their highlights by geometry. Section 4.0
+and the chunk anchor in 5.1 record the shape. Selection in the paper view is a span from
+any start to any end, and one popover afterwards offers highlight or cut.
 
 Every `[CHOICE]` above was reviewed and accepted as written, with these outcomes:
 
