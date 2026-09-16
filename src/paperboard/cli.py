@@ -1,11 +1,18 @@
-"""`paperboard extract` — the only command in this plan."""
+"""`paperboard extract` and `paperboard serve`."""
 
 import shutil
 from pathlib import Path
 
 import typer
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
+from paperboard.api import create_app
 from paperboard.extract import extract
+
+HOST = "127.0.0.1"
+DEFAULT_PORT = 8765
+DEFAULT_WEB = Path("web") / "dist"
 
 app = typer.Typer(help="Take a paper apart so its ideas can be laid out.")
 
@@ -19,6 +26,19 @@ def main() -> None:
     file.pdf` would parse "extract" as the pdf argument instead of
     dispatching the extract command (Ruling F4).
     """
+
+
+def build_app(root: Path, web: Path = DEFAULT_WEB) -> FastAPI:
+    """The API over the data folder `root`, plus the frontend build at `/` when
+    `web/index.html` exists."""
+    application = create_app(root)
+    if (web / "index.html").exists():
+        application.mount("/", StaticFiles(directory=web, html=True), name="web")
+    else:
+        @application.get("/")
+        def placeholder():
+            return {"message": "paperboard API is running; the web build is not present"}
+    return application
 
 
 @app.command("extract")
@@ -48,3 +68,16 @@ def extract_command(
         f"{document.paper_id}: {len(document.sections)} sections, "
         f"{len(document.figures)} figures"
     )
+
+
+@app.command("serve")
+def serve_command(
+    root: Path = typer.Option(Path("."), "--root", help="Data folder holding papers/ and tags.json."),
+    web: Path = typer.Option(DEFAULT_WEB, "--web", help="Frontend build folder (web/dist)."),
+    port: int = typer.Option(DEFAULT_PORT, "--port", help="Local port."),
+) -> None:
+    """Run the local server on 127.0.0.1 only."""
+    import uvicorn
+
+    typer.echo(f"paperboard at http://{HOST}:{port}  (data: {root.resolve()}, web: {web.resolve()})")
+    uvicorn.run(build_app(root, web), host=HOST, port=port, log_level="warning")
