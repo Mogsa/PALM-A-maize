@@ -1,7 +1,12 @@
+import re
+from pathlib import Path
+
 import pymupdf
 
 from paperboard.extract import extract
 from paperboard.extract.pymupdf_layout import paper_id_for
+
+_PAPER_ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f.]+$")
 
 
 def test_paper_id_is_slug_plus_arxiv_id_when_present(paper_path, paper_name):
@@ -17,6 +22,43 @@ def test_paper_id_is_stable_across_runs(paper_path):
 
 def test_paper_id_is_filesystem_safe(paper_path):
     assert extract(paper_path).paper_id.replace("-", "").replace(".", "").isalnum()
+
+
+def test_paper_id_for_strips_non_slug_characters(paper_path):
+    assert _PAPER_ID.match(paper_id_for(paper_path, "Adam's Method", "arXiv:1234.5678"))
+    assert _PAPER_ID.match(
+        paper_id_for(paper_path, "Über Attention: Einführung", "arXiv:1234.5678")
+    )
+    assert _PAPER_ID.match(
+        paper_id_for(paper_path, "Punctuation,  and   Spaces!!", "arXiv:1234.5678")
+    )
+    non_ascii = paper_id_for(paper_path, "Über Attention: Einführung", "arXiv:1234.5678")
+    assert "ü" not in non_ascii
+    assert "über" not in non_ascii
+
+
+def test_paper_id_for_empty_slug_returns_just_the_suffix(paper_path):
+    paper_id = paper_id_for(paper_path, "!!! *** ???", "arXiv:1234.5678")
+    assert paper_id == "1234.5678"
+
+
+def test_paper_id_for_falls_back_to_a_content_hash_when_no_arxiv_id(paper_path):
+    paper_id = paper_id_for(paper_path, "A Title With No ArXiv Id", "no id on this page")
+    suffix = paper_id.rsplit("-", 1)[-1]
+    assert re.fullmatch(r"[0-9a-f]{10}", suffix)
+
+
+def test_paper_id_for_content_hash_is_stable(paper_path):
+    first = paper_id_for(paper_path, "Same Title", "no id here")
+    second = paper_id_for(paper_path, "Same Title", "no id here")
+    assert first == second
+
+
+def test_paper_id_for_different_pdfs_same_title_get_different_hash_ids():
+    fixtures = Path(__file__).parent / "fixtures" / "papers"
+    id_a = paper_id_for(fixtures / "attention.pdf", "Identical Title", "no id here")
+    id_b = paper_id_for(fixtures / "adam.pdf", "Identical Title", "no id here")
+    assert id_a != id_b
 
 
 def test_extracted_document_is_populated(paper_path):

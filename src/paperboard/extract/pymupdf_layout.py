@@ -313,7 +313,6 @@ def read_page_text(pdf_path: Path) -> list[PageText]:
 
 _ARXIV = re.compile(r"arXiv:\s*(\d{4}\.\d{4,5})", re.IGNORECASE)
 _SLUG_TRIM = re.compile(r"[^a-z0-9]+")
-SLUG_WORDS = 6
 
 
 def paper_id_for(pdf_path: Path, title: str, first_page_text: str) -> str:
