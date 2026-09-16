@@ -1,10 +1,11 @@
 import json
 
+from conftest import FIXTURES
+from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
-from paperboard.cli import app
+from paperboard.cli import app, build_app
 from paperboard.source_model import SourceDocument
-from conftest import FIXTURES
 
 runner = CliRunner()
 
@@ -40,3 +41,23 @@ def test_missing_file_exits_nonzero_with_a_readable_message(tmp_path):
     # the runner is asked to keep the streams apart.
     combined = result.output + (result.stderr or "")
     assert "not found" in combined.lower()
+
+
+def test_build_app_serves_the_api_and_a_placeholder_root(tmp_path):
+    client = TestClient(build_app(tmp_path / "data", tmp_path / "missing-web"))
+    assert client.get("/api/papers").json() == []
+    assert client.get("/").json()["message"].startswith("paperboard API")
+
+
+def test_build_app_serves_the_frontend_when_built(tmp_path):
+    dist = tmp_path / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><title>board</title>")
+    client = TestClient(build_app(tmp_path / "data", dist))
+    assert client.get("/").status_code == 200
+    assert "board" in client.get("/").text
+
+
+def test_serve_command_exists():
+    result = runner.invoke(app, ["serve", "--help"])
+    assert result.exit_code == 0 and "--port" in result.output

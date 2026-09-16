@@ -1,7 +1,10 @@
 import json
+import shutil
 from pathlib import Path
 
 import pytest
+
+from paperboard.extract import extract
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
 PAPER_DIR = FIXTURE_DIR / "papers"
@@ -28,3 +31,25 @@ def paper_path(paper_name: str) -> Path:
     if not path.exists():
         pytest.fail(MISSING_FIXTURE.format(path=path), pytrace=False)
     return path
+
+
+@pytest.fixture(scope="session")
+def extracted() -> dict:
+    """Every fixture paper extracted once per session; about four seconds each."""
+    docs = {}
+    for name, path in FIXTURES.items():
+        if not path.exists():
+            pytest.fail(MISSING_FIXTURE.format(path=path), pytrace=False)
+        docs[name] = extract(path)
+    return docs
+
+
+@pytest.fixture
+def store_root(tmp_path, extracted) -> Path:
+    """A store root with all three papers already in it, laid out per SPEC.md 7."""
+    for name, doc in extracted.items():
+        folder = tmp_path / "papers" / doc.paper_id
+        folder.mkdir(parents=True)
+        shutil.copy2(FIXTURES[name], folder / "paper.pdf")
+        (folder / "source.json").write_text(doc.model_dump_json(by_alias=True, indent=2))
+    return tmp_path
