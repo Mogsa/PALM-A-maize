@@ -441,12 +441,10 @@ CONTEXT_CHARS = 32  # prefix and suffix length in a QuoteSelector
 AnchorState = Literal["anchored", "relocated", "orphaned"]
 
 
-def _prefixed(prefix: str):
-    def check(value: str) -> str:
-        if not value.startswith(prefix) or len(value) <= len(prefix):
-            raise ValueError(f"id must start with {prefix!r}, got {value!r}")
-        return value
-    return check
+def _check_prefix(value: str, prefix: str) -> str:
+    if not value.startswith(prefix) or len(value) <= len(prefix):
+        raise ValueError(f"id must start with {prefix!r}, got {value!r}")
+    return value
 
 
 class QuoteSelector(BaseModel):
@@ -477,7 +475,11 @@ class Highlight(BaseModel):
     tags: list[str] = []
     note: str | None = None
     anchor: HighlightAnchor
-    _id = field_validator("id")(_prefixed("h-"))
+
+    @field_validator("id")
+    @classmethod
+    def _id_prefix(cls, value: str) -> str:
+        return _check_prefix(value, "h-")
 
 
 class Position(BaseModel):
@@ -546,7 +548,11 @@ class _NodeBase(BaseModel):
     initialHeight: float | None = None
     hidden: bool | None = None
     zIndex: int | None = None
-    _id = field_validator("id")(_prefixed("n-"))
+
+    @field_validator("id")
+    @classmethod
+    def _id_prefix(cls, value: str) -> str:
+        return _check_prefix(value, "n-")
 
 
 class ChunkNode(_NodeBase):
@@ -586,7 +592,11 @@ class Edge(BaseModel):
     target: str
     targetHandle: str | None = None
     data: EdgeData = EdgeData()
-    _id = field_validator("id")(_prefixed("e-"))
+
+    @field_validator("id")
+    @classmethod
+    def _id_prefix(cls, value: str) -> str:
+        return _check_prefix(value, "e-")
 
 
 class Board(BaseModel):
@@ -638,7 +648,11 @@ class Tag(BaseModel):
     id: str
     name: str
     colour: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
-    _id = field_validator("id")(_prefixed("t-"))
+
+    @field_validator("id")
+    @classmethod
+    def _id_prefix(cls, value: str) -> str:
+        return _check_prefix(value, "t-")
 
 
 class TagFile(BaseModel):
@@ -1835,8 +1849,10 @@ def test_highlights_in_uses_geometry(resnet):
 def test_export_follows_the_papers_order_not_the_boards(resnet):
     doc, pdf = resnet
     md = export_markdown(doc, _board(doc), NOTES, pdf, tags=[])
-    assert md.index("understand residual blocks") < md.index("1. Introduction")
-    assert md.index("1. Introduction") < md.index("Figure 1") < md.index("3.1. Residual Learning")
+    assert md.index("understand residual blocks") < md.index("Figure 1")
+    # Pieces sort by (page, top edge): on ResNet page 0, Figure 1 sits at y 224 in the right
+    # column and the Introduction heading at y 536 in the left, so the figure comes first.
+    assert md.index("Figure 1") < md.index("1. Introduction") < md.index("3.1. Residual Learning")
 
 
 def test_export_places_highlight_and_its_note_under_the_chunk(resnet):
@@ -1984,7 +2000,7 @@ def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pd
 - [ ] **Step 4: Run the tests**
 
 Run: `.venv/bin/pytest tests/test_export.py -v`
-Expected: 5 passed. `test_export_follows_the_papers_order_not_the_boards` depends on ResNet's Figure 1 sitting on page 0 after the Introduction heading; it does (heading at y 536, figure at y 224 in the right column, so the figure sorts first by y). If the assertion order surprises you, print the three indices and check them against the page before touching the test.
+Expected: 5 passed. `test_export_follows_the_papers_order_not_the_boards` pins the order rule to a measured page: Figure 1 at y 224 sorts before the Introduction heading at y 536. That is geometric order, not reading order; on a two-column page they differ. If a reader finds it wrong in practice, the rule to change is `_order_key`, and this test, together.
 
 - [ ] **Step 5: Commit**
 
