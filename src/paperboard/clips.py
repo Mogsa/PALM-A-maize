@@ -12,6 +12,8 @@ MAX_DPI = 300
 
 
 def render_clip(pdf: pymupdf.Document, target: PageRect, dpi: int = DEFAULT_DPI) -> tuple[bytes, int, int]:
+    if not 0 <= target.page < pdf.page_count:
+        raise ValueError(f"page {target.page} is outside the document")
     dpi = max(36, min(MAX_DPI, int(dpi)))
     page = pdf[target.page]
     clip = pymupdf.Rect(*pad(normalise(target.rect), CLIP_PAD)) & page.rect

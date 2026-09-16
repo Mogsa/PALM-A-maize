@@ -65,6 +65,9 @@ def _selector(page_text: str, exact: str) -> tuple[QuoteSelector, int]:
 def select(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRect], snap: bool) -> Selection:
     if not rects:
         raise ValueError("a selection needs at least one rectangle")
+    for r in rects:
+        if not 0 <= r.page < len(doc.pages):
+            raise ValueError(f"page {r.page} is outside the document")
     label: str | None = None
     if len(rects) == 1:
         region = _smallest_region_at(doc, rects[0].page, midpoint(rects[0].rect))

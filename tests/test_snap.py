@@ -81,3 +81,9 @@ def test_multi_page_selection_has_no_highlight_anchor_and_does_not_snap(resnet):
     assert result.highlight is None
     assert [r.page for r in result.rects] == [2, 3]
     assert result.rects[0] == _slice(a, 0.9)
+
+
+def test_a_page_outside_the_document_is_rejected(resnet):
+    doc, pdf = resnet
+    with pytest.raises(ValueError):
+        select(doc, pdf, [PageRect(page=999, rect=(0, 0, 10, 10))], snap=False)

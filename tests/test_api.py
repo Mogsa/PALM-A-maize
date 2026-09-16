@@ -68,6 +68,22 @@ def test_text_rejects_bad_geometry(client, resnet_id):
     assert response.json()["error"]["code"] == "invalid"
 
 
+def test_text_and_clip_reject_a_page_outside_the_paper(client, resnet_id):
+    text_response = client.post(
+        f"/api/papers/{resnet_id}/text",
+        json={"rects": [{"page": 999, "rect": [0, 0, 10, 10]}], "snap": False},
+    )
+    assert text_response.status_code == 422
+    assert text_response.json()["error"]["code"] == "invalid"
+
+    clip_response = client.put(
+        f"/api/papers/{resnet_id}/clips/n-fig",
+        json={"page": 999, "rect": [0, 0, 10, 10], "dpi": 100},
+    )
+    assert clip_response.status_code == 422
+    assert clip_response.json()["error"]["code"] == "invalid"
+
+
 def test_board_put_get_and_version_conflict(client, resnet_id):
     board = client.get(f"/api/papers/{resnet_id}/board").json()
     assert board["version"] == 0 and board["nodes"] == []
