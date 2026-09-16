@@ -1,6 +1,6 @@
 import pytest
 
-from paperboard.extract.pymupdf_layout import build_sections, parse_number, read_regions
+from paperboard.extract.pymupdf_layout import _clean_title, build_sections, parse_number, read_regions
 
 
 @pytest.mark.parametrize(
@@ -89,3 +89,45 @@ def test_unnumbered_abstract_is_depth_one(paper_path):
     sections = build_sections(pages, regions)
     abstract = next(s for s in sections if s.title.lower().startswith("abstract"))
     assert abstract.depth == 1
+
+
+def test_section_titles_have_no_decoding_or_layout_artefacts(paper_path):
+    """Titles are user-visible: the export's literature note prints them verbatim.
+
+    get_textbox preserves the PDF's own line breaks and glyph-decoding failures
+    (U+FFFD) end up embedded in the raw region text. None of that belongs in a
+    title a reader sees.
+    """
+    pages, regions = read_regions(paper_path)
+    for section in build_sections(pages, regions):
+        title = section.title
+        assert "\n" not in title, title
+        assert "\r" not in title, title
+        assert "\t" not in title, title
+        assert "  " not in title, title
+        assert "�" not in title, title
+
+
+def test_adam_numbered_headings_parse_after_cleaning(paper_path, paper_name):
+    if paper_name != "adam":
+        return
+    pages, regions = read_regions(paper_path)
+    sections = build_sections(pages, regions)
+    update_rule = next(s for s in sections if "ADAM’S UPDATE RULE" in s.title.upper())
+    assert update_rule.number == "2.1"
+    assert update_rule.depth == 2
+    init_bias = next(s for s in sections if "INITIALIZATION BIAS CORRECTION" in s.title.upper())
+    assert init_bias.number == "3"
+    assert init_bias.depth == 1
+
+
+def test_clean_title_strips_replacement_character():
+    assert _clean_title("�\n2.1\nADAM’S UPDATE RULE") == "2.1 ADAM’S UPDATE RULE"
+
+
+def test_clean_title_collapses_multiline_to_one_line():
+    assert _clean_title("3.1.\nResidual Learning") == "3.1. Residual Learning"
+
+
+def test_clean_title_leaves_a_clean_title_unchanged():
+    assert _clean_title("1. Introduction") == "1. Introduction"

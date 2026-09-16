@@ -91,12 +91,35 @@ def parse_number(title: str) -> tuple[str | None, int]:
     return number, number.count(".") + 1
 
 
+# Leading characters stripped by _clean_title: anything that is not alphanumeric
+# and not an opening bracket a heading might legitimately start with.
+_LEADING_JUNK = re.compile(r"^[^\w(\[]+")
+
+# Any run of whitespace, including the line breaks get_textbox preserves.
+_WHITESPACE_RUN = re.compile(r"\s+")
+
+
+def _clean_title(text: str) -> str:
+    """Presentation-only cleanup of a heading's text for use as a Section title.
+
+    `region.text` is a faithful record of what the layout model and `get_textbox`
+    returned, including line breaks the PDF itself carries and glyph-decoding
+    artefacts such as U+FFFD REPLACEMENT CHARACTER for a font glyph with no
+    Unicode mapping. Neither belongs in a title a reader sees, so this collapses
+    every run of whitespace (line breaks included) to a single space, then strips
+    leading characters that are neither alphanumeric nor an opening bracket. It
+    does not touch `Region.text`, which stays untouched for source.json.
+    """
+    collapsed = _WHITESPACE_RUN.sub(" ", text).strip()
+    return _LEADING_JUNK.sub("", collapsed)
+
+
 def _is_heading(region: Region) -> bool:
     if region.label not in {"section-header", "title"}:
         return False
     if region.label == "title" and region.page > 0:
         return False  # only the first page carries the paper title
-    text = region.text.strip()
+    text = _clean_title(region.text)
     if not (MIN_HEADING_CHARS <= len(text) <= MAX_HEADING_CHARS):
         return False
     if text.isdigit():
@@ -119,7 +142,8 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
     sections: list[Section] = []
     for ordinal, (start, region) in enumerate(headings):
         stop = headings[ordinal + 1][0] if ordinal + 1 < len(headings) else len(body)
-        number, depth = parse_number(region.text)
+        title = _clean_title(region.text)
+        number, depth = parse_number(title)
         if number is None and region.header_level:
             # header_level 1 is the paper title, so top-level sections are 2.
             depth = max(1, region.header_level - 1)
@@ -129,7 +153,7 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
                 id=f"sec-{ordinal}",
                 number=number,
                 depth=depth,
-                title=region.text,
+                title=title,
                 heading_rect=PageRect(page=region.page, rect=region.rect),
                 extent=_extent(span),
                 text="\n\n".join(r.text for r in span[1:] if r.text),
