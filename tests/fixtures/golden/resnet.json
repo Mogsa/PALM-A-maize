@@ -1,0 +1,377 @@
+{
+  "page_count": 12,
+  "region_count": 235,
+  "sections": [
+    {
+      "id": "sec-0",
+      "number": null,
+      "depth": 1,
+      "title": "Deep Residual Learning for Image Recognition",
+      "page": 0,
+      "extent_pages": [
+        0
+      ]
+    },
+    {
+      "id": "sec-1",
+      "number": null,
+      "depth": 1,
+      "title": "Abstract",
+      "page": 0,
+      "extent_pages": [
+        0
+      ]
+    },
+    {
+      "id": "sec-2",
+      "number": "1",
+      "depth": 1,
+      "title": "1. Introduction",
+      "page": 0,
+      "extent_pages": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "sec-3",
+      "number": "2",
+      "depth": 1,
+      "title": "2. Related Work",
+      "page": 1,
+      "extent_pages": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "sec-4",
+      "number": "3",
+      "depth": 1,
+      "title": "3. Deep Residual Learning",
+      "page": 2,
+      "extent_pages": [
+        2
+      ]
+    },
+    {
+      "id": "sec-5",
+      "number": "3.1",
+      "depth": 2,
+      "title": "3.1. Residual Learning",
+      "page": 2,
+      "extent_pages": [
+        2
+      ]
+    },
+    {
+      "id": "sec-6",
+      "number": "3.2",
+      "depth": 2,
+      "title": "3.2. Identity Mapping by Shortcuts",
+      "page": 2,
+      "extent_pages": [
+        2
+      ]
+    },
+    {
+      "id": "sec-7",
+      "number": "3.3",
+      "depth": 2,
+      "title": "3.3. Network Architectures",
+      "page": 2,
+      "extent_pages": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": "sec-8",
+      "number": "3.4",
+      "depth": 2,
+      "title": "3.4. Implementation",
+      "page": 3,
+      "extent_pages": [
+        3
+      ]
+    },
+    {
+      "id": "sec-9",
+      "number": "4",
+      "depth": 1,
+      "title": "4. Experiments",
+      "page": 3,
+      "extent_pages": [
+        3
+      ]
+    },
+    {
+      "id": "sec-10",
+      "number": "4.1",
+      "depth": 2,
+      "title": "4.1. ImageNet Classification",
+      "page": 3,
+      "extent_pages": [
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "id": "sec-11",
+      "number": "4.2",
+      "depth": 2,
+      "title": "4.2. CIFAR-10 and Analysis",
+      "page": 6,
+      "extent_pages": [
+        6,
+        7
+      ]
+    },
+    {
+      "id": "sec-12",
+      "number": "4.3",
+      "depth": 2,
+      "title": "4.3. Object Detection on PASCAL and MS COCO",
+      "page": 7,
+      "extent_pages": [
+        7
+      ]
+    },
+    {
+      "id": "sec-13",
+      "number": null,
+      "depth": 1,
+      "title": "References",
+      "page": 8,
+      "extent_pages": [
+        8
+      ]
+    },
+    {
+      "id": "sec-14",
+      "number": "A",
+      "depth": 1,
+      "title": "A. Object Detection Baselines",
+      "page": 9,
+      "extent_pages": [
+        9
+      ]
+    },
+    {
+      "id": "sec-15",
+      "number": null,
+      "depth": 3,
+      "title": "PASCAL VOC",
+      "page": 9,
+      "extent_pages": [
+        9
+      ]
+    },
+    {
+      "id": "sec-16",
+      "number": null,
+      "depth": 3,
+      "title": "MS COCO",
+      "page": 9,
+      "extent_pages": [
+        9
+      ]
+    },
+    {
+      "id": "sec-17",
+      "number": "B",
+      "depth": 1,
+      "title": "B. Object Detection Improvements",
+      "page": 9,
+      "extent_pages": [
+        9
+      ]
+    },
+    {
+      "id": "sec-18",
+      "number": null,
+      "depth": 3,
+      "title": "MS COCO",
+      "page": 9,
+      "extent_pages": [
+        9,
+        10
+      ]
+    },
+    {
+      "id": "sec-19",
+      "number": null,
+      "depth": 3,
+      "title": "PASCAL VOC",
+      "page": 10,
+      "extent_pages": [
+        10
+      ]
+    },
+    {
+      "id": "sec-20",
+      "number": null,
+      "depth": 3,
+      "title": "ImageNet Detection",
+      "page": 10,
+      "extent_pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "id": "sec-21",
+      "number": "C",
+      "depth": 1,
+      "title": "C. ImageNet Localization",
+      "page": 11,
+      "extent_pages": [
+        11
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "fig-1",
+      "kind": "figure",
+      "label": "Figure 1",
+      "page": 0,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-3",
+      "kind": "figure",
+      "label": "Figure 3",
+      "page": 3,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-4",
+      "kind": "figure",
+      "label": "Figure 4",
+      "page": 4,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-5",
+      "kind": "figure",
+      "label": "Figure 5",
+      "page": 5,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-6",
+      "kind": "figure",
+      "label": "Figure 6",
+      "page": 7,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-7",
+      "kind": "figure",
+      "label": "Figure 7",
+      "page": 7,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-1",
+      "kind": "table",
+      "label": "Table 1",
+      "page": 4,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-10",
+      "kind": "table",
+      "label": "Table 10",
+      "page": 10,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-11",
+      "kind": "table",
+      "label": "Table 11",
+      "page": 10,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-12",
+      "kind": "table",
+      "label": "Table 12",
+      "page": 10,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-13",
+      "kind": "table",
+      "label": "Table 13",
+      "page": 11,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-14",
+      "kind": "table",
+      "label": "Table 14",
+      "page": 11,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-2",
+      "kind": "table",
+      "label": "Table 2",
+      "page": 4,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-3",
+      "kind": "table",
+      "label": "Table 3",
+      "page": 5,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-4",
+      "kind": "table",
+      "label": "Table 4",
+      "page": 5,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-5",
+      "kind": "table",
+      "label": "Table 5",
+      "page": 5,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-6",
+      "kind": "table",
+      "label": "Table 6",
+      "page": 6,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-7",
+      "kind": "table",
+      "label": "Table 7",
+      "page": 7,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-8",
+      "kind": "table",
+      "label": "Table 8",
+      "page": 7,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-9",
+      "kind": "table",
+      "label": "Table 9",
+      "page": 10,
+      "confidence": "region"
+    }
+  ]
+}

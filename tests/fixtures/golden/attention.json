@@ -1,0 +1,333 @@
+{
+  "page_count": 15,
+  "region_count": 185,
+  "sections": [
+    {
+      "id": "sec-0",
+      "number": null,
+      "depth": 1,
+      "title": "Attention Is All You Need",
+      "page": 0,
+      "extent_pages": [
+        0
+      ]
+    },
+    {
+      "id": "sec-1",
+      "number": null,
+      "depth": 1,
+      "title": "Abstract",
+      "page": 0,
+      "extent_pages": [
+        0
+      ]
+    },
+    {
+      "id": "sec-2",
+      "number": "1",
+      "depth": 1,
+      "title": "1 Introduction",
+      "page": 1,
+      "extent_pages": [
+        1
+      ]
+    },
+    {
+      "id": "sec-3",
+      "number": "2",
+      "depth": 1,
+      "title": "2 Background",
+      "page": 1,
+      "extent_pages": [
+        1
+      ]
+    },
+    {
+      "id": "sec-4",
+      "number": "3",
+      "depth": 1,
+      "title": "3 Model Architecture",
+      "page": 1,
+      "extent_pages": [
+        1,
+        2
+      ]
+    },
+    {
+      "id": "sec-5",
+      "number": "3.1",
+      "depth": 2,
+      "title": "3.1 Encoder and Decoder Stacks",
+      "page": 2,
+      "extent_pages": [
+        2
+      ]
+    },
+    {
+      "id": "sec-6",
+      "number": "3.2",
+      "depth": 2,
+      "title": "3.2 Attention",
+      "page": 2,
+      "extent_pages": [
+        2,
+        3
+      ]
+    },
+    {
+      "id": "sec-7",
+      "number": "3.2.1",
+      "depth": 3,
+      "title": "3.2.1 Scaled Dot-Product Attention",
+      "page": 3,
+      "extent_pages": [
+        3
+      ]
+    },
+    {
+      "id": "sec-8",
+      "number": "3.2.2",
+      "depth": 3,
+      "title": "3.2.2 Multi-Head Attention",
+      "page": 3,
+      "extent_pages": [
+        3,
+        4
+      ]
+    },
+    {
+      "id": "sec-9",
+      "number": "3.2.3",
+      "depth": 3,
+      "title": "3.2.3 Applications of Attention in our Model",
+      "page": 4,
+      "extent_pages": [
+        4
+      ]
+    },
+    {
+      "id": "sec-10",
+      "number": "3.3",
+      "depth": 2,
+      "title": "3.3 Position-wise Feed-Forward Networks",
+      "page": 4,
+      "extent_pages": [
+        4
+      ]
+    },
+    {
+      "id": "sec-11",
+      "number": "3.4",
+      "depth": 2,
+      "title": "3.4 Embeddings and Softmax",
+      "page": 4,
+      "extent_pages": [
+        4,
+        5
+      ]
+    },
+    {
+      "id": "sec-12",
+      "number": "3.5",
+      "depth": 2,
+      "title": "3.5 Positional Encoding",
+      "page": 5,
+      "extent_pages": [
+        5
+      ]
+    },
+    {
+      "id": "sec-13",
+      "number": "4",
+      "depth": 1,
+      "title": "4 Why Self-Attention",
+      "page": 5,
+      "extent_pages": [
+        5,
+        6
+      ]
+    },
+    {
+      "id": "sec-14",
+      "number": "5",
+      "depth": 1,
+      "title": "5 Training",
+      "page": 6,
+      "extent_pages": [
+        6
+      ]
+    },
+    {
+      "id": "sec-15",
+      "number": "5.1",
+      "depth": 2,
+      "title": "5.1 Training Data and Batching",
+      "page": 6,
+      "extent_pages": [
+        6
+      ]
+    },
+    {
+      "id": "sec-16",
+      "number": "5.2",
+      "depth": 2,
+      "title": "5.2 Hardware and Schedule",
+      "page": 6,
+      "extent_pages": [
+        6
+      ]
+    },
+    {
+      "id": "sec-17",
+      "number": "5.3",
+      "depth": 2,
+      "title": "5.3 Optimizer",
+      "page": 6,
+      "extent_pages": [
+        6
+      ]
+    },
+    {
+      "id": "sec-18",
+      "number": "5.4",
+      "depth": 2,
+      "title": "5.4 Regularization",
+      "page": 6,
+      "extent_pages": [
+        6,
+        7
+      ]
+    },
+    {
+      "id": "sec-19",
+      "number": "6",
+      "depth": 1,
+      "title": "6 Results",
+      "page": 7,
+      "extent_pages": [
+        7
+      ]
+    },
+    {
+      "id": "sec-20",
+      "number": "6.1",
+      "depth": 2,
+      "title": "6.1 Machine Translation",
+      "page": 7,
+      "extent_pages": [
+        7
+      ]
+    },
+    {
+      "id": "sec-21",
+      "number": "6.2",
+      "depth": 2,
+      "title": "6.2 Model Variations",
+      "page": 7,
+      "extent_pages": [
+        7,
+        8
+      ]
+    },
+    {
+      "id": "sec-22",
+      "number": "6.3",
+      "depth": 2,
+      "title": "6.3 English Constituency Parsing",
+      "page": 8,
+      "extent_pages": [
+        8,
+        9
+      ]
+    },
+    {
+      "id": "sec-23",
+      "number": "7",
+      "depth": 1,
+      "title": "7 Conclusion",
+      "page": 9,
+      "extent_pages": [
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "sec-24",
+      "number": null,
+      "depth": 1,
+      "title": "Attention Visualizations Input-Input Laye",
+      "page": 12,
+      "extent_pages": [
+        12,
+        13,
+        14
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "fig-1",
+      "kind": "figure",
+      "label": "Figure 1",
+      "page": 2,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-2",
+      "kind": "figure",
+      "label": "Figure 2",
+      "page": 3,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-3",
+      "kind": "figure",
+      "label": "Figure 3",
+      "page": 12,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-4",
+      "kind": "figure",
+      "label": "Figure 4",
+      "page": 13,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-5",
+      "kind": "figure",
+      "label": "Figure 5",
+      "page": 14,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-1",
+      "kind": "table",
+      "label": "Table 1",
+      "page": 5,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-2",
+      "kind": "table",
+      "label": "Table 2",
+      "page": 7,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-3",
+      "kind": "table",
+      "label": "Table 3",
+      "page": 8,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-4",
+      "kind": "table",
+      "label": "Table 4",
+      "page": 9,
+      "confidence": "region"
+    }
+  ]
+}
