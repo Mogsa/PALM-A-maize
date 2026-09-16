@@ -3,7 +3,7 @@
 16 September 2026. Supplement to `2026-09-15-extraction.md`. The pinned triplet
 `pymupdf == pymupdf4llm == pymupdf-layout == 1.28.2` was installed in a throwaway
 environment and run over ResNet (`1512.03385v1`). Everything below is measured, not read
-from documentation. Apply the five fixes to the plan before executing it.
+from documentation. The five fixes below were applied to the plan on 16 September 2026; they stay here as the record of why.
 
 ## Confirmed
 
@@ -147,14 +147,14 @@ already has them. Store them.
 Add to `source_model.py`:
 
 ```python
-class Region(BaseModel):
+class LayoutRegion(BaseModel):
     page: int = Field(ge=0)
     rect: Rect
     label: str
 ```
 
-and `regions: list[Region] = []` on `SourceDocument`. In Task 7 `extract_document`, pass
-`regions=[Region(page=r.page, rect=r.rect, label=r.label) for r in regions]`. Do not store
+and `regions: list[LayoutRegion] = []` on `SourceDocument`. In Task 7 `extract_document`, pass
+`regions=[LayoutRegion(page=r.page, rect=r.rect, label=r.label) for r in regions]`. The name is `LayoutRegion` because `pymupdf_layout.py` already has a `Region` dataclass. Do not store
 region text; `page_text` already has it and the addendum keeps the file readable.
 
 Add to SPEC-ADDENDUM.md section 3's example a `regions` array beside `sections`, and one

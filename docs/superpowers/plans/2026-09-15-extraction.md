@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** `paperboard extract paper.pdf` writes a `source.json` holding the paper's sections, figures, and formulas with page rectangles, good enough that the split command and export can be built on it.
+**Goal:** `paperboard extract paper.pdf` writes a `source.json` holding the paper's sections and figures with page rectangles, good enough that the split command and export can be built on it.
 
 **Architecture:** One Python package, `paperboard`. A pydantic model of `source.json`, an `extract()` interface with exactly one implementation over `pymupdf-layout`, and a CLI. No web server, no UI, no network. Tests are golden files over three committed fixture papers.
 
@@ -211,9 +211,9 @@ git commit -m "chore: scaffold paperboard package and fixture papers"
   - `paperboard.source_model.PageRect(page: int, rect: Rect)`
   - `paperboard.source_model.Section(id, number, depth, title, heading_rect: PageRect, extent: list[PageRect], text)`
   - `paperboard.source_model.Figure(id, kind, label, caption, caption_rect, rect, confidence)`
-  - `paperboard.source_model.Formula(id, rect: PageRect, text)`
   - `paperboard.source_model.PageText(page: int, text: str)`
-  - `paperboard.source_model.SourceDocument(schema, paper_id, extracted_at, extractor, pages, sections, figures, formulas, page_text)`
+  - `paperboard.source_model.LayoutRegion(page: int, rect: Rect, label: str)`
+  - `paperboard.source_model.SourceDocument(schema, paper_id, extracted_at, extractor, pages, sections, figures, regions, page_text)`
 
 - [ ] **Step 1: Write the failing geometry test**
 
@@ -444,15 +444,18 @@ class Figure(BaseModel):
     confidence: FigureConfidence
 
 
-class Formula(BaseModel):
-    id: str
-    rect: PageRect
-    text: str = ""
-
-
 class PageText(BaseModel):
     page: int = Field(ge=0)
     text: str
+
+
+class LayoutRegion(BaseModel):
+    """One labelled layout box. Stored for the snap rule in SPEC-ADDENDUM.md section 5.3
+    and nothing else: the API must not re-run the layout model per request."""
+
+    page: int = Field(ge=0)
+    rect: Rect
+    label: str
 
 
 class SourceDocument(BaseModel):
@@ -463,7 +466,7 @@ class SourceDocument(BaseModel):
     pages: list[PageInfo]
     sections: list[Section] = []
     figures: list[Figure] = []
-    formulas: list[Formula] = []
+    regions: list[LayoutRegion] = []
     page_text: list[PageText] = []
 
     model_config = {"populate_by_name": True}
@@ -545,6 +548,19 @@ def test_resnet_has_section_headers_without_a_pdf_outline(paper_path, paper_name
     headers = [r for r in regions if r.label == "section-header"]
     assert len(headers) >= 10
     assert any("Residual Learning" in r.text for r in headers)
+
+
+def test_page_zero_title_box_holds_the_paper_title(paper_path, paper_name):
+    """parse_document numbers pages from 1. Off by one, and every box reads the
+    text of the following page. This is the test that catches it."""
+    _, regions = read_regions(paper_path)
+    title = next(r for r in regions if r.page == 0 and r.label == "title")
+    expected = {
+        "attention": "Attention Is All You Need",
+        "resnet": "Deep Residual Learning",
+        "adam": "ADAM",
+    }[paper_name]
+    assert expected.lower() in title.text.lower()
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -565,7 +581,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf
-from pymupdf4llm.helpers.document_layout import parse_document
+from pymupdf4llm.helpers.document_layout import OCRMode, parse_document
 
 from paperboard.geometry import Rect, normalise
 from paperboard.source_model import PageInfo
@@ -590,13 +606,16 @@ def read_regions(pdf_path: Path) -> tuple[list[PageInfo], list[Region]]:
     Regions come back in reading order within a page, and pages in order, which is
     what lets section extents be computed by walking the list once.
     """
-    parsed = parse_document(str(pdf_path))
+    # OCR never: born-digital papers do not need it, and a test must not depend on
+    # whether Tesseract happens to be installed.
+    parsed = parse_document(str(pdf_path), use_ocr=OCRMode.NEVER)
     pages: list[PageInfo] = []
     regions: list[Region] = []
 
     with pymupdf.open(pdf_path) as doc:
         for page_layout in parsed.pages:
-            index = page_layout.page_number
+            # parse_document numbers pages from 1; PyMuPDF and source.json from 0.
+            index = page_layout.page_number - 1
             page = doc[index]
             pages.append(
                 PageInfo(
@@ -652,7 +671,7 @@ fine and only fails when called, which is what keeps Tasks 3 to 6 independently 
 - [ ] **Step 5: Run the region tests**
 
 Run: `.venv/bin/pytest tests/test_regions.py -v`
-Expected: 12 passed (four tests across three papers). The run takes roughly 10 seconds
+Expected: 15 passed (five tests across three papers). The run takes roughly 10 seconds
 per paper; `parse_document` may invoke OCR on a few pages.
 
 - [ ] **Step 6: Commit**
@@ -747,6 +766,23 @@ def test_running_heads_are_not_mistaken_for_sections(paper_path):
     pages, regions = read_regions(paper_path)
     titles = [s.title.lower() for s in build_sections(pages, regions)]
     assert not any(t.isdigit() for t in titles)
+
+
+def test_no_heading_starts_lowercase_or_ends_with_a_period(paper_path):
+    """ResNet page 0 has a section-header box reading 'greatly benefited from very
+    deep models.' -- a body sentence the layout model promoted."""
+    pages, regions = read_regions(paper_path)
+    for section in build_sections(pages, regions):
+        assert not section.title[0].islower(), section.title
+        assert not section.title.endswith("."), section.title
+
+
+def test_unnumbered_abstract_is_depth_one(paper_path):
+    """header_level counts the paper title as 1, so Abstract arrives as 2."""
+    pages, regions = read_regions(paper_path)
+    sections = build_sections(pages, regions)
+    abstract = next(s for s in sections if s.title.lower().startswith("abstract"))
+    assert abstract.depth == 1
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
@@ -796,6 +832,8 @@ def _is_heading(region: Region) -> bool:
         return False
     if text.isdigit():
         return False  # a bare page number the model promoted
+    if text[0].islower() or text.endswith("."):
+        return False  # a body sentence the model promoted; no real heading looks like this
     return True
 
 
@@ -814,7 +852,8 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
         stop = headings[ordinal + 1][0] if ordinal + 1 < len(headings) else len(body)
         number, depth = parse_number(region.text)
         if number is None and region.header_level:
-            depth = region.header_level
+            # header_level 1 is the paper title, so top-level sections are 2.
+            depth = max(1, region.header_level - 1)
         span = body[start:stop]
         sections.append(
             Section(
@@ -874,6 +913,11 @@ adjacent layout region, else an embedded image above the caption, else clustered
 drawings. `Figure.confidence` records which branch won, so a reader can see that a
 boundary was guessed. (Addendum section 3.)
 
+Captions are found by their text, not their label. Measured on ResNet: the layout model
+labelled 13 boxes `caption` and 7 more real captions `text`, including Figure 1. Every
+real caption has `.` or `:` after its number; body references like "Table 3 shows" do not.
+The pattern below requires that separator and is applied to `caption` and `text` boxes.
+
 - [ ] **Step 1: Write the failing test**
 
 `tests/test_figures.py`:
@@ -907,12 +951,16 @@ def test_a_figure_rect_never_swallows_its_own_caption(paper_path):
         assert figure.rect.rect[1] < figure.caption_rect.rect[3]
 
 
-def test_resnet_finds_several_figures(paper_path, paper_name):
+def test_resnet_finds_figure_one_and_most_tables(paper_path, paper_name):
+    """Figure 1's caption is labelled `text` by the layout model. Caption-only
+    scanning misses it and six others."""
     if paper_name != "resnet":
         return
     pages, regions = read_regions(paper_path)
     figures = build_figures(paper_path, pages, regions)
+    assert any(f.label == "Figure 1" for f in figures)
     assert len([f for f in figures if f.kind == "figure"]) >= 4
+    assert len([f for f in figures if f.kind == "table"]) >= 8
 
 
 def test_attention_figure_one_is_recovered_by_the_fallback(paper_path, paper_name):
@@ -942,7 +990,9 @@ Expected: FAIL, `ImportError: cannot import name 'build_figures'`.
 from paperboard.geometry import area, pad
 from paperboard.source_model import Figure
 
-_CAPTION = re.compile(r"^\s*(Figure|Fig\.?|Table)\s*(\d+)", re.IGNORECASE)
+# A caption, not a reference to one: "Figure 3." or "Table 2:" but not "Table 3 shows".
+_CAPTION = re.compile(r"^\s*(Figure|Fig\.?|Table)\s*(\d+)\s*[.:]", re.IGNORECASE)
+_CAPTION_LABELS = {"caption", "text"}
 
 CAPTION_PAD = 4.0          # points; a tight clip cuts the bottom row of glyphs
 MIN_FIGURE_AREA = 2500.0   # square points; smaller boxes are rules and separators
@@ -981,11 +1031,9 @@ def build_figures(pdf_path: Path, pages: list[PageInfo], regions: list[Region]) 
     """
     figures: list[Figure] = []
     with pymupdf.open(pdf_path) as doc:
-        for ordinal, caption in enumerate(r for r in regions if r.label == "caption"):
-            key = _caption_key(caption.text)
-            if key is None:
-                continue
-            kind, number = key
+        captions = [r for r in regions if r.label in _CAPTION_LABELS and _CAPTION.match(r.text)]
+        for caption in captions:
+            kind, number = _caption_key(caption.text)
             found = _find_artwork(doc, regions, caption, kind)
             if found is None:
                 continue
@@ -1073,39 +1121,32 @@ git commit -m "feat: pair captions with figures through a three-branch fallback"
 
 ---
 
-### Task 6: Formulas and page text
+### Task 6: Page text
 
 **Files:**
 - Modify: `src/paperboard/extract/pymupdf_layout.py`
-- Test: `tests/test_formulas.py`
+- Test: `tests/test_page_text.py`
 
 **Interfaces:**
 - Consumes: `Region`, `PageInfo`.
-- Produces: `build_formulas(pages, regions) -> list[Formula]`, `read_page_text(pdf_path) -> list[PageText]`.
+- Produces: `read_page_text(pdf_path) -> list[PageText]`.
+
+There is no formula extraction. SPEC-ADDENDUM.md section 11 removed the `formulas` list
+from `source.json` because no command consumes it: a cut equation is a chunk like any
+other, anchored by its rectangle. The `formula` layout label is still used — Task 5 relies
+on layout regions generally — but nothing is stored for it.
 
 `page_text` exists so the anchoring module in the API plan can re-anchor without reopening
 the PDF, and so anchoring is testable from a JSON fixture. (Addendum sections 3 and 5.)
+Use `page.get_text()`, not `PageLayout.fulltext`: measured, `fulltext` came back as 47
+characters for a full page.
 
 - [ ] **Step 1: Write the failing test**
 
-`tests/test_formulas.py`:
+`tests/test_page_text.py`:
 
 ```python
-from paperboard.extract.pymupdf_layout import build_formulas, read_page_text, read_regions
-
-
-def test_formulas_are_large_enough_to_be_real(paper_path):
-    pages, regions = read_regions(paper_path)
-    for formula in build_formulas(pages, regions):
-        x0, y0, x1, y1 = formula.rect.rect
-        assert (x1 - x0) * (y1 - y0) >= 200.0
-
-
-def test_adam_has_display_equations(paper_path, paper_name):
-    if paper_name != "adam":
-        return
-    pages, regions = read_regions(paper_path)
-    assert len(build_formulas(pages, regions)) >= 3
+from paperboard.extract.pymupdf_layout import read_page_text, read_regions
 
 
 def test_page_text_covers_every_page_in_order(paper_path):
@@ -1120,36 +1161,13 @@ def test_page_text_is_not_empty_for_a_body_page(paper_path):
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `.venv/bin/pytest tests/test_formulas.py -v`
-Expected: FAIL, `ImportError: cannot import name 'build_formulas'`.
+Run: `.venv/bin/pytest tests/test_page_text.py -v`
+Expected: FAIL, `ImportError: cannot import name 'read_page_text'`.
 
 - [ ] **Step 3: Add to `src/paperboard/extract/pymupdf_layout.py`**
 
 ```python
-from paperboard.source_model import Formula, PageText
-
-MIN_FORMULA_AREA = 200.0  # square points; the model emits slivers like [326,602,329,606]
-
-
-def build_formulas(pages: list[PageInfo], regions: list[Region]) -> list[Formula]:
-    """Display equations as rectangles. Never LaTeX — SPEC.md section 12.
-
-    The rectangle is the deliverable: the front end renders it as a clip, which is
-    exactly what the equation looked like in the paper.
-    """
-    formulas: list[Formula] = []
-    for ordinal, region in enumerate(r for r in regions if r.label == "formula"):
-        x0, y0, x1, y1 = region.rect
-        if (x1 - x0) * (y1 - y0) < MIN_FORMULA_AREA:
-            continue
-        formulas.append(
-            Formula(
-                id=f"eq-{ordinal}",
-                rect=PageRect(page=region.page, rect=region.rect),
-                text=region.text,
-            )
-        )
-    return formulas
+from paperboard.source_model import PageText
 
 
 def read_page_text(pdf_path: Path) -> list[PageText]:
@@ -1162,16 +1180,16 @@ def read_page_text(pdf_path: Path) -> list[PageText]:
         return [PageText(page=i, text=doc[i].get_text()) for i in range(doc.page_count)]
 ```
 
-- [ ] **Step 4: Run the formula tests**
+- [ ] **Step 4: Run the page-text tests**
 
-Run: `.venv/bin/pytest tests/test_formulas.py -v`
+Run: `.venv/bin/pytest tests/test_page_text.py -v`
 Expected: all pass.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/paperboard/extract/pymupdf_layout.py tests/test_formulas.py
-git commit -m "feat: extract display equations and per-page text"
+git add src/paperboard/extract/pymupdf_layout.py tests/test_page_text.py
+git commit -m "feat: extract per-page text for anchoring"
 ```
 
 ---
@@ -1217,7 +1235,7 @@ def test_extracted_document_is_populated(paper_path):
     doc = extract(paper_path)
     assert doc.schema_version == 1
     assert doc.extractor.startswith("pymupdf-layout/")
-    assert doc.pages and doc.sections and doc.page_text
+    assert doc.pages and doc.sections and doc.regions and doc.page_text
 
 
 def test_extraction_never_modifies_the_pdf(paper_path):
@@ -1233,7 +1251,6 @@ def test_every_rect_in_the_document_lies_on_a_real_page(paper_path):
         [s.heading_rect for s in doc.sections]
         + [r for s in doc.sections for r in s.extent]
         + [f.rect for f in doc.figures]
-        + [f.rect for f in doc.formulas]
     )
     for page_rect in rects:
         assert page_rect.page in sizes
@@ -1283,12 +1300,12 @@ def extract_document(pdf_path: Path) -> SourceDocument:
         pages=pages,
         sections=sections,
         figures=build_figures(pdf_path, pages, regions),
-        formulas=build_formulas(pages, regions),
+        regions=[LayoutRegion(page=r.page, rect=r.rect, label=r.label) for r in regions],
         page_text=page_text,
     )
 ```
 
-Add the import at the top of the file: `from paperboard.source_model import SourceDocument`.
+Add the import at the top of the file: `from paperboard.source_model import LayoutRegion, SourceDocument`.
 
 - [ ] **Step 4: Run the tests**
 
@@ -1401,7 +1418,7 @@ def extract_command(
     )
     typer.echo(
         f"{document.paper_id}: {len(document.sections)} sections, "
-        f"{len(document.figures)} figures, {len(document.formulas)} formulas"
+        f"{len(document.figures)} figures"
     )
 ```
 
@@ -1468,6 +1485,7 @@ from paperboard.extract import extract  # noqa: E402
 def summarise(document) -> dict:
     return {
         "page_count": len(document.pages),
+        "region_count": len(document.regions),
         "sections": [
             {
                 "id": s.id,
@@ -1484,7 +1502,6 @@ def summarise(document) -> dict:
              "page": f.rect.page, "confidence": f.confidence}
             for f in document.figures
         ],
-        "formula_count": len(document.formulas),
     }
 
 
