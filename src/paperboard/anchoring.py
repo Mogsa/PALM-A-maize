@@ -10,18 +10,17 @@ only thing that produces them.
 """
 
 import bisect
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pymupdf
 from rapidfuzz import fuzz
 
 from paperboard.board_model import ChunkAnchor, HighlightAnchor, QuoteSelector
-from paperboard.geometry import Rect, column_runs, midpoint, normalise, union
+from paperboard.geometry import Rect, column_runs, contains_point, midpoint, normalise, union
 from paperboard.source_model import PageRect, SourceDocument
 
 MIN_SCORE = 0.5            # below this, a quote is orphaned
 MIN_QUOTE_SCORE = 0.6      # the quote itself must match at least this well to be a candidate
-SAME_PLACE_POINTS = 3.0    # a recovered rect within this many points of the stored one is "anchored"
 FUZZY_MIN_CHARS = 8        # shorter quotes are matched exactly or not at all
 WEIGHTS = {"quote": 50.0, "prefix": 20.0, "suffix": 20.0, "position": 2.0}
 TOTAL_WEIGHT = sum(WEIGHTS.values())
@@ -33,6 +32,10 @@ class PageIndex:
     text: str
     stripped: str
     offsets: list[int]
+    # Per-character boxes, filled on first use by `page_char_boxes`. An index is
+    # built for one resolve pass over one open PDF, so this caches one rawdict
+    # extraction per page for that pass and dies with it (ruling R14).
+    cache: dict = field(default_factory=dict, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -237,39 +240,29 @@ def _char_boxes(page: pymupdf.Page) -> list[tuple[str, Rect]]:
     return chars
 
 
-def rect_for_offsets(page: pymupdf.Page, page_index: PageIndex, start: int, end: int) -> Rect | None:
-    """The bounding box of exactly the characters at `page_index.text[start:end]`
-    (unstripped offsets, the same convention as `Match.start`/`Match.end`),
-    built from PyMuPDF's per-character boxes rather than a text search.
+def page_char_boxes(page: pymupdf.Page, page_index: PageIndex) -> list[tuple[str, Rect]]:
+    """`_char_boxes` for this page, read once per index (ruling R14: measured
+    60 highlights resolving in about 1.1 s when every call re-read rawdict)."""
+    if "chars" not in page_index.cache:
+        page_index.cache["chars"] = _char_boxes(page)
+    return page_index.cache["chars"]
 
-    Ruling R6: `rects_for_text` unions every occurrence `search_for` finds, so
-    a repeated phrase (measured: "shortcut connections" occurs 5 times on
-    ResNet page 1) comes back as a box spanning every occurrence, not the one
-    `find_quote` chose. Reading the boxes off the matched characters
-    themselves cannot pick up another occurrence, because it never searches
-    for text at all.
 
-    Before trusting those boxes, the matched slice of the `rawdict` character
-    sequence is checked against `page_index.stripped[s:e]` -- the same slice,
-    not just the same length, since a same-length substitution would pass a
-    length-only check. `get_text()` (what `page_index.stripped` is built from)
-    and `rawdict` are two different extraction paths; this fixture set always
-    agrees between them (fix round 1's measurement), but nothing enforces
-    that in general, and returning a plausible-looking rect built from the
-    wrong characters would be silently wrong. Returns `None` when the slice
-    doesn't check out, so the caller (`_recover_rect`) falls back to
-    `rects_for_text`.
-    """
-    if end <= start:
-        return None
-    offsets = page_index.offsets
-    s = bisect.bisect_left(offsets, start)
-    e = bisect.bisect_left(offsets, end - 1) + 1
-    if s >= e:
-        return None
-    chars = _char_boxes(page)
+def rect_for_stripped(page: pymupdf.Page, page_index: PageIndex, s: int, e: int) -> Rect | None:
+    """The bounding box of the characters at `page_index.stripped[s:e]`, read
+    off PyMuPDF's per-character boxes.
+
+    Before trusting those boxes, the slice of the `rawdict` character sequence
+    is checked against `page_index.stripped[s:e]` -- the same slice, not just
+    the same length, since a same-length substitution would pass a length-only
+    check. `get_text()` (what `page_index.stripped` is built from) and
+    `rawdict` are two different extraction paths; this fixture set always
+    agrees between them, but nothing enforces that in general, and a
+    plausible-looking rect built from the wrong characters would be silently
+    wrong. Returns `None` when the slice does not check out."""
+    chars = page_char_boxes(page, page_index)
     e = min(e, len(chars))
-    if s >= e:
+    if s < 0 or s >= e:
         return None
     matched = chars[s:e]
     if "".join(c for c, _ in matched) != page_index.stripped[s:e]:
@@ -280,8 +273,37 @@ def rect_for_offsets(page: pymupdf.Page, page_index: PageIndex, start: int, end:
     return rect
 
 
-def _same_place(a: Rect, b: Rect) -> bool:
-    return all(abs(x - y) <= SAME_PLACE_POINTS for x, y in zip(normalise(a), normalise(b)))
+def rect_for_offsets(page: pymupdf.Page, page_index: PageIndex, start: int, end: int) -> Rect | None:
+    """The bounding box of exactly the characters at `page_index.text[start:end]`
+    (unstripped offsets, the same convention as `Match.start`/`Match.end`).
+
+    Ruling R6: `rects_for_text` unions every occurrence `search_for` finds, so
+    a repeated phrase (measured: "shortcut connections" occurs 5 times on
+    ResNet page 1) comes back as a box spanning every occurrence, not the one
+    `find_quote` chose. Reading the boxes off the matched characters
+    themselves cannot pick up another occurrence, because it never searches
+    for text at all. Returns `None` when the character boxes do not line up
+    with the page text (see `rect_for_stripped`), so the caller
+    (`_recover_rect`) falls back to `rects_for_text`.
+    """
+    if end <= start:
+        return None
+    offsets = page_index.offsets
+    s = bisect.bisect_left(offsets, start)
+    e = bisect.bisect_left(offsets, end - 1) + 1
+    return rect_for_stripped(page, page_index, s, e)
+
+
+def _holds(found: tuple[int, Rect], stored: list[PageRect]) -> bool:
+    """Ruling R12, the one "unchanged" rule: the recovered text box's midpoint
+    lies inside a stored rect on the page it was found on. The same midpoint
+    rule `highlights_in` and the frontend use to say a mark is under a region.
+    A rect is paint geometry drawn by the reader, so it may be looser than the
+    glyphs (a padded drag) or cut through a line; the text still being under
+    it is what "unchanged" means."""
+    page, rect = found
+    point = midpoint(rect)
+    return any(r.page == page and contains_point(r.rect, *point) for r in stored)
 
 
 def _recover_rect(pdf: pymupdf.Document, index: list[PageIndex], match: Match) -> Rect | None:
@@ -313,7 +335,7 @@ def resolve_highlight(anchor: HighlightAnchor, index: list[PageIndex], pdf: pymu
         if match.page == anchor.page:
             return anchor.model_copy(update={"state": "anchored", "position": position})
         return anchor.model_copy(update={"state": "orphaned"})
-    if match.page == anchor.page and _same_place(rect, anchor.rect):
+    if _holds((match.page, rect), [PageRect(page=anchor.page, rect=anchor.rect)]):
         return anchor.model_copy(update={"state": "anchored", "position": position})
     return anchor.model_copy(update={"page": match.page, "rect": rect, "position": position, "state": "relocated"})
 
@@ -340,9 +362,14 @@ def _regions_between(doc: SourceDocument, start: tuple[int, Rect], end: tuple[in
 
 
 def resolve_chunk(anchor: ChunkAnchor, index: list[PageIndex], pdf: pymupdf.Document, doc: SourceDocument) -> ChunkAnchor:
-    """Anchor the two ends independently. If both hold where they were, keep the
-    stored rects. If they moved, rebuild the region from the layout regions
-    between them with the same column-run rule extraction uses."""
+    """Anchor the two ends independently. If both hold where they were (ruling
+    R12: each end's text box has its midpoint inside a stored rect on its
+    page), keep the stored rects. If they moved, rebuild the region from the
+    layout regions between them with the same column-run rule extraction uses.
+    A chunk with no quotable text at either end (a figure with no text layer)
+    has nothing to re-find and anchors on its geometry alone."""
+    if not strip_whitespace(anchor.start.exact)[0] and not strip_whitespace(anchor.end.exact)[0]:
+        return anchor.model_copy(update={"state": "anchored"})
     first_page = anchor.rects[0].page
     start = find_quote(index, anchor.start, anchor.position, first_page)
     end = find_quote(index, anchor.end, anchor.position, anchor.rects[-1].page)
@@ -357,7 +384,7 @@ def resolve_chunk(anchor: ChunkAnchor, index: list[PageIndex], pdf: pymupdf.Docu
 
     start_at = located(start, anchor.rects[0])
     end_at = located(end, anchor.rects[-1])
-    if start and end and _still_inside(start_at, anchor.rects[0]) and _still_inside(end_at, anchor.rects[-1]):
+    if start and end and _holds(start_at, anchor.rects) and _holds(end_at, anchor.rects):
         position = global_position(index, start.page, start.start)
         return anchor.model_copy(update={"state": "anchored", "position": position})
 
@@ -367,14 +394,3 @@ def resolve_chunk(anchor: ChunkAnchor, index: list[PageIndex], pdf: pymupdf.Docu
     position = global_position(index, start.page, start.start) if start else anchor.position
     return anchor.model_copy(update={"rects": rects, "position": position, "state": "relocated"})
 
-
-def _still_inside(found: tuple[int, Rect], stored: PageRect) -> bool:
-    """The recovered end sits on the stored page and inside the stored rect,
-    give or take a few points."""
-    page, rect = found
-    if page != stored.page:
-        return False
-    bx0, by0, bx1, by1 = normalise(stored.rect)
-    x0, y0, x1, y1 = normalise(rect)
-    slack = SAME_PLACE_POINTS
-    return bx0 - slack <= x0 and by0 - slack <= y0 and x1 <= bx1 + slack and y1 <= by1 + slack

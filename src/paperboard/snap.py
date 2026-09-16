@@ -4,9 +4,9 @@ region when the drag was rough. SPEC-ADDENDUM.md section 5.3, one implementation
 import pymupdf
 from pydantic import BaseModel
 
-from paperboard.anchoring import build_index, global_position, strip_whitespace
+from paperboard.anchoring import PageIndex, build_index, global_position, rect_for_stripped, strip_whitespace
 from paperboard.board_model import CONTEXT_CHARS, ChunkAnchor, HighlightAnchor, QuoteSelector
-from paperboard.geometry import Rect, area, midpoint, normalise
+from paperboard.geometry import Rect, area, contains_point, midpoint, normalise
 from paperboard.source_model import PageRect, SourceDocument
 
 SNAP_THRESHOLD = 0.6   # a rough drag covering this share of a region's characters takes the region
@@ -45,19 +45,34 @@ def _snap_rect(pdf: pymupdf.Document, rect: PageRect, region) -> PageRect:
     return rect
 
 
-def _selector(page_text: str, exact: str) -> tuple[QuoteSelector, int]:
-    """Prefix and suffix from the page's own text around the first occurrence,
-    matched with whitespace stripped so line breaks do not defeat it."""
-    stripped_page, offsets = strip_whitespace(page_text)
+def _occurrence_under(page: pymupdf.Page, page_index: PageIndex, needle: str, rect: Rect) -> int:
+    """Stripped offset of the occurrence of `needle` whose character boxes have
+    their midpoint inside `rect` (ruling R13): a repeated phrase is quoted where
+    the reader selected it, not where it first appears on the page. Falls back
+    to the first occurrence when none lies under the rect, for instance when
+    the character boxes do not line up with the page text; -1 when absent."""
+    first = at = page_index.stripped.find(needle)
+    while at != -1:
+        box = rect_for_stripped(page, page_index, at, at + len(needle))
+        if box is not None and contains_point(rect, *midpoint(box)):
+            return at
+        at = page_index.stripped.find(needle, at + 1)
+    return first
+
+
+def _selector(page: pymupdf.Page, page_index: PageIndex, exact: str, rect: Rect) -> tuple[QuoteSelector, int]:
+    """Prefix and suffix from the page's own text around the occurrence under
+    `rect`, matched with whitespace stripped so line breaks do not defeat it."""
     needle, _ = strip_whitespace(exact)
-    at = stripped_page.find(needle) if needle else -1
+    at = _occurrence_under(page, page_index, needle, rect) if needle else -1
     if at == -1:
         return QuoteSelector(exact=exact), 0
+    text, offsets = page_index.text, page_index.offsets
     start = offsets[at]
     end = offsets[at + len(needle) - 1] + 1
     return (
-        QuoteSelector(exact=exact, prefix=page_text[max(0, start - CONTEXT_CHARS):start],
-                      suffix=page_text[end:end + CONTEXT_CHARS]),
+        QuoteSelector(exact=exact, prefix=text[max(0, start - CONTEXT_CHARS):start],
+                      suffix=text[end:end + CONTEXT_CHARS]),
         start,
     )
 
@@ -77,19 +92,21 @@ def select(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRect], sn
 
     pieces = [text_under(pdf[r.page], r.rect) for r in rects]
     text = "\n".join(pieces)
-    stripped_text = text.strip()
     index = build_index(doc)
-    first_page_text = doc.page_text[rects[0].page].text
-    last_page_text = doc.page_text[rects[-1].page].text
+    first, last = rects[0], rects[-1]
 
-    start, start_at = _selector(first_page_text, stripped_text[:END_CHARS])
-    end, _ = _selector(last_page_text, stripped_text[-END_CHARS:])
-    position = global_position(index, rects[0].page, start_at)
+    # Each end is quoted from the text under its own rect, so the quote lies
+    # under that rect and R12's "unchanged" test can find it there. Quoting
+    # the first characters of the whole selection spilled past a heading-only
+    # first rect into the next one (measured: Attention 3.1's extent).
+    start, start_at = _selector(pdf[first.page], index[first.page], pieces[0].strip()[:END_CHARS], first.rect)
+    end, _ = _selector(pdf[last.page], index[last.page], pieces[-1].strip()[-END_CHARS:], last.rect)
+    position = global_position(index, first.page, start_at)
     chunk = ChunkAnchor(rects=rects, start=start, end=end, position=position)
 
     highlight = None
     if len(rects) == 1:
-        quote, at = _selector(first_page_text, stripped_text)
+        quote, at = _selector(pdf[first.page], index[first.page], text.strip(), first.rect)
         highlight = HighlightAnchor(page=rects[0].page, rect=rects[0].rect, quote=quote,
                                     position=global_position(index, rects[0].page, at))
     return Selection(text=text, rects=rects, region_label=label, highlight=highlight, chunk=chunk)
