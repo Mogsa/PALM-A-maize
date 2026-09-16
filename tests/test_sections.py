@@ -1,12 +1,14 @@
 import pytest
 
 from paperboard.extract.pymupdf_layout import (
+    Region,
     _clean_title,
     build_sections,
     parse_number,
     read_regions,
 )
 from paperboard.geometry import contains_point
+from paperboard.source_model import PageInfo
 
 
 @pytest.mark.parametrize(
@@ -98,6 +100,30 @@ def test_unnumbered_abstract_is_depth_one(paper_path):
     sections = build_sections(pages, regions)
     abstract = next(s for s in sections if s.title.lower().startswith("abstract"))
     assert abstract.depth == 1
+
+
+def _region(page, y0, label, text, header_level=None):
+    return Region(page=page, rect=(50.0, y0, 300.0, y0 + 12.0), label=label,
+                  header_level=header_level, text=text)
+
+
+def test_front_matter_heading_is_depth_one_whatever_its_level():
+    """On the AAAI template the layout model reports Abstract at a small heading
+    level, and the level fallback made it depth 3. An unnumbered heading that comes
+    before the first numbered section is front matter and is never nested."""
+    pages = [PageInfo(index=0, width=612.0, height=792.0, rotation=0)]
+    regions = [
+        _region(0, 72.0, "section-header", "Some Paper Title", header_level=1),
+        _region(0, 120.0, "section-header", "Abstract", header_level=4),
+        _region(0, 140.0, "text", "We study things."),
+        _region(0, 300.0, "section-header", "1 Introduction", header_level=2),
+        _region(0, 320.0, "text", "Body."),
+        _region(0, 500.0, "section-header", "A Subsection Without A Number", header_level=4),
+    ]
+    depths = {s.title: s.depth for s in build_sections(pages, regions)}
+    assert depths["Abstract"] == 1
+    assert depths["1 Introduction"] == 1
+    assert depths["A Subsection Without A Number"] == 3  # after numbering starts, the level counts
 
 
 def test_section_titles_have_no_decoding_or_layout_artefacts(paper_path):

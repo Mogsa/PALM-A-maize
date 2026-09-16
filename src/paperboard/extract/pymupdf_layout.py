@@ -152,11 +152,18 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
     page_widths = {p.index: p.width for p in pages}
 
     sections: list[Section] = []
+    numbering_started = False
     for ordinal, (start, region) in enumerate(headings):
         stop = headings[ordinal + 1][0] if ordinal + 1 < len(headings) else len(body)
         title = _clean_title(region.text)
         number, depth = parse_number(title)
-        if number is None and region.header_level:
+        numbering_started = numbering_started or number is not None
+        if number is None and not numbering_started:
+            # Front matter: title, Abstract, keywords. Never nested, whatever font
+            # size the layout model saw. The AAAI template reports Abstract at a
+            # small level and the fallback below made it depth 3.
+            depth = 1
+        elif number is None and region.header_level:
             # header_level 1 is the paper title, so top-level sections are 2.
             depth = max(1, region.header_level - 1)
         span = body[start:stop]
