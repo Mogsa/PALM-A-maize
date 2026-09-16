@@ -1,6 +1,6 @@
 # Paper Board: spec and plan
 
-Draft for review. Third revision, 16 September 2026. Grounded in RESEARCH.md.
+Draft for review. Third revision, 16 September 2026. Grounded in RESEARCH.md and TOOLS.md.
 
 ## 1. Purpose
 
@@ -42,7 +42,7 @@ Every piece has the same operations: move, resize, collapse or expand, open sour
 
 A section piece collapsed shows its heading, a line or two, and a count of what has been attached to it. Expanded, it shows the full text and can be highlighted in place, as many times as you like, in as many passes as you like. Figures and equations are rendered clips from the PDF. The PDF itself opens in a side panel from any piece with a source link.
 
-Cutting an excerpt never changes the section. Cutting from an excerpt never changes the excerpt. The paper is never edited.
+Highlighting is deliberately forgiving: a rough drag across a paragraph excerpts the whole paragraph, and exact selection is there when you want it. Cutting an excerpt never changes the section. Cutting from an excerpt never changes the excerpt. The paper is never edited.
 
 ### 3.2 Tag
 
@@ -54,7 +54,7 @@ Tags are one thing doing the jobs the previous drafts gave to three:
 - **Pass.** `pass 1`, `pass 2` are preset tags. Add `pass 3`, `pass 7`, or none. A highlight made in the second pass over a section already highlighted in the first is just a highlight with a different tag. Filter to `pass 1` to see what you knew after pass 1.
 - **Not yet understood.** `question` is a preset tag. The board lists every `question`-tagged piece that has no note attached. That list is the queue of things to go look up. Attaching a note clears it.
 
-Presets can be renamed, recoloured, or deleted. New tags are one click. No piece needs a tag.
+Presets can be renamed, recoloured, or deleted. New tags are one click. No piece needs a tag. Tags are global across all boards, never per paper.
 
 ### 3.3 Connection
 
@@ -76,7 +76,7 @@ Proximity without a group also counts. The research says readers use position as
 
 **Reading goal.** One optional line at the top of the board: why am I reading this. It is a note pinned to the header.
 
-**Summary export.** One command writes the board to a single Markdown file in reading order: the goal, then each section with its excerpts and notes, then the concept links and references. Filtered by tag if you want, so "export pass 1" or "export claims and evidence" is the same command. This is the literature note. No separate summary is ever written by hand.
+**Summary export.** One command writes the board to a single Markdown file in the paper's own order, with figure clips as images, not placeholders: the goal, then each section with its excerpts and notes, then the concept links and references. Filtered by tag if you want, so "export pass 1" or "export claims and evidence" is the same command. This is the literature note. No separate summary is ever written by hand.
 
 **Initial layout.** On open, sections in the paper's order down the left, figures in a column beside them, all collapsed. That is the uncut paper. Everything after is the reader's, and the tool never rearranges anything.
 
