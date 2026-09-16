@@ -56,6 +56,35 @@ Do not push. When finished, use superpowers:finishing-a-development-branch, run 
 section 11 by hand on a paper of the reader's choosing, and merge locally.
 ```
 
+## Resuming a stopped session
+
+### Session A, resume (Tasks 1 to 7 done)
+
+```
+Resume executing docs/superpowers/plans/2026-09-16-api-and-storage.md in the existing worktree
+.claude/worktrees/api on branch api. Tasks 1 to 7 are committed and reviewed; the ledger is
+.superpowers/sdd/*/progress.md in that worktree, so read it first and keep its rulings.
+Execute Task 8 and Task 9 with the superpowers:subagent-driven-development skill, then the
+final whole-branch review and one fix wave. First read the "Shared rules" section of
+docs/superpowers/plans/2026-09-16-plans-kickoff-prompt.md and follow every rule in it. Do not
+push. When finished, use superpowers:finishing-a-development-branch and merge locally into
+claude/serene-albattani-r85tze.
+```
+
+### Session B, resume (Task 1 done, stopped on purpose)
+
+```
+Resume executing docs/superpowers/plans/2026-09-16-frontend-core.md in the existing worktree
+.claude/worktrees/frontend-core on branch frontend-core. Task 1 is committed; the session
+stopped because the spike contradicted the plan. The plan has since been amended on
+claude/serene-albattani-r85tze (commit c85e44d, see "Spike findings applied" at its top).
+First rebase frontend-core onto claude/serene-albattani-r85tze so the amended plan is in the
+worktree. Read the ledger in .superpowers/sdd/*/progress.md and keep its rulings. Then execute
+Tasks 2 and 3 only, with the superpowers:subagent-driven-development skill, following the
+"Shared rules" section of docs/superpowers/plans/2026-09-16-plans-kickoff-prompt.md. Stop
+after Task 3 is committed and reviewed, keep the branch unmerged, and do not push.
+```
+
 ## Shared rules
 
 Invoke `superpowers:subagent-driven-development` first and follow it exactly: one fresh subagent per task, tests written before code, the two-stage review between tasks, one commit per task.
