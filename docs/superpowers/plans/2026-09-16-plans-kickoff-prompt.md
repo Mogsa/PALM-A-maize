@@ -1,22 +1,70 @@
-# Kickoff prompt: execute the API plan, then the two frontend plans
+# Kickoff prompts: four sessions for the three remaining plans
 
-Three plans follow build step 1, in this order, each in its own fresh Claude Code session
-opened in this repo. Paste the block below the line, replacing `<PLAN>` with the plan file
-for that session:
+Four fresh Claude Code sessions, each opened in this repo. At most two run at once:
 
-1. `docs/superpowers/plans/2026-09-16-api-and-storage.md`
-2. `docs/superpowers/plans/2026-09-16-frontend-core.md` (after 1 is merged)
-3. `docs/superpowers/plans/2026-09-16-frontend-features.md` (after 2 is merged)
+| Session | Runs | Starts when |
+|---|---|---|
+| A | API and storage plan, all tasks | now |
+| B | Frontend core, Tasks 1 to 3 only | now, beside A |
+| C | Frontend core, Tasks 4 to 7, on B's branch | A is merged |
+| D | Frontend features, all tasks | C is merged |
 
----
+The rules block at the end is shared. Each session prompt tells the session to read it.
 
-Execute the implementation plan at `<PLAN>` using the `superpowers:subagent-driven-development` skill. Invoke that skill first and follow it exactly: one fresh subagent per task, tests written before code, the two-stage review between tasks, one commit per task.
+## Session A
+
+```
+Execute docs/superpowers/plans/2026-09-16-api-and-storage.md, all nine tasks, using the
+superpowers:subagent-driven-development skill. First read the "Shared rules" section of
+docs/superpowers/plans/2026-09-16-plans-kickoff-prompt.md and follow every rule in it.
+Work in a worktree on a branch named api off claude/serene-albattani-r85tze. Do not push.
+When finished, use superpowers:finishing-a-development-branch and merge locally.
+```
+
+## Session B
+
+```
+Execute Tasks 1, 2 and 3 only of docs/superpowers/plans/2026-09-16-frontend-core.md, using
+the superpowers:subagent-driven-development skill. First read the "Shared rules" section of
+docs/superpowers/plans/2026-09-16-plans-kickoff-prompt.md and follow every rule in it.
+Work in a worktree on a branch named frontend-core off claude/serene-albattani-r85tze.
+These three tasks need no server; do not start Task 4. Stop after Task 3 is committed and
+reviewed, keep the branch unmerged, and report the spike findings file in full. Do not push.
+```
+
+## Session C
+
+```
+The branch frontend-core has Tasks 1 to 3 of docs/superpowers/plans/2026-09-16-frontend-core.md
+committed, and the API plan is now merged into claude/serene-albattani-r85tze. Check out
+frontend-core in a worktree, rebase it onto claude/serene-albattani-r85tze, and execute
+Tasks 4, 5, 6 and 7 using the superpowers:subagent-driven-development skill. First read the
+"Shared rules" section of docs/superpowers/plans/2026-09-16-plans-kickoff-prompt.md and
+follow every rule in it, and read docs/superpowers/plans/2026-09-16-frontend-spike-findings.md
+before Task 4: if it contradicts the plan, stop and say so. Do not push. When finished, use
+superpowers:finishing-a-development-branch and merge locally.
+```
+
+## Session D
+
+```
+Execute docs/superpowers/plans/2026-09-16-frontend-features.md, all six tasks, using the
+superpowers:subagent-driven-development skill. First read the "Shared rules" section of
+docs/superpowers/plans/2026-09-16-plans-kickoff-prompt.md and follow every rule in it.
+Work in a worktree on a branch named frontend-features off claude/serene-albattani-r85tze.
+Do not push. When finished, use superpowers:finishing-a-development-branch, run SPEC.md
+section 11 by hand on a paper of the reader's choosing, and merge locally.
+```
+
+## Shared rules
+
+Invoke `superpowers:subagent-driven-development` first and follow it exactly: one fresh subagent per task, tests written before code, the two-stage review between tasks, one commit per task.
 
 Before dispatching anything:
 
 1. Read `docs/SPEC.md` in full and `docs/SPEC-ADDENDUM.md` sections 2, 4, 5, 6, 7, 8. The plan argues from them. Where the plan and the addendum disagree, the plan is newer; its last section lists the differences, and you apply them to the addendum in your final commit.
 2. Read `docs/superpowers/plans/2026-09-15-extraction-verification.md` and `docs/superpowers/plans/2026-09-16-frontend-spike-findings.md` if it exists. They record where earlier plans were wrong about a library and why; the rule they teach is that a test derived from a measurement asserts only what was measured, on every fixture it runs over.
-3. Use the `superpowers:using-git-worktrees` skill to work on a branch off `claude/serene-albattani-r85tze`. Do not push.
+3. Use the `superpowers:using-git-worktrees` skill for the worktree and branch your session prompt names. Do not push.
 4. Run `python scripts/fetch_fixtures.py` once in the worktree's virtual environment. The fixture papers are not committed.
 
 Rules for every subagent prompt you write:
