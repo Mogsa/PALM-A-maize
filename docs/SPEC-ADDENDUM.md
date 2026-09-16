@@ -134,7 +134,12 @@ Field notes:
   `formula` boxes, which may remove the need for a separate `get_pixmap(clip=...)` on the
   extraction path. Extraction runs once per paper, so it uses `parse_document()`.
 - `extent` is the span from a heading to the next heading in reading order, as one
-  rectangle per page crossed. It is what the split command turns into a section piece.
+  rectangle per column run: a run breaks at a page change, at an upward jump in reading
+  order, or when a region's horizontal centre moves by more than 0.15 of the page width.
+  So a two-column page usually contributes two rectangles, and a full-width figure gets
+  its own. One hull per page was the first wording, and it was wrong: on a two-column
+  page that hull spans the column gap and covers the next section's heading. Measured on
+  ResNet, 6 of 21 sections. It is what the split command turns into a section piece.
 - `confidence` on a figure records which branch of the fallback chain found it:
   `"region"` (a layout `picture`/`table` region), `"image"` (`get_image_info()` above the
   caption), or `"drawings"` (`cluster_drawings()`). Surfaced so a reader can see that a
@@ -148,9 +153,12 @@ Field notes:
 
 **[CHOICE]** Caption-to-figure association is proximity matching — a `caption` region is
 bound to the nearest `picture`/`table` region in the same column, preferring above. This
-is the real capability we gave up by not using Docling, which links them natively, and it
-has a known failure on the Transformer paper's Figure 1. You would prefer Docling if your
-corpus is figure-dense and the misses annoy you; section 3.1 keeps that door open.
+is the real capability we gave up by not using Docling, which links them natively. The
+measured miss is ResNet's Figure 2, whose caption the layout model merges into the picture
+region itself, so no caption exists to pair; 19 of ResNet's 20 figures and tables pair
+correctly. An earlier draft named the Transformer paper's Figure 1 as the miss; measured,
+the layout model finds it as a picture region. You would prefer Docling if your corpus is
+figure-dense and the misses annoy you; section 3.1 keeps that door open.
 
 ### 3.1 The extractor is behind an interface
 
@@ -442,7 +450,7 @@ node) covers a region that may cross pages and headings:
 }
 ```
 
-`rects` is one rectangle per page crossed, in reading order. `start` and `end` are
+`rects` is one rectangle per column run, in reading order, as `extent` in section 3. `start` and `end` are
 quote selectors for the first and last few words, anchored independently by the algorithm
 in 5.2; the region is rebuilt as the span between them, one rectangle per page. If only
 one of the two anchors, the chunk is `relocated` with the found end and the stored
@@ -567,9 +575,12 @@ carrying the `question` tag that has no edge connecting it to a node of type `no
 SPEC.md's build plan tests are all manual. They stay — they are the acceptance test — but
 each task also needs something runnable unattended.
 
-**Fixtures.** Three CC-BY arXiv papers committed under `tests/fixtures/papers/`, with
-their licences recorded in a `SOURCES.md` beside them. One must be maths-heavy. Total
-under 5 MB.
+**Fixtures.** Three arXiv papers under `tests/fixtures/papers/`, fetched once by
+`scripts/fetch_fixtures.py` and verified against sha256 hashes in `MANIFEST.json`. They
+are not committed: all three are under arXiv's non-exclusive licence, which grants no
+redistribution right, and an earlier draft wrongly assumed CC-BY. `SOURCES.md` beside them
+records the licences. One is maths-heavy. A missing fixture fails the suite with the fetch
+command in the message; the fetch script is the only network use in the project.
 
 **Python, pytest.**
 - `extract/`: golden `source.json` per fixture. Assert section count, section titles, and
