@@ -149,6 +149,7 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
     """
     body = [r for r in regions if r.label not in _FURNITURE]
     headings = [(i, r) for i, r in enumerate(body) if _is_heading(r)]
+    page_widths = {p.index: p.width for p in pages}
 
     sections: list[Section] = []
     for ordinal, (start, region) in enumerate(headings):
@@ -166,33 +167,34 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
                 depth=depth,
                 title=title,
                 heading_rect=PageRect(page=region.page, rect=region.rect),
-                extent=_extent(span),
+                extent=_extent(span, page_widths),
                 text="\n\n".join(r.text for r in span[1:] if r.text),
             )
         )
     return sections
 
 
-def _extent(span: list[Region]) -> list[PageRect]:
-    """Collapse a run of regions into one rectangle per contiguous run on a page.
+# A region joins the current run only if its horizontal centre sits within this
+# fraction of the page width of the run's centre. Columns on a two-column page are
+# about 0.21 of the page width apart, a full-width figure is about 0.21 from either
+# column, and nothing inside one column (indented lists, centred formulas) moves the
+# centre by more than about 0.05.
+COLUMN_CENTRE_TOLERANCE = 0.15
+
+
+def _extent(span: list[Region], page_widths: dict[int, float]) -> list[PageRect]:
+    """Collapse a run of regions into one rectangle per column run on a page.
 
     One hull per page is wrong on a two-column layout: a section ends low in the
     left column and resumes high in the right column, and the hull of both spans
-    the full column gap, geometrically containing everything between them --
-    including the next section's heading and body. So instead of one hull per
-    page, this emits one rect per contiguous run: a new run starts whenever the
-    page changes, or the next region's top y jumps upward above the current run's
-    hull top (the column-break signal, since reading order runs down a column
-    before crossing to the next one).
-
-    Runs come out in the order they were encountered, which keeps pages in
-    ascending order too since span is already page-ordered.
-
-    The jump is measured against the *previous region's* top y, not the run's
-    hull top: partway through a run the hull top is already the column's first
-    line, so comparing against it never trips once a second column's regions
-    (which start lower than that) are appended -- the break must be judged
-    region-to-region, the way reading order actually flows.
+    the column gap, geometrically containing everything between them, including
+    the next section's heading. So a run is broken whenever any of three things
+    happens: the page changes; the next region's top is above the previous
+    region's top (reading order runs down a column before crossing to the next,
+    so an upward jump is a column change); or the next region sits in a
+    different column, judged by its horizontal centre. The third test is what
+    catches a full-width figure at the top of a page: merged with the column
+    beneath it, the hull would reach across the page and cover the other column.
     """
     runs: list[tuple[int, Rect]] = []
     last_y0: float | None = None
@@ -200,7 +202,12 @@ def _extent(span: list[Region]) -> list[PageRect]:
         x0, y0, x1, y1 = region.rect
         if runs:
             page, (px0, py0, px1, py1) = runs[-1]
-            if region.page == page and last_y0 is not None and y0 >= last_y0:
+            same_page = region.page == page
+            reads_downward = last_y0 is not None and y0 >= last_y0
+            same_column = abs((px0 + px1) / 2 - (x0 + x1) / 2) <= (
+                COLUMN_CENTRE_TOLERANCE * page_widths[region.page]
+            )
+            if same_page and reads_downward and same_column:
                 runs[-1] = (page, (min(px0, x0), min(py0, y0), max(px1, x1), max(py1, y1)))
                 last_y0 = y0
                 continue

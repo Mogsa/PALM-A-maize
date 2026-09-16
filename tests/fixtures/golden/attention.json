@@ -19,6 +19,7 @@
       "title": "Abstract",
       "page": 0,
       "extent_pages": [
+        0,
         0
       ]
     },
@@ -29,6 +30,7 @@
       "title": "1 Introduction",
       "page": 1,
       "extent_pages": [
+        1,
         1
       ]
     },
@@ -39,6 +41,7 @@
       "title": "2 Background",
       "page": 1,
       "extent_pages": [
+        1,
         1
       ]
     },
@@ -50,6 +53,7 @@
       "page": 1,
       "extent_pages": [
         1,
+        1,
         2
       ]
     },
@@ -60,6 +64,7 @@
       "title": "3.1 Encoder and Decoder Stacks",
       "page": 2,
       "extent_pages": [
+        2,
         2
       ]
     },
@@ -71,6 +76,8 @@
       "page": 2,
       "extent_pages": [
         2,
+        2,
+        3,
         3,
         3
       ]
@@ -82,6 +89,7 @@
       "title": "3.2.1 Scaled Dot-Product Attention",
       "page": 3,
       "extent_pages": [
+        3,
         3
       ]
     },
@@ -92,6 +100,7 @@
       "title": "3.2.2 Multi-Head Attention",
       "page": 3,
       "extent_pages": [
+        3,
         3,
         4
       ]
@@ -113,6 +122,7 @@
       "title": "3.3 Position-wise Feed-Forward Networks",
       "page": 4,
       "extent_pages": [
+        4,
         4
       ]
     },
@@ -124,6 +134,7 @@
       "page": 4,
       "extent_pages": [
         4,
+        4,
         5
       ]
     },
@@ -134,6 +145,7 @@
       "title": "3.5 Positional Encoding",
       "page": 5,
       "extent_pages": [
+        5,
         5
       ]
     },
@@ -144,6 +156,7 @@
       "title": "4 Why Self-Attention",
       "page": 5,
       "extent_pages": [
+        5,
         5,
         6
       ]
@@ -165,6 +178,7 @@
       "title": "5.1 Training Data and Batching",
       "page": 6,
       "extent_pages": [
+        6,
         6
       ]
     },
@@ -175,6 +189,7 @@
       "title": "5.2 Hardware and Schedule",
       "page": 6,
       "extent_pages": [
+        6,
         6
       ]
     },
@@ -185,6 +200,7 @@
       "title": "5.3 Optimizer",
       "page": 6,
       "extent_pages": [
+        6,
         6
       ]
     },
@@ -216,6 +232,7 @@
       "title": "6.1 Machine Translation",
       "page": 7,
       "extent_pages": [
+        7,
         7
       ]
     },
@@ -226,6 +243,7 @@
       "title": "6.2 Model Variations",
       "page": 7,
       "extent_pages": [
+        7,
         7,
         8
       ]
@@ -238,6 +256,7 @@
       "page": 8,
       "extent_pages": [
         8,
+        8,
         9
       ]
     },
@@ -248,6 +267,7 @@
       "title": "7 Conclusion",
       "page": 9,
       "extent_pages": [
+        9,
         9,
         10,
         11
@@ -260,6 +280,7 @@
       "title": "Attention Visualizations Input-Input Laye",
       "page": 12,
       "extent_pages": [
+        12,
         12,
         13,
         14

@@ -1,6 +1,12 @@
 import pytest
 
-from paperboard.extract.pymupdf_layout import _clean_title, build_sections, parse_number, read_regions
+from paperboard.extract.pymupdf_layout import (
+    _clean_title,
+    build_sections,
+    parse_number,
+    read_regions,
+)
+from paperboard.geometry import contains_point
 
 
 @pytest.mark.parametrize(
@@ -136,27 +142,27 @@ def test_clean_title_leaves_a_clean_title_unchanged():
     assert _clean_title("1. Introduction") == "1. Introduction"
 
 
-def _rect_contains(outer, inner) -> bool:
-    ox0, oy0, ox1, oy1 = outer
-    ix0, iy0, ix1, iy1 = inner
-    return ox0 <= ix0 and oy0 <= iy0 and ox1 >= ix1 and oy1 >= iy1
-
-
-def test_no_sections_extent_contains_the_next_sections_heading(paper_path):
+def test_no_sections_extent_covers_another_sections_heading(paper_path):
     """Regression guard for the two-column hull bug: a section's extent must not
-    swallow the following heading. On a two-column page, one hull per page spans
-    both columns and geometrically contains everything between them, including the
-    next section's heading and body -- this pins the fix that emits one rect per
-    contiguous run within a page instead.
+    cover any other section's heading. The check is on the heading's midpoint,
+    not full enclosure: on a two-column page a hull that merges a full-width
+    figure with the column beneath it reaches across the page and covers most of
+    a heading in the other column without enclosing it, and that extent would
+    still render the next section inside this one's chunk.
     """
     pages, regions = read_regions(paper_path)
     sections = build_sections(pages, regions)
     violations = []
-    for current, nxt in zip(sections, sections[1:]):
-        heading = nxt.heading_rect
-        for extent_rect in current.extent:
-            if extent_rect.page != heading.page:
+    for current in sections:
+        for other in sections:
+            if other is current:
                 continue
-            if _rect_contains(extent_rect.rect, heading.rect):
-                violations.append((current.title, nxt.title))
+            heading = other.heading_rect
+            hx0, hy0, hx1, hy1 = heading.rect
+            midpoint = ((hx0 + hx1) / 2, (hy0 + hy1) / 2)
+            for extent_rect in current.extent:
+                if extent_rect.page != heading.page:
+                    continue
+                if contains_point(extent_rect.rect, *midpoint):
+                    violations.append((current.title, other.title, heading.page))
     assert not violations, violations
