@@ -70,7 +70,7 @@ What they share: the note answers questions, it is written in the reader's own w
 | **Open Paper** (khoj-ai) | Open source reading workbench: upload, highlight, annotate, AI assistant with citations. | Product, no study. | An open-source reference for highlight and annotation plumbing in a Python and web stack. Not a canvas. |
 | **LiquidText** | Excerpts pulled onto a workspace with lines back to the source. | Product. | The pull-out interaction. |
 
-## 4. What this changes in the spec
+## 4. What sections 1 to 3 changed in the spec (superseded by section 5 where they conflict)
 
 The spec already matches the consensus in its core: cut the paper into pieces, keep source links, lay out and connect, reader's own words. Five things were missing or under-weighted.
 
@@ -86,7 +86,38 @@ Things considered and rejected for v1:
 - **Cross-paper table à la Pacheco-Vega.** Easy to derive later from exported summaries. Not a board feature.
 - **A fixed order inside a pass.** The guides disagree on it, and you asked for order to stay free.
 
-## Sources
+## 5. Which ways of organizing ideas actually have evidence behind them
+
+The question here is different from section 1. Not "how should I read" but "which ways of laying out and connecting ideas are known to help understanding, and why." The answers below are from meta-analyses and controlled studies where they exist, and from long-running HCI research where they do not.
+
+| Method | Evidence | Why it works | What it means for the tool |
+|---|---|---|---|
+| **Concept maps** (nodes, labelled links) | Nesbit and Adesope 2006 meta-analysis: 55 studies, 5,818 participants. Constructing node-link diagrams beat outlines and plain passages for retention, with moderate effects. A 2017 follow-up meta-analysis found *constructing* maps beats *studying* ready-made ones. | The reader has to decide what connects to what and name the connection. That decision is the learning. | Edges with optional labels between any two pieces. The reader draws them; the tool never generates them. |
+| **Argument maps** (claim, supports, objects) | van Gelder 2015 meta-analysis: high-intensity argument-mapping courses raised critical-thinking scores by about 0.8 standard deviations, roughly twice a normal critical-thinking course. | Making the support structure of an argument explicit exposes gaps. A paper is an argument. | Edge labels like "supports" and "contradicts" are cheap and match this. Still optional. |
+| **Self-explanation** | Chi and colleagues, and the Bisra et al. 2018 meta-analysis: prompting learners to explain material to themselves in their own words improves comprehension and transfer. | Generating an explanation forces integration with what you already know and reveals what you do not. | Notes in the reader's own words are the core act. The "don't understand" flag resolved by writing an explanation is self-explanation with a queue. |
+| **Generative note-taking** | Kiewra's work: paraphrased and summarized notes beat verbatim copying. Reviewing notes later adds a large further gain. | Same mechanism: transformation over transcription. | Highlights alone are verbatim. A highlight should invite a note. Restoring the board tomorrow is the review. |
+| **Spatial arrangement** | Andrews, Endert, and North 2010, "Space to Think": people given room to lay documents out formed clusters, used position as external memory, and understood the material better. Marshall and Shipman's spatial hypertext work over two decades found the same in practice. | Position and proximity carry meaning without the reader having to say what the meaning is. | Free placement is a feature, not just a canvas. Proximity is a valid connection. Do not demand an edge for every relationship. |
+| **Incremental formalization** | Shipman and Marshall 1999, "Formality Considered Harmful": users reject or work around systems that demand explicit structure (types, link kinds, categories) before they know what they think. Systems that let structure stay implicit and be named later are used more. | Asking for a category too early is asking for a decision the reader cannot yet make. | **Every label in the tool is optional.** Roles, pass numbers, edge labels, groups: all can be added later or never. Nothing is required to place, cut, or connect. |
+| **Mind maps** (one center, radial branches) | Mixed. Some gains in delayed recall, no consistent advantage over concept maps, and the single-center shape fits a paper badly. | | Not adopted. A paper has several centers. |
+| **Outlines** | Consistently the comparison condition that concept maps beat. | Linear, one parent per item. | The paper's own section list is already the outline. The board exists to escape it. |
+
+Two consequences stand out.
+
+First, the strong effects come from what the reader *does* (constructing links, explaining in their own words), not from what the tool shows. Anything automatic that does that work for the reader removes the effect.
+
+Second, Shipman and Marshall's finding is a direct instruction for this project: do not force structure. That reverses the previous draft's fixed pass count and required roles. The right design is one where a tag, a label, or a group can be added when the reader is ready and left off when they are not.
+
+### Sources for this section
+
+- Nesbit and Adesope, [Learning With Concept and Knowledge Maps: A Meta-Analysis](https://journals.sagepub.com/doi/10.3102/00346543076003413), Review of Educational Research 2006
+- Schroeder et al., [Studying and Constructing Concept Maps: a Meta-Analysis](https://www.researchgate.net/publication/315507389_Studying_and_Constructing_Concept_Maps_a_Meta-Analysis), 2017
+- van Gelder, [Using Argument Mapping to Improve Critical Thinking Skills](https://thinkeranalytix.org/wp-content/uploads/2018/09/TvG-Using-argument-mapping-to-improve-critical-thinking-skills-2015.pdf), 2015
+- Bisra et al., [Inducing Self-Explanation: a Meta-Analysis](https://gwern.net/doc/psychology/spaced-repetition/2018-bisra.pdf), Educational Psychology Review 2018
+- Kiewra, [Combined effects of note-taking and reviewing](https://www.researchgate.net/publication/247513702_Combined_Effects_of_Note-Taking-Reviewing_on_Learning_and_the_Enhancement_through_Interventions_A_meta-analytic_review)
+- Andrews, Endert, and North, [Space to Think: Large High-Resolution Displays for Sensemaking](https://dl.acm.org/doi/10.1145/1753326.1753336), CHI 2010
+- Shipman and Marshall, [Formality Considered Harmful](https://people.engr.tamu.edu/shipman/formality-paper/harmful.html), CSCW 1999; [Spatial hypertext: designing for change](https://dl.acm.org/doi/10.1145/208344.208350), CACM 1995
+
+## Sources for sections 1 to 4
 
 Reading guides
 - Georgia Tech OMSCS 6460, [How To: Read an Academic Paper](https://omscs6460.gatech.edu/research-guide/how-to-read-an-academic-paper/)
