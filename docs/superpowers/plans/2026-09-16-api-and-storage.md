@@ -273,8 +273,8 @@ git commit -m "refactor: move the column-run rule to geometry, add shared test f
   - `ChunkAnchor(rects: list[PageRect], start: QuoteSelector, end: QuoteSelector, position: int = 0, state: AnchorState = "anchored")`
   - `Highlight(id, tags: list[str], note: str | None, anchor: HighlightAnchor)`
   - `Position(x, y)`, `Viewport(x, y, zoom)`
-  - `ChunkData(tags, collapsed, region: ChunkAnchor, text: str, user_sized: bool)`
-  - `FigureData(tags, collapsed, region: ChunkAnchor, clip: str | None, clip_size: ClipSize | None, caption: str)`
+  - `ChunkData(tags, collapsed, region: ChunkAnchor, text: str, user_sized: bool, source_id: str | None)` — `source_id` is the `source.json` section id when the chunk came from split, else `None`, so split can skip sections already on the board
+  - `FigureData(tags, collapsed, region: ChunkAnchor, clip: str | None, clip_size: ClipSize | None, caption: str, source_id: str | None)`
   - `NoteData(tags, collapsed, note: str)`
   - `GroupData(tags, name: str | None)`
   - `ChunkNode | FigureNode | NoteNode | GroupNode`, discriminated on `type`, alias `Node`
@@ -503,6 +503,7 @@ class ChunkData(BaseModel):
     region: ChunkAnchor
     text: str = ""
     user_sized: bool = False
+    source_id: str | None = None   # section id from source.json when made by split
 
 
 class FigureData(BaseModel):
@@ -513,6 +514,7 @@ class FigureData(BaseModel):
     clip: str | None = None
     clip_size: ClipSize | None = None
     caption: str = ""
+    source_id: str | None = None   # figure id from source.json when made by split
 
 
 class NoteData(BaseModel):

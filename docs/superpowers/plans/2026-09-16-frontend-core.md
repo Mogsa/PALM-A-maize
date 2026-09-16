@@ -351,8 +351,8 @@ export type ChunkAnchor = { rects: PageRect[]; start: QuoteSelector; end: QuoteS
 
 export type Highlight = { id: string; tags: string[]; note: string | null; anchor: HighlightAnchor };
 
-export type ChunkData = { tags: string[]; collapsed: boolean; region: ChunkAnchor; text: string; user_sized: boolean };
-export type FigureData = { tags: string[]; collapsed: boolean; region: ChunkAnchor; clip: string | null; clip_size: { width: number; height: number } | null; caption: string };
+export type ChunkData = { tags: string[]; collapsed: boolean; region: ChunkAnchor; text: string; user_sized: boolean; source_id: string | null };
+export type FigureData = { tags: string[]; collapsed: boolean; region: ChunkAnchor; clip: string | null; clip_size: { width: number; height: number } | null; caption: string; source_id: string | null };
 export type NoteData = { tags: string[]; collapsed: boolean; note: string };
 export type GroupData = { tags: string[]; name: string | null };
 
@@ -523,7 +523,7 @@ const region = { rects: [{ page: 0, rect: [0, 0, 1, 1] as [number, number, numbe
 
 const group: BoardNode = { id: "n-g", type: "group", position: { x: 0, y: 0 }, width: 500, height: 400, data: { tags: [], name: null } };
 const child: BoardNode = { id: "n-c", type: "chunk", position: { x: 10, y: 10 }, parentId: "n-g", extent: "parent", width: 300,
-  data: { tags: [], collapsed: false, region, text: "t", user_sized: false } };
+  data: { tags: [], collapsed: false, region, text: "t", user_sized: false, source_id: null } };
 const note: BoardNode = { id: "n-n", type: "note", position: { x: 700, y: 0 }, initialWidth: 280, data: { tags: [], collapsed: false, note: "notes/n-n.md" } };
 
 describe("toBoardJson", () => {
@@ -1135,7 +1135,7 @@ import type { BoardNode } from "../model/types";
 const q = { exact: "x", prefix: "", suffix: "" };
 const chunk = (id: string, y: number, height = 120): BoardNode => ({
   id, type: "chunk", position: { x: 40, y }, width: 320, height,
-  data: { tags: [], collapsed: false, region: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], start: q, end: q, position: 0, state: "anchored" }, text: "", user_sized: false },
+  data: { tags: [], collapsed: false, region: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], start: q, end: q, position: 0, state: "anchored" }, text: "", user_sized: false, source_id: null },
 });
 
 describe("nextChunkPosition", () => {
@@ -1405,7 +1405,7 @@ export function PaperScreen({ focus, onOpenOnBoard }: { focus: PageRect | null; 
       } else {
         const node: ChunkNode = {
           id: newId("n"), type: "chunk", position: nextChunkPosition(state.board.nodes), initialWidth: CHUNK_WIDTH,
-          data: { tags: [], collapsed: false, region: selection.chunk, text: selection.text, user_sized: false },
+          data: { tags: [], collapsed: false, region: selection.chunk, text: selection.text, user_sized: false, source_id: null },
         };
         dispatch({ type: "addNode", node });
       }
