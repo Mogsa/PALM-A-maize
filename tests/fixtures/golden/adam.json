@@ -1,0 +1,278 @@
+{
+  "page_count": 15,
+  "region_count": 191,
+  "sections": [
+    {
+      "id": "sec-0",
+      "number": null,
+      "depth": 1,
+      "title": "ADAM: A METHOD FOR STOCHASTIC OPTIMIZATION",
+      "page": 0,
+      "extent_pages": [
+        0
+      ]
+    },
+    {
+      "id": "sec-1",
+      "number": null,
+      "depth": 1,
+      "title": "ABSTRACT",
+      "page": 0,
+      "extent_pages": [
+        0
+      ]
+    },
+    {
+      "id": "sec-2",
+      "number": "1",
+      "depth": 1,
+      "title": "1 INTRODUCTION",
+      "page": 0,
+      "extent_pages": [
+        0,
+        0,
+        1
+      ]
+    },
+    {
+      "id": "sec-3",
+      "number": "2",
+      "depth": 1,
+      "title": "2 ALGORITHM",
+      "page": 1,
+      "extent_pages": [
+        1,
+        1
+      ]
+    },
+    {
+      "id": "sec-4",
+      "number": "2.1",
+      "depth": 2,
+      "title": "2.1 ADAM\u2019S UPDATE RULE",
+      "page": 1,
+      "extent_pages": [
+        1,
+        1,
+        2
+      ]
+    },
+    {
+      "id": "sec-5",
+      "number": "3",
+      "depth": 1,
+      "title": "3 INITIALIZATION BIAS CORRECTION",
+      "page": 2,
+      "extent_pages": [
+        2,
+        2
+      ]
+    },
+    {
+      "id": "sec-6",
+      "number": "4",
+      "depth": 1,
+      "title": "4 CONVERGENCE ANALYSIS",
+      "page": 3,
+      "extent_pages": [
+        3,
+        3
+      ]
+    },
+    {
+      "id": "sec-7",
+      "number": "5",
+      "depth": 1,
+      "title": "5 RELATED WORK",
+      "page": 3,
+      "extent_pages": [
+        3,
+        3,
+        4
+      ]
+    },
+    {
+      "id": "sec-8",
+      "number": "6",
+      "depth": 1,
+      "title": "6 EXPERIMENTS",
+      "page": 4,
+      "extent_pages": [
+        4,
+        4
+      ]
+    },
+    {
+      "id": "sec-9",
+      "number": "6.1",
+      "depth": 2,
+      "title": "6.1 EXPERIMENT: LOGISTIC REGRESSION",
+      "page": 4,
+      "extent_pages": [
+        4,
+        4,
+        5
+      ]
+    },
+    {
+      "id": "sec-10",
+      "number": "6.2",
+      "depth": 2,
+      "title": "6.2 EXPERIMENT: MULTI-LAYER NEURAL NETWORKS",
+      "page": 5,
+      "extent_pages": [
+        5
+      ]
+    },
+    {
+      "id": "sec-11",
+      "number": "6.3",
+      "depth": 2,
+      "title": "6.3 EXPERIMENT: CONVOLUTIONAL NEURAL NETWORKS",
+      "page": 5,
+      "extent_pages": [
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "id": "sec-12",
+      "number": "6.4",
+      "depth": 2,
+      "title": "6.4 EXPERIMENT: BIAS-CORRECTION TERM",
+      "page": 7,
+      "extent_pages": [
+        7,
+        7
+      ]
+    },
+    {
+      "id": "sec-13",
+      "number": "7",
+      "depth": 1,
+      "title": "7 EXTENSIONS",
+      "page": 7,
+      "extent_pages": [
+        7
+      ]
+    },
+    {
+      "id": "sec-14",
+      "number": "7.1",
+      "depth": 2,
+      "title": "7.1 ADAMAX",
+      "page": 7,
+      "extent_pages": [
+        7,
+        7,
+        8,
+        8,
+        8
+      ]
+    },
+    {
+      "id": "sec-15",
+      "number": "7.2",
+      "depth": 2,
+      "title": "7.2 TEMPORAL AVERAGING",
+      "page": 8,
+      "extent_pages": [
+        8,
+        8
+      ]
+    },
+    {
+      "id": "sec-16",
+      "number": "8",
+      "depth": 1,
+      "title": "8 CONCLUSION",
+      "page": 8,
+      "extent_pages": [
+        8,
+        8,
+        9
+      ]
+    },
+    {
+      "id": "sec-17",
+      "number": "9",
+      "depth": 1,
+      "title": "9 ACKNOWLEDGMENTS",
+      "page": 9,
+      "extent_pages": [
+        9,
+        9
+      ]
+    },
+    {
+      "id": "sec-18",
+      "number": null,
+      "depth": 1,
+      "title": "REFERENCES",
+      "page": 9,
+      "extent_pages": [
+        9,
+        9,
+        10
+      ]
+    },
+    {
+      "id": "sec-19",
+      "number": "10",
+      "depth": 1,
+      "title": "10 APPENDIX",
+      "page": 11,
+      "extent_pages": [
+        11,
+        11,
+        11,
+        11,
+        11,
+        12,
+        12,
+        12,
+        12,
+        12,
+        13,
+        13,
+        13,
+        13,
+        13,
+        14,
+        14,
+        14
+      ]
+    }
+  ],
+  "figures": [
+    {
+      "id": "fig-1",
+      "kind": "figure",
+      "label": "Figure 1",
+      "page": 5,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-2",
+      "kind": "figure",
+      "label": "Figure 2",
+      "page": 6,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-3",
+      "kind": "figure",
+      "label": "Figure 3",
+      "page": 6,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-4",
+      "kind": "figure",
+      "label": "Figure 4",
+      "page": 7,
+      "confidence": "region"
+    }
+  ]
+}

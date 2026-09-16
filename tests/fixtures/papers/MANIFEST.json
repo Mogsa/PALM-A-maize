@@ -1,0 +1,20 @@
+{
+  "attention": {
+    "arxiv": "1706.03762v7",
+    "url": "https://arxiv.org/pdf/1706.03762v7",
+    "sha256": "bdfaa68d8984f0dc02beaca527b76f207d99b666d31d1da728ee0728182df697",
+    "bytes": 2215244
+  },
+  "resnet": {
+    "arxiv": "1512.03385v1",
+    "url": "https://arxiv.org/pdf/1512.03385v1",
+    "sha256": "1e0651b6810ecba34a3dbc5b5b0209226f889004607c1f203540a48d64e5a93a",
+    "bytes": 819383
+  },
+  "adam": {
+    "arxiv": "1412.6980v9",
+    "url": "https://arxiv.org/pdf/1412.6980v9",
+    "sha256": "eab9c73ae2ceda884b94830bda99312254bac4806f6c9f045cbab90721ecda31",
+    "bytes": 584641
+  }
+}
