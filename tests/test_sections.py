@@ -24,11 +24,21 @@ def test_parse_number_ignores_a_trailing_sentence_period():
 
 
 def test_sections_are_found_and_ordered(paper_path):
+    """Sections come back in reading order, not shuffled.
+
+    We deliberately do not assert that heading y is globally non-decreasing: within
+    a page, regions are in column-major reading order, so a heading's y legitimately
+    decreases at a column break. On ResNet page 2 the left column ends near y=562
+    ("3.2 Identity Mapping by Shortcuts") and the right column resumes near y=463
+    ("3.3 Network Architectures") -- a real, correct reading-order transition that a
+    raw y-sort would reject. The exact within-page ordering is pinned instead by the
+    Task 9 golden files.
+    """
     pages, regions = read_regions(paper_path)
     sections = build_sections(pages, regions)
     assert len(sections) >= 5
-    order = [(s.heading_rect.page, s.heading_rect.rect[1]) for s in sections]
-    assert order == sorted(order)
+    section_pages = [s.heading_rect.page for s in sections]
+    assert section_pages == sorted(section_pages)
 
 
 def test_section_ids_are_unique(paper_path):
