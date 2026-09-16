@@ -70,7 +70,7 @@
 | LiquidText | excerpt with a line back to source | piece, source link |
 | LiquidText | collapse what you are not reading | piece, collapse |
 | MarginNote | one capture, many uses | piece: an excerpt is a highlight in the PDF, a card on the board, and a line in the export |
-| Heptabase | card identity across boards | concept note |
+| Heptabase | card identity across boards | concept note, deferred from v1 (SPEC.md section 9) |
 | Heptabase | highlight becomes card, no extra step | piece, from highlight |
 | Noteey | local files, no account, offline | files section of the spec |
 | TreeReader | collapsed shows the paper's own first lines, expanded shows all | piece, collapse and expand |

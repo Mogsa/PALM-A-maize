@@ -19,7 +19,7 @@ Every later decision is checked against these eight. If a feature fails one, it 
 5. **Plain local files, no account, no cloud.** A board is a folder you can copy.
 6. **One board per paper.** Bounded by construction so it never sprawls.
 7. **Export is not an afterthought.** The board written out in the paper's order is the literature note. No separate summary is written by hand.
-8. **Build on open source for anything hard to get right.** The canvas, the PDF renderer, and the extractor are existing libraries. Only what is specific to this tool is written here.
+8. **Depend, copy, or write, by how commodity the problem is.** Depend on a library where the problem is commodity, well solved, and actively maintained: rendering, the canvas, layout detection. Copy the algorithm where it is well understood but not packaged: fuzzy quote matching. Write it only where it is specific to this tool: the excerpt that remembers where it came from.
 
 ## 3. What the research says the tool must do
 
@@ -64,11 +64,11 @@ Anything on the board.
 
 Every piece has the same operations: move, resize, collapse or expand, open source, tag, connect, group. There are no piece-specific operations.
 
-A section or excerpt piece collapsed shows its first line or two and a count of what is connected to it. Expanded, it shows the full text, in the paper's own words. Figures and equations are rendered clips from the PDF. Text in pieces is read, not highlighted; to cut again, open the source and highlight in the paper.
+A section or excerpt piece collapsed shows its first line or two and a count of what is connected to it. Expanded, it shows the full text, in the paper's own words. Figures and equations are rectangles, rendered from the PDF into PNG clips in the board folder. Never LaTeX, never re-typeset. Text in pieces is read, not highlighted; to cut again, open the source and highlight in the paper.
 
-Highlighting is deliberately forgiving: a rough drag across a paragraph excerpts the whole paragraph, and exact selection is there when you want it. Cutting never changes the paper.
+Highlighting is deliberately forgiving: a rough drag across a paragraph excerpts the whole paragraph, and holding a modifier key keeps exactly what you selected. Cutting never changes the paper.
 
-An excerpt is anchored by page and rectangle, with a hash of the text under it. It re-anchors by text hash first, rectangle second, and is flagged if neither matches.
+An excerpt is anchored by page and rectangle, plus the quoted text with a few words either side. It re-anchors by quote first, rectangle second, and is flagged if neither matches. A section piece made by split anchors on its heading and carries the section's extent, one rectangle per page. The shapes are in SPEC-ADDENDUM.md section 5.
 
 ### 5.2 Tag
 
@@ -126,13 +126,15 @@ Standalone. Python backend, browser front end, runs locally. The tool is open so
 
 | Job | Component | Licence |
 |---|---|---|
-| sections and figures with page coordinates, for split and export | GROBID or Docling, decided in build step 1 | Apache 2.0 / MIT |
+| sections and figures with page coordinates, for split and export | `pymupdf-layout`, behind an `extract()` interface. Docling is the MIT drop-in if figure matching disappoints. | AGPL 3.0 |
 | text under a rectangle, rendered clips, page geometry | PyMuPDF | AGPL 3.0 |
 | API and file storage | FastAPI over plain files | MIT |
 | pieces, connections, groups on a canvas | React Flow | MIT |
-| paper view: rendering, text selection, highlights | PDF.js, via `react-pdf-highlighter` | Apache 2.0 / MIT |
+| paper view: rendering and text layer | `react-pdf` over PDF.js, plus our own selection layer | MIT / Apache 2.0 |
 
-API: get source, get and put board, get and put note, get text under a rectangle, get clip for a page and rectangle, list questions, export.
+Model weights ship inside the `pymupdf-layout` wheel, so the tool needs no network access at any point, including first run.
+
+API: get source, get and put board, get and put note, get text under a rectangle, get clip for a page and rectangle, list questions, export. Routes, file schemas, and the anchoring rules are in SPEC-ADDENDUM.md.
 
 ## 9. Not in v1
 
@@ -149,14 +151,14 @@ API: get source, get and put board, get and put note, get text under a rectangle
 
 | Step | Deliverable | Test on a real paper |
 |---|---|---|
-| 1 | Extraction experiment. Run GROBID and Docling on three papers, one with heavy math. Pick one. `paperboard extract paper.pdf` writes `source.json` with sections and figures. Python only. | Are the section boundaries right? Are the figures found? Prefer the one that installs without Docker if the results are close. |
+| 1 | Validate `pymupdf-layout` on three papers, one with heavy math, behind the `extract()` interface. `paperboard extract paper.pdf` writes `source.json` with sections and figures. Python only. | Are the section boundaries right? Are the figures found and paired with their captions? |
 | 2 | FastAPI serving source, board, notes, text under a rectangle, clips. | curl. |
 | 3 | Paper view with highlighting. A highlight becomes an excerpt piece, persisted with its anchor. Board view shows pieces: move, resize, switch between views. | Highlight five passages, close, reopen. Same highlights in the paper, same pieces on the board. |
 | 4 | Split command, figure clips, groups, collapse and expand. | Split, pile things up, close, reopen. |
 | 5 | Tags, connections, notes, question list, export. | Reconstruct one paper's argument. Export it. |
 | 6 | Acceptance test. | Below. |
 
-Step 1 starts first because it is the experiment and needs no UI. Step 3 is where the tool either works or does not: a cut in the paper must become a piece on the board and survive reopening.
+Step 1 starts first because it is the validation and needs no UI. Step 3 is where the tool either works or does not: a cut in the paper must become a piece on the board and survive reopening.
 
 ## 11. Acceptance test
 
@@ -185,5 +187,10 @@ Recorded so the reasoning is not lost.
 | Connection labels | Tags only | Two vocabularies for one thing. A sentence about a connection is a note. |
 | Where you cut | Paper view only | One gesture, one anchoring path. The board is where you arrange. |
 | First open | Empty board, split on request | The tool must not decide the layout before the reader has read a word. |
-| Extractor | GROBID or Docling, decided in step 1 | The spec should not pretend to know what step 1 exists to find out. |
+| Extractor | `pymupdf-layout` | The hierarchy and figure-quality advantages the heavier tools are bought for did not survive measurement. Same project and licence as PyMuPDF, 43 MB, no downloads. |
+| Paper view | `react-pdf` plus our own selection layer | The library first named was abandoned in 2024 and stores no quote text, so it could not re-anchor. |
+| Equations | Rendered clips, never LaTeX | A highlighted equation is a rectangle like any excerpt. Extracting equations separately serves no command. |
+| Captions to figures | Proximity matching | Only split needs it. A miss costs one figure piece, which the reader cuts by hand in seconds. |
+| Forgiving highlight | Snap to the layout region at 60 percent coverage | A guess, in one named constant, to be tuned after a day of reading. |
+| Anchoring | Server side, in Python | One implementation, testable without a browser. |
 | Name | Still a placeholder | Decides nothing. |
