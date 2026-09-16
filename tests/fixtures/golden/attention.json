@@ -71,6 +71,7 @@
       "page": 2,
       "extent_pages": [
         2,
+        3,
         3
       ]
     },
@@ -281,27 +282,6 @@
       "confidence": "region"
     },
     {
-      "id": "fig-3",
-      "kind": "figure",
-      "label": "Figure 3",
-      "page": 12,
-      "confidence": "region"
-    },
-    {
-      "id": "fig-4",
-      "kind": "figure",
-      "label": "Figure 4",
-      "page": 13,
-      "confidence": "region"
-    },
-    {
-      "id": "fig-5",
-      "kind": "figure",
-      "label": "Figure 5",
-      "page": 14,
-      "confidence": "region"
-    },
-    {
       "id": "tab-1",
       "kind": "table",
       "label": "Table 1",
@@ -327,6 +307,27 @@
       "kind": "table",
       "label": "Table 4",
       "page": 9,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-3",
+      "kind": "figure",
+      "label": "Figure 3",
+      "page": 12,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-4",
+      "kind": "figure",
+      "label": "Figure 4",
+      "page": 13,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-5",
+      "kind": "figure",
+      "label": "Figure 5",
+      "page": 14,
       "confidence": "region"
     }
   ]

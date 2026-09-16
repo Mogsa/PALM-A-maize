@@ -30,6 +30,8 @@
       "page": 0,
       "extent_pages": [
         0,
+        0,
+        1,
         1
       ]
     },
@@ -71,6 +73,7 @@
       "title": "3.2. Identity Mapping by Shortcuts",
       "page": 2,
       "extent_pages": [
+        2,
         2
       ]
     },
@@ -82,6 +85,7 @@
       "page": 2,
       "extent_pages": [
         2,
+        3,
         3
       ]
     },
@@ -114,6 +118,8 @@
       "extent_pages": [
         3,
         4,
+        4,
+        5,
         5,
         6
       ]
@@ -126,6 +132,8 @@
       "page": 6,
       "extent_pages": [
         6,
+        6,
+        7,
         7
       ]
     },
@@ -146,6 +154,7 @@
       "title": "References",
       "page": 8,
       "extent_pages": [
+        8,
         8
       ]
     },
@@ -176,6 +185,7 @@
       "title": "MS COCO",
       "page": 9,
       "extent_pages": [
+        9,
         9
       ]
     },
@@ -207,6 +217,7 @@
       "title": "PASCAL VOC",
       "page": 10,
       "extent_pages": [
+        10,
         10
       ]
     },
@@ -228,6 +239,7 @@
       "title": "C. ImageNet Localization",
       "page": 11,
       "extent_pages": [
+        11,
         11
       ]
     }
@@ -248,9 +260,23 @@
       "confidence": "region"
     },
     {
+      "id": "tab-1",
+      "kind": "table",
+      "label": "Table 1",
+      "page": 4,
+      "confidence": "region"
+    },
+    {
       "id": "fig-4",
       "kind": "figure",
       "label": "Figure 4",
+      "page": 4,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-2",
+      "kind": "table",
+      "label": "Table 2",
       "page": 4,
       "confidence": "region"
     },
@@ -259,69 +285,6 @@
       "kind": "figure",
       "label": "Figure 5",
       "page": 5,
-      "confidence": "region"
-    },
-    {
-      "id": "fig-6",
-      "kind": "figure",
-      "label": "Figure 6",
-      "page": 7,
-      "confidence": "region"
-    },
-    {
-      "id": "fig-7",
-      "kind": "figure",
-      "label": "Figure 7",
-      "page": 7,
-      "confidence": "region"
-    },
-    {
-      "id": "tab-1",
-      "kind": "table",
-      "label": "Table 1",
-      "page": 4,
-      "confidence": "region"
-    },
-    {
-      "id": "tab-10",
-      "kind": "table",
-      "label": "Table 10",
-      "page": 10,
-      "confidence": "region"
-    },
-    {
-      "id": "tab-11",
-      "kind": "table",
-      "label": "Table 11",
-      "page": 10,
-      "confidence": "region"
-    },
-    {
-      "id": "tab-12",
-      "kind": "table",
-      "label": "Table 12",
-      "page": 10,
-      "confidence": "region"
-    },
-    {
-      "id": "tab-13",
-      "kind": "table",
-      "label": "Table 13",
-      "page": 11,
-      "confidence": "region"
-    },
-    {
-      "id": "tab-14",
-      "kind": "table",
-      "label": "Table 14",
-      "page": 11,
-      "confidence": "region"
-    },
-    {
-      "id": "tab-2",
-      "kind": "table",
-      "label": "Table 2",
-      "page": 4,
       "confidence": "region"
     },
     {
@@ -353,6 +316,20 @@
       "confidence": "region"
     },
     {
+      "id": "fig-6",
+      "kind": "figure",
+      "label": "Figure 6",
+      "page": 7,
+      "confidence": "region"
+    },
+    {
+      "id": "fig-7",
+      "kind": "figure",
+      "label": "Figure 7",
+      "page": 7,
+      "confidence": "region"
+    },
+    {
       "id": "tab-7",
       "kind": "table",
       "label": "Table 7",
@@ -371,6 +348,41 @@
       "kind": "table",
       "label": "Table 9",
       "page": 10,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-10",
+      "kind": "table",
+      "label": "Table 10",
+      "page": 10,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-11",
+      "kind": "table",
+      "label": "Table 11",
+      "page": 10,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-12",
+      "kind": "table",
+      "label": "Table 12",
+      "page": 10,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-14",
+      "kind": "table",
+      "label": "Table 14",
+      "page": 11,
+      "confidence": "region"
+    },
+    {
+      "id": "tab-13",
+      "kind": "table",
+      "label": "Table 13",
+      "page": 11,
       "confidence": "region"
     }
   ]
