@@ -1,16 +1,23 @@
 # Fixture papers
 
-All three fixtures are distributed under arXiv's perpetual non-exclusive licence
-(`http://arxiv.org/licenses/nonexclusive-distrib/1.0/`), not CC-BY. That licence grants arXiv
-the right to distribute the paper; it does not grant third parties a redistribution right.
-These PDFs are committed here for local testing only. SPEC-ADDENDUM.md section 8's requirement
-for CC-BY-licensed fixtures is therefore **not met** by these three files, and this must be
-resolved before this repository is published or redistributed.
-Verify the licence line on the arXiv abstract page before adding a new fixture; this
-project is AGPL-3.0 and cannot ship non-redistributable files.
+The three PDFs are **not committed**. They are distributed by arXiv under its perpetual
+non-exclusive licence (`http://arxiv.org/licenses/nonexclusive-distrib/1.0/`), which grants
+arXiv the right to distribute them and grants this repository none. This project is
+AGPL-3.0 and cannot ship files it has no right to redistribute.
 
-| File | arXiv | Title | Why this one | Licence |
-|---|---|---|---|---|
-| attention.pdf | 1706.03762v7 | Attention Is All You Need | Has a PDF outline. Figure 1 is missed by the layout model, so it exercises the figure fallback chain. | arXiv perpetual non-exclusive (nonexclusive-distrib/1.0) |
-| resnet.pdf | 1512.03385v1 | Deep Residual Learning for Image Recognition | No PDF outline. Figure- and table-dense. | arXiv perpetual non-exclusive (nonexclusive-distrib/1.0) |
-| adam.pdf | 1412.6980v9 | Adam: A Method for Stochastic Optimization | No outline, small-caps headings smaller than body text, display equations. The hard case. | arXiv perpetual non-exclusive (nonexclusive-distrib/1.0) |
+Fetch them once, with hash verification, before running the tests:
+
+    python scripts/fetch_fixtures.py
+
+`MANIFEST.json` beside this file records each paper's arXiv id, URL, sha256, and size. The
+test suite is calibrated to these exact files, so a hash mismatch is an error. If arXiv
+replaces a version, pin the manifest to the old version's URL rather than re-measuring.
+
+If a fixture is ever added, check the licence line on its arXiv abstract page first. A
+CC-BY paper could be committed outright; these three cannot.
+
+| File | arXiv | Title | Why this one |
+|---|---|---|---|
+| attention.pdf | 1706.03762v7 | Attention Is All You Need | Has a PDF outline. Single column. Heavy tables. |
+| resnet.pdf | 1512.03385v1 | Deep Residual Learning for Image Recognition | No PDF outline. Two columns, figure- and table-dense. Figure 2's caption is merged into its picture region by the layout model, the one documented figure miss. |
+| adam.pdf | 1412.6980v9 | Adam: A Method for Stochastic Optimization | No outline, small-caps headings smaller than body text, display equations. The hard case. |
