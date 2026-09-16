@@ -75,9 +75,11 @@ def read_regions(pdf_path: Path) -> tuple[list[PageInfo], list[Region]]:
     return pages, regions
 
 
-# A heading number: "3", "3.1", "3.1.4", or a single appendix letter, then a
-# separator. Anchored, so a sentence that merely contains a number is not a heading.
-_NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)*|[A-Z])[.)]?\s+\S")
+# A heading number: "3", "3.1", "3.1.4" (separator optional), or a single appendix
+# letter (separator mandatory -- otherwise "A Simple Framework..." reads as
+# appendix "A"). Anchored, so a sentence that merely contains a number is not a
+# heading.
+_NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)*[.)]?|[A-Z][.)])\s+\S")
 
 # Layout labels that can never be a section heading, whatever the model says.
 _FURNITURE = {"page-header", "page-footer", "footnote", "caption"}
@@ -96,7 +98,7 @@ def parse_number(title: str) -> tuple[str | None, int]:
     match = _NUMBER.match(title)
     if not match:
         return None, 1
-    number = match.group(1).rstrip(".")
+    number = match.group(1).rstrip(".)")
     return number, number.count(".") + 1
 
 
@@ -172,16 +174,39 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
 
 
 def _extent(span: list[Region]) -> list[PageRect]:
-    """Collapse a run of regions into one bounding rectangle per page crossed."""
-    by_page: dict[int, Rect] = {}
+    """Collapse a run of regions into one rectangle per contiguous run on a page.
+
+    One hull per page is wrong on a two-column layout: a section ends low in the
+    left column and resumes high in the right column, and the hull of both spans
+    the full column gap, geometrically containing everything between them --
+    including the next section's heading and body. So instead of one hull per
+    page, this emits one rect per contiguous run: a new run starts whenever the
+    page changes, or the next region's top y jumps upward above the current run's
+    hull top (the column-break signal, since reading order runs down a column
+    before crossing to the next one).
+
+    Runs come out in the order they were encountered, which keeps pages in
+    ascending order too since span is already page-ordered.
+
+    The jump is measured against the *previous region's* top y, not the run's
+    hull top: partway through a run the hull top is already the column's first
+    line, so comparing against it never trips once a second column's regions
+    (which start lower than that) are appended -- the break must be judged
+    region-to-region, the way reading order actually flows.
+    """
+    runs: list[tuple[int, Rect]] = []
+    last_y0: float | None = None
     for region in span:
         x0, y0, x1, y1 = region.rect
-        if region.page not in by_page:
-            by_page[region.page] = (x0, y0, x1, y1)
-            continue
-        px0, py0, px1, py1 = by_page[region.page]
-        by_page[region.page] = (min(px0, x0), min(py0, y0), max(px1, x1), max(py1, y1))
-    return [PageRect(page=page, rect=rect) for page, rect in sorted(by_page.items())]
+        if runs:
+            page, (px0, py0, px1, py1) = runs[-1]
+            if region.page == page and last_y0 is not None and y0 >= last_y0:
+                runs[-1] = (page, (min(px0, x0), min(py0, y0), max(px1, x1), max(py1, y1)))
+                last_y0 = y0
+                continue
+        runs.append((region.page, (x0, y0, x1, y1)))
+        last_y0 = y0
+    return [PageRect(page=page, rect=rect) for page, rect in runs]
 
 
 # A caption, not a reference to one: "Figure 3." or "Table 2:" but not "Table 3 shows".
@@ -291,14 +316,20 @@ def _find_artwork(doc, regions, caption: Region, kind: str):
 
 
 def _dedupe(figures: list[Figure]) -> list[Figure]:
-    """Keep the most trusted entry when two captions claim the same number."""
+    """Keep the most trusted entry when two captions claim the same number.
+
+    Keys on kind+number (the figure id) across the whole document, so two
+    distinct artworks that happen to share a number -- a "Figure 3 (continued)"
+    on a later page, say -- silently lose one. Accepted for now; see SPEC.md
+    section 12.
+    """
     rank = {"region": 0, "image": 1, "drawings": 2}
     best: dict[str, Figure] = {}
     for figure in figures:
         current = best.get(figure.id)
         if current is None or rank[figure.confidence] < rank[current.confidence]:
             best[figure.id] = figure
-    return [best[k] for k in sorted(best)]
+    return sorted(best.values(), key=lambda f: (f.rect.page, f.rect.rect[1]))
 
 
 def read_page_text(pdf_path: Path) -> list[PageText]:
@@ -339,7 +370,7 @@ def extract_document(pdf_path: Path) -> SourceDocument:
         sections[0].title if sections else pdf_path.stem,
     )
     return SourceDocument(
-        paper_id=paper_id_for(pdf_path, title, page_text[0].text if page_text else ""),
+        paper_id=paper_id_for(pdf_path, _clean_title(title), page_text[0].text if page_text else ""),
         extractor=EXTRACTOR_NAME,
         pages=pages,
         sections=sections,

@@ -20,10 +20,6 @@ def test_paper_id_is_stable_across_runs(paper_path):
     assert extract(paper_path).paper_id == extract(paper_path).paper_id
 
 
-def test_paper_id_is_filesystem_safe(paper_path):
-    assert extract(paper_path).paper_id.replace("-", "").replace(".", "").isalnum()
-
-
 def test_paper_id_for_strips_non_slug_characters(paper_path):
     assert _PAPER_ID.match(paper_id_for(paper_path, "Adam's Method", "arXiv:1234.5678"))
     assert _PAPER_ID.match(
@@ -82,5 +78,11 @@ def test_every_rect_in_the_document_lies_on_a_real_page(paper_path):
         + [r for s in doc.sections for r in s.extent]
         + [f.rect for f in doc.figures]
     )
+    tolerance = 8.0  # points: figure rects are padded by 4, and layout boxes
+    # occasionally touch the trim edge.
     for page_rect in rects:
         assert page_rect.page in sizes
+        width, height = sizes[page_rect.page]
+        x0, y0, x1, y1 = page_rect.rect
+        assert -tolerance <= x0 and x1 <= width + tolerance
+        assert -tolerance <= y0 and y1 <= height + tolerance

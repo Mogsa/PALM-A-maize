@@ -13,6 +13,9 @@ from paperboard.extract.pymupdf_layout import _clean_title, build_sections, pars
         ("Abstract", (None, 1)),
         ("A. Appendix", ("A", 1)),
         ("", (None, 1)),
+        ("A Simple Framework for Contrastive Learning", (None, 1)),
+        ("I Introduction", (None, 1)),
+        ("B) Background", ("B", 1)),
     ],
 )
 def test_parse_number(title, expected):
@@ -131,3 +134,29 @@ def test_clean_title_collapses_multiline_to_one_line():
 
 def test_clean_title_leaves_a_clean_title_unchanged():
     assert _clean_title("1. Introduction") == "1. Introduction"
+
+
+def _rect_contains(outer, inner) -> bool:
+    ox0, oy0, ox1, oy1 = outer
+    ix0, iy0, ix1, iy1 = inner
+    return ox0 <= ix0 and oy0 <= iy0 and ox1 >= ix1 and oy1 >= iy1
+
+
+def test_no_sections_extent_contains_the_next_sections_heading(paper_path):
+    """Regression guard for the two-column hull bug: a section's extent must not
+    swallow the following heading. On a two-column page, one hull per page spans
+    both columns and geometrically contains everything between them, including the
+    next section's heading and body -- this pins the fix that emits one rect per
+    contiguous run within a page instead.
+    """
+    pages, regions = read_regions(paper_path)
+    sections = build_sections(pages, regions)
+    violations = []
+    for current, nxt in zip(sections, sections[1:]):
+        heading = nxt.heading_rect
+        for extent_rect in current.extent:
+            if extent_rect.page != heading.page:
+                continue
+            if _rect_contains(extent_rect.rect, heading.rect):
+                violations.append((current.title, nxt.title))
+    assert not violations, violations
