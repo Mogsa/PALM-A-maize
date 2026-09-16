@@ -8,6 +8,8 @@
 
 **Tech Stack:** React 19.3, TypeScript 7, Vite 8, `@xyflow/react` 12.11, `react-pdf` 11 over `pdfjs-dist` 6.3, `ulid` 3, vitest 5 with jsdom 30, `@playwright/test` 1.63. All MIT or Apache.
 
+**Spike findings applied (17 September 2026).** Task 1 ran and contradicted this plan four times; the changes are already folded in below. (1) The page element fills its container, so page geometry is measured from `.react-pdf__Page__canvas`. (2) Text-layer rects sit up to 3.5 pt above PyMuPDF's; manual checks compare against PyMuPDF's `search_for` rect. (3) `extent: "parent"` clamps a node the moment it is re-parented and stops it ever being dragged out, so it is never set; on drop a node joins the smallest group that wholly contains it, or none. (4) `getClientRects()` returns several rects per line and a per-page union of a two-column selection covers both columns, so selections become one rect per column run, and Highlight is offered only for a single run. Full measurements: `2026-09-16-frontend-spike-findings.md`.
+
 **Spec:** `docs/SPEC.md` sections 4, 5, 11; `docs/SPEC-ADDENDUM.md` sections 2, 4, 6, 8; `docs/superpowers/plans/2026-09-16-api-and-storage.md` Task 2 (the shapes) and Task 8 (the routes). The API plan must be merged before Task 4 of this plan; Tasks 1 to 3 need nothing from it.
 
 ## Global Constraints
@@ -274,6 +276,10 @@ Add `web/node_modules/`, `web/dist/`, `web/test-results/`, `web/playwright-repor
   - `newId(kind: "n" | "e" | "h"): string`
   - `api.listPapers()`, `api.getSource(id)`, `api.getBoard(id)`, `api.putBoard(id, board, version) -> Promise<{ version } | { conflict: true; current: number }>`, `api.postText(id, rects, snap)`, `api.pdfUrl(id)`, `ApiError`
 
+- [ ] **Step 0: Two scaffold fixes from Task 1's review**
+
+Add `"type": "module"` to `web/package.json` (Vite warns that its ESM config sits in a CommonJS package) and add `web/*.tsbuildinfo` to the repo `.gitignore` (`tsc -b` leaves it behind). They go in this task's commit. Node 25 prints `EBADENGINE` warnings for jsdom and vitest; they are warnings only, and nothing else changes for them.
+
 - [ ] **Step 1: Write the failing tests**
 
 `web/src/model/ids.test.ts`:
@@ -473,7 +479,8 @@ git commit -m "feat(web): board types mirroring the server contract, ids, api cl
   - `highlightsIn(highlights: Highlight[], region: ChunkAnchor): Highlight[]`, the containment rule of addendum 4.0, the same as the server's `export.highlights_in`
   - `toBoardJson(board: Board): Board`, a deep copy with runtime fields removed, `undefined` dropped, and nodes sorted parents-first, stable otherwise
   - `PERSISTED_NODE_FIELDS`, `PERSISTED_EDGE_FIELDS`
-  - `toRelative(absolute: XY, parentAbsolute: XY): XY`, `toAbsolute(relative: XY, parentAbsolute: XY): XY`, `reparent(node, newParentId: string | null, nodeAbsolute: XY, parentAbsolute: XY | null): BoardNode`
+  - `toRelative(absolute: XY, parentAbsolute: XY): XY`, `toAbsolute(relative: XY, parentAbsolute: XY): XY`, `reparent(node, newParentId: string | null, nodeAbsolute: XY, parentAbsolute: XY | null): BoardNode` (never sets `extent`, and removes one if present)
+  - `Box = { x; y; width; height }`, `fitsInside(child: Box, parent: Box): boolean`, `isDescendant(nodes: BoardNode[], candidateId: string, ancestorId: string): boolean`
 
 These are the load-bearing tests the addendum names in section 8: React Flow mutates node objects with runtime state, and re-parenting does not convert coordinates for you.
 
@@ -564,7 +571,7 @@ describe("toBoardJson", () => {
 
 ```ts
 import { describe, expect, it } from "vitest";
-import { reparent, toAbsolute, toRelative } from "./reparent";
+import { fitsInside, isDescendant, reparent, toAbsolute, toRelative } from "./reparent";
 import type { BoardNode } from "./types";
 
 const note: BoardNode = { id: "n-n", type: "note", position: { x: 700, y: 300 }, data: { tags: [], collapsed: false, note: "notes/n-n.md" } };
@@ -577,7 +584,7 @@ describe("reparent", () => {
   it("moving into a group keeps the node visually still", () => {
     const moved = reparent(note, "n-g", { x: 700, y: 300 }, { x: 400, y: 120 });
     expect(moved.parentId).toBe("n-g");
-    expect(moved.extent).toBe("parent");
+    expect(moved.extent).toBeUndefined();   // spike finding 3: extent "parent" clamps and traps the node
     expect(moved.position).toEqual({ x: 300, y: 180 });
   });
   it("moving out of a group restores absolute coordinates", () => {
@@ -586,6 +593,19 @@ describe("reparent", () => {
     expect(out.parentId).toBeUndefined();
     expect(out.extent).toBeUndefined();
     expect(out.position).toEqual({ x: 700, y: 300 });
+  });
+  it("fitsInside needs the whole box inside, edges inclusive", () => {
+    const group = { x: 100, y: 100, width: 480, height: 480 };
+    expect(fitsInside({ x: 100, y: 100, width: 480, height: 480 }, group)).toBe(true);
+    expect(fitsInside({ x: 150, y: 150, width: 120, height: 40 }, group)).toBe(true);
+    expect(fitsInside({ x: 500, y: 150, width: 120, height: 40 }, group)).toBe(false);   // overhangs the right edge
+  });
+  it("isDescendant walks the parent chain, so a group cannot be dropped into its own child", () => {
+    const g = (id: string, parentId?: string): BoardNode => ({ id, type: "group", position: { x: 0, y: 0 }, parentId, data: { tags: [], name: null } });
+    const nodes = [g("n-a"), g("n-b", "n-a"), g("n-c", "n-b")];
+    expect(isDescendant(nodes, "n-c", "n-a")).toBe(true);
+    expect(isDescendant(nodes, "n-a", "n-c")).toBe(false);
+    expect(isDescendant(nodes, "n-b", "n-b")).toBe(false);
   });
 });
 ```
@@ -670,13 +690,33 @@ export type XY = { x: number; y: number };
 export const toRelative = (absolute: XY, parentAbsolute: XY): XY => ({ x: absolute.x - parentAbsolute.x, y: absolute.y - parentAbsolute.y });
 export const toAbsolute = (relative: XY, parentAbsolute: XY): XY => ({ x: relative.x + parentAbsolute.x, y: relative.y + parentAbsolute.y });
 
-/** Change a node's parent without moving it on screen. React Flow does not convert for you (addendum 4.2). */
+export type Box = { x: number; y: number; width: number; height: number };
+
+/** Change a node's parent without moving it on screen. React Flow does not convert for you (addendum 4.2).
+ *  Never sets `extent: "parent"`: the spike measured that it clamps a node the moment it is re-parented
+ *  and stops it from ever being dragged back out (findings, section 2). */
 export function reparent(node: BoardNode, newParentId: string | null, nodeAbsolute: XY, parentAbsolute: XY | null): BoardNode {
+  const { parentId: _p, extent: _e, ...rest } = node;
   if (newParentId === null || parentAbsolute === null) {
-    const { parentId: _p, extent: _e, ...rest } = node;
     return { ...rest, position: { ...nodeAbsolute } } as BoardNode;
   }
-  return { ...node, parentId: newParentId, extent: "parent", position: toRelative(nodeAbsolute, parentAbsolute) } as BoardNode;
+  return { ...rest, parentId: newParentId, position: toRelative(nodeAbsolute, parentAbsolute) } as BoardNode;
+}
+
+export function fitsInside(child: Box, parent: Box): boolean {
+  return child.x >= parent.x && child.y >= parent.y
+    && child.x + child.width <= parent.x + parent.width && child.y + child.height <= parent.y + parent.height;
+}
+
+/** True if `candidateId` sits somewhere inside `ancestorId`'s subtree. */
+export function isDescendant(nodes: BoardNode[], candidateId: string, ancestorId: string): boolean {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let parent = byId.get(candidateId)?.parentId;
+  while (parent) {
+    if (parent === ancestorId) return true;
+    parent = byId.get(parent)?.parentId;
+  }
+  return false;
 }
 ```
 
@@ -735,7 +775,7 @@ describe("selectionToPageRects", () => {
     expect(rect.rect.map((v) => Math.round(v))).toEqual([50, 130, 156, 139]);
   });
 
-  it("merges the lines of one page into one rectangle and splits across pages", () => {
+  it("merges the lines of one column into one rectangle and splits across pages", () => {
     const lines = [
       { left: 160, top: 1500, right: 400, bottom: 1512 },
       { left: 150, top: 1514, right: 420, bottom: 1526 },
@@ -750,8 +790,34 @@ describe("selectionToPageRects", () => {
     expect(y1).toBeCloseTo((1526 - 1000) / scale, 3);
   });
 
-  it("ignores zero-height line rects browsers emit at range ends", () => {
-    const lines = [{ left: 160, top: 1500, right: 400, bottom: 1512 }, { left: 400, top: 1512, right: 400, bottom: 1512 }];
+  it("splits a two-column selection on one page into one rect per column", () => {
+    // left column lines, then the right column starting higher up the page (spike finding 4)
+    const lines = [
+      { left: 160, top: 1700, right: 427, bottom: 1712 },
+      { left: 157, top: 1714, right: 427, bottom: 1726 },
+      { left: 453, top: 1082, right: 723, bottom: 1094 },
+      { left: 453, top: 1096, right: 700, bottom: 1108 },
+    ];
+    const rects = selectionToPageRects(lines, frames);
+    expect(rects.map((r) => r.page)).toEqual([2, 2]);
+    expect(rects[0].rect[2]).toBeLessThan(rects[1].rect[0]);
+  });
+
+  it("keeps spans of one line together across a word gap, and a span's two boxes together", () => {
+    const lines = [
+      { left: 150, top: 1500, right: 300, bottom: 1512 },
+      { left: 150, top: 1498, right: 300, bottom: 1512 },   // the same span's text box, 2 px taller
+      { left: 303, top: 1500, right: 420, bottom: 1512 },   // next span on the line
+    ];
+    expect(selectionToPageRects(lines, frames)).toHaveLength(1);
+  });
+
+  it("ignores zero-height and zero-width rects browsers emit at range ends and <br>s", () => {
+    const lines = [
+      { left: 160, top: 1500, right: 400, bottom: 1512 },
+      { left: 400, top: 1512, right: 400, bottom: 1512 },
+      { left: 100, top: 1100, right: 100, bottom: 1116 },   // a <br> rect with an unrelated y
+    ];
     expect(selectionToPageRects(lines, frames)).toHaveLength(1);
   });
 
@@ -775,12 +841,23 @@ export type LineRect = { left: number; top: number; right: number; bottom: numbe
 export type PageFrame = { page: number; box: LineRect; widthPt: number };
 
 const MIN_LINE_PX = 1;
+/** A span more than this far sideways from the current run is in another column. Word gaps are
+ *  about 3 pt; the narrowest two-column gutter in common CS templates is about 14 pt. */
+export const COLUMN_GAP_PT = 8;
+/** A span's text box sits up to 1.75 pt above its element box (spike finding 4), so "reads
+ *  downward" allows this much upward slack before starting a new run. */
+export const LINE_SLACK_PT = 3;
 
-/** CSS pixels to PyMuPDF points: subtract the page's screen origin, divide by scale.
- *  The page element is rendered at widthPx = widthPt * scale, so scale = box.width / widthPt.
- *  Origin is the page's top-left, so no flip. This is the one place the conversion lives. */
+/** CSS pixels to PyMuPDF points, merged into one rect per column run.
+ *  Conversion: subtract the page canvas's screen origin, divide by scale = canvas width / page width
+ *  in points. Origin is top-left, so no flip. This is the one place the conversion lives.
+ *  Runs: rects arrive in content-stream order, which is reading order. A run continues while the
+ *  next rect is on the same page, no higher than the last by more than LINE_SLACK_PT, and within
+ *  COLUMN_GAP_PT sideways of the run. So one column gives one rect, and a selection that crosses
+ *  to the next column gives a second rect instead of a block covering both. */
 export function selectionToPageRects(lines: LineRect[], frames: PageFrame[]): PageRect[] {
-  const byPage = new Map<number, Rect>();
+  const runs: PageRect[] = [];
+  let lastTop: number | null = null;
   for (const line of lines) {
     if (line.bottom - line.top < MIN_LINE_PX || line.right - line.left < MIN_LINE_PX) continue;
     const cy = (line.top + line.bottom) / 2;
@@ -791,18 +868,26 @@ export function selectionToPageRects(lines: LineRect[], frames: PageFrame[]): Pa
       (line.left - frame.box.left) / scale, (line.top - frame.box.top) / scale,
       (line.right - frame.box.left) / scale, (line.bottom - frame.box.top) / scale,
     ];
-    const prev = byPage.get(frame.page);
-    byPage.set(frame.page, prev
-      ? [Math.min(prev[0], rect[0]), Math.min(prev[1], rect[1]), Math.max(prev[2], rect[2]), Math.max(prev[3], rect[3])]
-      : rect);
+    const run = runs[runs.length - 1];
+    const samePage = run !== undefined && run.page === frame.page;
+    const sameColumn = samePage && rect[0] <= run.rect[2] + COLUMN_GAP_PT && run.rect[0] <= rect[2] + COLUMN_GAP_PT;
+    const readsDown = lastTop !== null && rect[1] >= lastTop - LINE_SLACK_PT;
+    if (run && sameColumn && readsDown) {
+      run.rect = [Math.min(run.rect[0], rect[0]), Math.min(run.rect[1], rect[1]), Math.max(run.rect[2], rect[2]), Math.max(run.rect[3], rect[3])];
+    } else {
+      runs.push({ page: frame.page, rect });
+    }
+    lastTop = rect[1];
   }
-  return [...byPage.entries()].sort((a, b) => a[0] - b[0]).map(([page, rect]) => ({ page, rect }));
+  return runs;
 }
 
 export function pageFrames(container: HTMLElement, source: Source): PageFrame[] {
   return Array.from(container.querySelectorAll<HTMLElement>(".react-pdf__Page")).map((el) => {
     const page = Number(el.dataset.pageNumber) - 1;   // react-pdf numbers pages from 1
-    const box = el.getBoundingClientRect();
+    // The page element fills its container; only the canvas is the page (spike finding 1).
+    const canvas = el.querySelector<HTMLElement>(".react-pdf__Page__canvas") ?? el;
+    const box = canvas.getBoundingClientRect();
     return { page, box: { left: box.left, top: box.top, right: box.right, bottom: box.bottom }, widthPt: source.pages[page].width };
   });
 }
@@ -822,7 +907,7 @@ export function readSelection(container: HTMLElement, source: Source): PageRect[
 - [ ] **Step 4: Run the selection tests**
 
 Run: `cd web && npm test -- selection`
-Expected: 4 passed.
+Expected: 6 passed.
 
 - [ ] **Step 5: Write the overlay and the paper view**
 
@@ -885,7 +970,8 @@ export function PaperView({ paperId, source, board, focus, onSelect, onOutlineCl
     if (!focus || !container.current || !ready) return;
     const el = container.current.querySelector<HTMLElement>(`.react-pdf__Page[data-page-number="${focus.page + 1}"]`);
     if (!el) return;
-    const scale = el.clientWidth / source.pages[focus.page].width;
+    const canvas = el.querySelector<HTMLElement>(".react-pdf__Page__canvas") ?? el;
+    const scale = canvas.clientWidth / source.pages[focus.page].width;
     el.scrollIntoView({ block: "start" });
     container.current.scrollBy({ top: focus.rect[1] * scale - 80 });
   }, [focus, ready, source]);
@@ -991,7 +1077,7 @@ createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictM
 cd web && npm run dev
 ```
 
-Open the dev URL, pick the paper, select the heading "3.1. Residual Learning" on page 3, and read the console: the logged rect must be within 3 points of `[50, 130, 156, 139]` on page 2, the same check the spike made, now through the real code path. Then hand-edit `/tmp/pb-data/papers/<id>/board.json` to add one highlight with that rect and reload: a yellow mark must sit exactly on the heading.
+Open the dev URL, pick the paper, select the heading "3.1. Residual Learning" on page 3, and read the console: the logged rect must be within 3 points of PyMuPDF's `search_for` rect `[50.11, 128.76, 155.90, 139.72]` on page 2 (the spike measured 2.26 pt worst, on the top edge), now through the real code path. Then select from the end of one column into the next and check that two rects are logged, one per column. Then hand-edit `/tmp/pb-data/papers/<id>/board.json` to add one highlight with that rect and reload: a yellow mark must sit exactly on the heading.
 
 - [ ] **Step 7: Commit**
 
@@ -1361,13 +1447,16 @@ export function useBoard(): Ctx {
 
 ```tsx
 // web/src/paper/SelectionPopover.tsx
-type Props = { at: DOMRect; busy: boolean; onHighlight: () => void; onCut: () => void; onDismiss: () => void };
+type Props = { at: DOMRect; busy: boolean; canHighlight: boolean; onHighlight: () => void; onCut: () => void; onDismiss: () => void };
 
-/** One selection, then a choice. No modes (SPEC.md section 4). */
-export function SelectionPopover({ at, busy, onHighlight, onCut, onDismiss }: Props) {
+export const ONE_COLUMN_HINT = "A highlight covers one column on one page. Cut this, or highlight each column.";
+
+/** One selection, then a choice. No modes (SPEC.md section 4). A selection that crosses a column
+ *  or a page is several rects, and a highlight anchor holds one, so Highlight is not offered. */
+export function SelectionPopover({ at, busy, canHighlight, onHighlight, onCut, onDismiss }: Props) {
   return (
     <div className="popover" style={{ left: at.right + 8, top: at.bottom + 4 }} onMouseDown={(e) => e.stopPropagation()}>
-      <button disabled={busy} onClick={onHighlight}>Highlight</button>
+      <button disabled={busy || !canHighlight} title={canHighlight ? undefined : ONE_COLUMN_HINT} onClick={onHighlight}>Highlight</button>
       <button disabled={busy} onClick={onCut}>Cut</button>
       <button className="quiet" onClick={onDismiss}>×</button>
     </div>
@@ -1400,7 +1489,9 @@ export function PaperScreen({ focus, onOpenOnBoard }: { focus: PageRect | null; 
     setBusy(true);
     try {
       const selection = await api.postText(paperId, pending.rects, !pending.exact);
-      if (kind === "highlight" && selection.highlight) {
+      if (kind === "highlight") {
+        if (!selection.highlight) return;   // the server gives a highlight anchor only for one rect; never cut instead
+
         dispatch({ type: "addHighlight", highlight: { id: newId("h"), tags: [], note: null, anchor: selection.highlight } });
       } else {
         const node: ChunkNode = {
@@ -1421,13 +1512,13 @@ export function PaperScreen({ focus, onOpenOnBoard }: { focus: PageRect | null; 
       <PaperView paperId={paperId} source={source} board={state.board} focus={focus}
                  onSelect={(rects, at, exact) => setPending({ rects, at, exact })}
                  onOutlineClick={onOpenOnBoard} />
-      {pending && <SelectionPopover at={pending.at} busy={busy} onHighlight={() => choose("highlight")} onCut={() => choose("cut")} onDismiss={() => setPending(null)} />}
+      {pending && <SelectionPopover at={pending.at} busy={busy} canHighlight={pending.rects.length === 1} onHighlight={() => choose("highlight")} onCut={() => choose("cut")} onDismiss={() => setPending(null)} />}
     </>
   );
 }
 ```
 
-A highlight request whose selection spans pages comes back with `highlight: null`; the code above falls through to a cut, which is the only thing a multi-page selection can be. Say so in the popover later if it proves confusing; for now it is the simplest honest behaviour.
+A selection that crosses a column or a page arrives as several rects. The popover disables Highlight for it and says why, and `choose` never turns a highlight request into a cut: the reader gets exactly the action they clicked or nothing.
 
 `web/src/App.tsx`:
 
@@ -1707,7 +1798,8 @@ import { useCallback, useMemo } from "react";
 import { Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow, type Node, type OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { newId } from "../model/ids";
-import { reparent } from "../model/reparent";
+import { fitsInside, isDescendant, reparent, type Box } from "../model/reparent";
+import { parentsFirst } from "../model/serialize";
 import type { BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
 import { ChunkNode } from "./nodes/ChunkNode";
@@ -1719,21 +1811,27 @@ const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group:
 
 function Inner({ onOpenInPaper }: { onOpenInPaper: (rect: PageRect) => void }) {
   const { state, dispatch } = useBoard();
-  const { getIntersectingNodes, getInternalNode } = useReactFlow<BoardNode>();
+  const { getInternalNode } = useReactFlow<BoardNode>();
 
-  /** Drop a node into a group, or out of one. Coordinates converted explicitly (addendum 4.2). */
-  const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, node) => {
-    if (node.type === "group") return;
-    const groups = getIntersectingNodes(node).filter((n) => n.type === "group" && n.id !== node.parentId) as GroupNodeType[];
-    const target = groups[0] ?? null;
-    const absolute = getInternalNode(node.id)!.internals.positionAbsolute;
-    if (target) {
-      const parentAbsolute = getInternalNode(target.id)!.internals.positionAbsolute;
-      dispatch({ type: "replaceNode", node: reparent(node, target.id, absolute, parentAbsolute) });
-    } else if (node.parentId && getIntersectingNodes(node).every((n) => n.id !== node.parentId)) {
-      dispatch({ type: "replaceNode", node: reparent(node, null, absolute, null) });
-    }
-  }, [dispatch, getIntersectingNodes, getInternalNode]);
+  /** On drop, a node belongs to the smallest group that wholly contains it, or to none. This one rule
+   *  covers dropping in, dragging out, moving between groups, and nesting groups. Whole containment,
+   *  not intersection, because a partial overlap is where the spike saw nodes jump (findings, section 2).
+   *  Coordinates converted explicitly (addendum 4.2). */
+  const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, dragged) => {
+    const box = (id: string): Box => {
+      const internal = getInternalNode(id)!;
+      return { ...internal.internals.positionAbsolute, width: internal.measured?.width ?? 0, height: internal.measured?.height ?? 0 };
+    };
+    const me = box(dragged.id);
+    const target = state.board.nodes
+      .filter((n) => n.type === "group" && n.id !== dragged.id && !isDescendant(state.board.nodes, n.id, dragged.id))
+      .map((n) => ({ id: n.id, box: box(n.id) }))
+      .filter((g) => fitsInside(me, g.box))
+      .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)[0] ?? null;
+    if ((target?.id ?? null) === (dragged.parentId ?? null)) return;
+    const stored = state.board.nodes.find((n) => n.id === dragged.id)!;
+    dispatch({ type: "replaceNode", node: reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null) });
+  }, [dispatch, getInternalNode, state.board.nodes]);
 
   const addGroup = () => {
     const node: GroupNodeType = { id: newId("n"), type: "group", position: { x: 400, y: 40 }, width: 480, height: 320, data: { tags: [], name: null } };
@@ -1746,7 +1844,9 @@ function Inner({ onOpenInPaper }: { onOpenInPaper: (rect: PageRect) => void }) {
     }
   };
 
-  const nodes = useMemo(() => state.board.nodes, [state.board.nodes]);
+  // Every path into <ReactFlow> goes through parentsFirst, not only saving: a node re-parented into a
+  // group created after it would otherwise be listed before its parent (findings, section 3).
+  const nodes = useMemo(() => parentsFirst(state.board.nodes), [state.board.nodes]);
   return (
     <div className="board">
       <div className="board-tools"><button onClick={addGroup}>New group</button></div>
@@ -1818,7 +1918,7 @@ With the server up and a board holding two chunks and a highlight from Task 5:
 
 1. Board view shows both chunks; the one containing the highlight paints it as a mark and shows a handle for it.
 2. Drag one, resize it, collapse it. Notice shows Saved after each. Reload: same.
-3. New group; drag a chunk into it; drag the group: the chunk moves with it. Reload: still inside. Read `board.json`: the chunk has `parentId` and a small relative `position`, and the group precedes it in `nodes`.
+3. New group; drag a chunk wholly into it; drag the group: the chunk moves with it. Reload: still inside. Read `board.json`: the chunk has `parentId`, no `extent`, a small relative `position`, and the group precedes it in `nodes`. Drag the chunk back out of the group: it leaves, and a group drag no longer moves it. Drop a chunk half over the group's edge: it stays where it was dropped and does not join.
 4. Select the group, press Delete: the chunk survives at the same screen position.
 5. Click the ↗ on a chunk: the paper view opens scrolled to that region's page with its outline in view.
 6. In the paper view, click an outline: the board view opens.

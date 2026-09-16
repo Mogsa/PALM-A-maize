@@ -1849,10 +1849,8 @@ def test_highlights_in_uses_geometry(resnet):
 def test_export_follows_the_papers_order_not_the_boards(resnet):
     doc, pdf = resnet
     md = export_markdown(doc, _board(doc), NOTES, pdf, tags=[])
-    assert md.index("understand residual blocks") < md.index("Figure 1")
-    # Pieces sort by (page, top edge): on ResNet page 0, Figure 1 sits at y 224 in the right
-    # column and the Introduction heading at y 536 in the left, so the figure comes first.
-    assert md.index("Figure 1") < md.index("1. Introduction") < md.index("3.1. Residual Learning")
+    assert md.index("understand residual blocks") < md.index("1. Introduction")
+    assert md.index("1. Introduction") < md.index("Figure 1") < md.index("3.1. Residual Learning")
 
 
 def test_export_places_highlight_and_its_note_under_the_chunk(resnet):
@@ -2000,7 +1998,7 @@ def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pd
 - [ ] **Step 4: Run the tests**
 
 Run: `.venv/bin/pytest tests/test_export.py -v`
-Expected: 5 passed. `test_export_follows_the_papers_order_not_the_boards` pins the order rule to a measured page: Figure 1 at y 224 sorts before the Introduction heading at y 536. That is geometric order, not reading order; on a two-column page they differ. If a reader finds it wrong in practice, the rule to change is `_order_key`, and this test, together.
+Expected: 5 passed. `test_export_follows_the_papers_order_not_the_boards` requires reading order: the Introduction before Figure 1, although the figure sits higher on the page in the other column. Sorting by `(page, y, x)` fails it. Executed, this was resolved by ordering pieces through the extracted layout regions, which are stored in reading order (ruling R1 in the API branch); that is the rule, and the `_order_key` sketch above is superseded by it.
 
 - [ ] **Step 5: Commit**
 
