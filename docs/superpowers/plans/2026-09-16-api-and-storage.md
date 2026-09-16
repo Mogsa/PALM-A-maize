@@ -2452,7 +2452,7 @@ git commit -m "feat: add the HTTP API over the store, anchoring, snap, clips and
 
 **Interfaces:**
 - Consumes: `api.create_app`.
-- Produces: `paperboard serve [--root DIR] [--port 8765]`, binding `127.0.0.1`. If `DIR/web/dist/index.html` exists it is served at `/`, which is where the frontend plan will put its build. Until then `/` returns a one-line JSON saying so.
+- Produces: `paperboard serve [--root DIR] [--web DIR] [--port 8765]`, binding `127.0.0.1`. `--root` is the data folder holding `papers/` and `tags.json`. `--web` is the frontend build folder, default `web/dist` relative to the current directory, which is where the frontend plan puts it; if its `index.html` exists it is served at `/`, otherwise `/` returns a one-line JSON saying so. The two folders are separate on purpose: one is the reader's data, the other is the program.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2465,16 +2465,16 @@ from paperboard.cli import build_app
 
 
 def test_build_app_serves_the_api_and_a_placeholder_root(tmp_path):
-    client = TestClient(build_app(tmp_path))
+    client = TestClient(build_app(tmp_path / "data", tmp_path / "missing-web"))
     assert client.get("/api/papers").json() == []
     assert client.get("/").json()["message"].startswith("paperboard API")
 
 
 def test_build_app_serves_the_frontend_when_built(tmp_path):
-    dist = tmp_path / "web" / "dist"
+    dist = tmp_path / "dist"
     dist.mkdir(parents=True)
     (dist / "index.html").write_text("<!doctype html><title>board</title>")
-    client = TestClient(build_app(tmp_path))
+    client = TestClient(build_app(tmp_path / "data", dist))
     assert client.get("/").status_code == 200
     assert "board" in client.get("/").text
 
@@ -2499,14 +2499,15 @@ from paperboard.api import create_app
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
+DEFAULT_WEB = Path("web") / "dist"
 
 
-def build_app(root: Path) -> FastAPI:
-    """The API plus, when built, the frontend at `/`."""
+def build_app(root: Path, web: Path = DEFAULT_WEB) -> FastAPI:
+    """The API over the data folder `root`, plus the frontend build at `/` when
+    `web/index.html` exists."""
     application = create_app(root)
-    dist = root / "web" / "dist"
-    if (dist / "index.html").exists():
-        application.mount("/", StaticFiles(directory=dist, html=True), name="web")
+    if (web / "index.html").exists():
+        application.mount("/", StaticFiles(directory=web, html=True), name="web")
     else:
         @application.get("/")
         def placeholder():
@@ -2516,14 +2517,15 @@ def build_app(root: Path) -> FastAPI:
 
 @app.command("serve")
 def serve_command(
-    root: Path = typer.Option(Path("."), "--root", help="Folder holding papers/ and tags.json."),
+    root: Path = typer.Option(Path("."), "--root", help="Data folder holding papers/ and tags.json."),
+    web: Path = typer.Option(DEFAULT_WEB, "--web", help="Frontend build folder (web/dist)."),
     port: int = typer.Option(DEFAULT_PORT, "--port", help="Local port."),
 ) -> None:
     """Run the local server on 127.0.0.1 only."""
     import uvicorn
 
-    typer.echo(f"paperboard at http://{HOST}:{port}  (root: {root.resolve()})")
-    uvicorn.run(build_app(root), host=HOST, port=port, log_level="warning")
+    typer.echo(f"paperboard at http://{HOST}:{port}  (data: {root.resolve()}, web: {web.resolve()})")
+    uvicorn.run(build_app(root, web), host=HOST, port=port, log_level="warning")
 ```
 
 `import uvicorn` is inside the command so that importing the CLI module for tests does not start anything.
