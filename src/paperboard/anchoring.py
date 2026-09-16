@@ -212,13 +212,19 @@ def rects_for_text(page: pymupdf.Page, text: str) -> Rect | None:
     return union(tuple(head[0]), tuple(tail[-1]))
 
 
-def _char_boxes(page: pymupdf.Page) -> list[Rect]:
-    """One bounding box per non-whitespace character, in the same reading
-    order PyMuPDF's plain `get_text()` produces. Measured (scratch script,
-    all pages of all three fixture papers): the whitespace-stripped character
-    sequence from `rawdict` is identical, page for page, to `PageIndex.stripped`
-    built from `get_text()`, so index `i` here is the box for `stripped[i]`."""
-    boxes: list[Rect] = []
+def _char_boxes(page: pymupdf.Page) -> list[tuple[str, Rect]]:
+    """One (character, bounding box) pair per non-whitespace character, in the
+    same reading order PyMuPDF's plain `get_text()` produces. Measured
+    (scratch script, all pages of all three fixture papers): the
+    whitespace-stripped character sequence from `rawdict` is identical, page
+    for page, to `PageIndex.stripped` built from `get_text()`, so index `i`
+    here is normally the box for `stripped[i]`. `rawdict` is a different
+    extraction path than `get_text()`, though, and nothing guarantees they
+    agree on every PDF (ligatures, dropped or substituted glyphs, unusual
+    encodings) -- `rect_for_offsets` keeps the character alongside the box so
+    it can check that assumption for the slice it actually uses, rather than
+    trusting the index blindly."""
+    chars: list[tuple[str, Rect]] = []
     raw = page.get_text("rawdict")
     for block in raw["blocks"]:
         if block.get("type") != 0:  # text blocks only; images carry no chars
@@ -227,8 +233,8 @@ def _char_boxes(page: pymupdf.Page) -> list[Rect]:
             for span in line["spans"]:
                 for ch in span["chars"]:
                     if not ch["c"].isspace():
-                        boxes.append(normalise(tuple(ch["bbox"])))
-    return boxes
+                        chars.append((ch["c"], normalise(tuple(ch["bbox"]))))
+    return chars
 
 
 def rect_for_offsets(page: pymupdf.Page, page_index: PageIndex, start: int, end: int) -> Rect | None:
@@ -242,6 +248,17 @@ def rect_for_offsets(page: pymupdf.Page, page_index: PageIndex, start: int, end:
     `find_quote` chose. Reading the boxes off the matched characters
     themselves cannot pick up another occurrence, because it never searches
     for text at all.
+
+    Before trusting those boxes, the matched slice of the `rawdict` character
+    sequence is checked against `page_index.stripped[s:e]` -- the same slice,
+    not just the same length, since a same-length substitution would pass a
+    length-only check. `get_text()` (what `page_index.stripped` is built from)
+    and `rawdict` are two different extraction paths; this fixture set always
+    agrees between them (fix round 1's measurement), but nothing enforces
+    that in general, and returning a plausible-looking rect built from the
+    wrong characters would be silently wrong. Returns `None` when the slice
+    doesn't check out, so the caller (`_recover_rect`) falls back to
+    `rects_for_text`.
     """
     if end <= start:
         return None
@@ -250,12 +267,15 @@ def rect_for_offsets(page: pymupdf.Page, page_index: PageIndex, start: int, end:
     e = bisect.bisect_left(offsets, end - 1) + 1
     if s >= e:
         return None
-    boxes = _char_boxes(page)
-    e = min(e, len(boxes))
+    chars = _char_boxes(page)
+    e = min(e, len(chars))
     if s >= e:
         return None
-    rect = boxes[s]
-    for box in boxes[s + 1:e]:
+    matched = chars[s:e]
+    if "".join(c for c, _ in matched) != page_index.stripped[s:e]:
+        return None
+    rect = matched[0][1]
+    for _, box in matched[1:]:
         rect = union(rect, box)
     return rect
 

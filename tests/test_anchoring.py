@@ -3,6 +3,7 @@ import pytest
 from conftest import FIXTURES
 
 from paperboard.anchoring import (
+    PageIndex,
     build_index,
     find_quote,
     global_position,
@@ -104,6 +105,40 @@ def test_rects_for_text_returns_the_lines_bounding_box(resnet):
     assert rect is not None
     x0, y0, x1, y1 = rect
     assert 0 < x0 < x1 < 612 and 0 < y0 < y1 < 792
+
+
+def test_rect_for_offsets_falls_back_when_char_boxes_do_not_line_up(resnet):
+    """rect_for_offsets reads geometry from PyMuPDF's rawdict character boxes,
+    a different extraction path than the get_text() page.stripped/offsets it
+    is indexed against. Measured (task-4-report.md fix round 1) that the two
+    agree on all three fixture papers, but nothing enforces that in general --
+    a PDF where they diverge (ligatures, dropped or substituted glyphs,
+    unusual encodings) must not silently return a plausible-looking rect built
+    from the wrong characters. Doctor a PageIndex, no PDF editing: keep the
+    real page's offsets (so the position math is unchanged) but corrupt the
+    stripped text at the matched slice to a same-length string the real page
+    does not contain. rect_for_offsets must refuse to trust the character
+    boxes at that position and return None rather than the "plausible" real
+    rect that sits there."""
+    doc, index, pdf = resnet
+    page_index = index[2]
+    text = doc.page_text[2].text
+    quote = "Let us consider H(x) as an underlying mapping"
+    stripped_quote, _ = strip_whitespace(quote)
+    s = page_index.stripped.index(stripped_quote)
+    e = s + len(stripped_quote)
+
+    # Same length as the real text at [s:e) -- a length-only check would miss
+    # this -- but different content, so it cannot really be what the rawdict
+    # characters at those positions spell out.
+    doctored_stripped = page_index.stripped[:s] + ("x" * (e - s)) + page_index.stripped[e:]
+    doctored = PageIndex(page=page_index.page, text=page_index.text, stripped=doctored_stripped, offsets=page_index.offsets)
+
+    start = page_index.offsets[s]
+    end = page_index.offsets[e - 1] + 1
+    assert text[start:end] == quote  # sanity: these offsets really do point at the quote
+
+    assert rect_for_offsets(pdf[2], doctored, start, end) is None
 
 
 def test_resolve_highlight_states(resnet):
