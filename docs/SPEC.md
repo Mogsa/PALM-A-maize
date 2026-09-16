@@ -1,134 +1,164 @@
 # Paper Board: spec and plan
 
-Draft for review. Third revision, 16 September 2026. Grounded in RESEARCH.md and TOOLS.md.
+Fourth revision, 16 September 2026. Grounded in RESEARCH.md and TOOLS.md. This revision closes the open items and fixes the design principles.
 
 ## 1. Purpose
 
 A tool for taking a CS paper apart so its ideas can be laid out, connected, and understood. Like cutting a printed paper into pieces with scissors, spreading them on a desk, and writing on scraps beside them. Except nothing is destroyed, and every piece remembers where it came from.
 
-**The one rule.** If a feature does not help break the paper's ideas apart and lay them out simply, it is not in the tool.
+There is no right way to read a paper with it. It is a tool for making your own tools around the paper, in your own non-linear order.
 
-**The second rule, from the research.** Nothing is forced. No reading order, no required pass, no required label. Structure is available when the reader wants it and invisible when they do not. (Shipman and Marshall, RESEARCH.md section 5.)
+## 2. Principles
 
-## 2. What the research says the tool must do
+Every later decision is checked against these eight. If a feature fails one, it is not in the tool.
+
+1. **The reader does the work.** Nothing is generated: no summaries, no explanations, no suggested tags or connections. The measured gains in understanding come from the reader constructing links and explaining in their own words (RESEARCH.md section 5). Anything automatic that does that work removes the gain.
+2. **Nothing is forced.** No reading order, no required pass, no required label or type. Structure is available when the reader wants it and invisible when they do not (Shipman and Marshall).
+3. **The paper is never edited, and the source is always one click away.** Every piece cut from the paper keeps a link back to where it came from.
+4. **Four primitives, one set of operations.** Anything on the board is a piece, a tag, a connection, or a group. Anything new must be one of those or it is not added.
+5. **Plain local files, no account, no cloud.** A board is a folder you can copy.
+6. **One board per paper.** Bounded by construction so it never sprawls.
+7. **Export is not an afterthought.** The board written out in the paper's order is the literature note. No separate summary is written by hand.
+8. **Build on open source for anything hard to get right.** The canvas, the PDF renderer, and the extractor are existing libraries. Only what is specific to this tool is written here.
+
+## 3. What the research says the tool must do
 
 From RESEARCH.md, the effects on understanding that are actually measured come from four acts by the reader. The tool exists to make these four acts easy and to stay out of the way otherwise.
 
 | Act | Evidence | In the tool |
 |---|---|---|
-| Deciding what connects to what and naming it | concept maps, argument maps | draw a line between any two pieces, label it if you want |
+| Deciding what connects to what and naming it | concept maps, argument maps | draw a line between any two pieces, tag it if you want |
 | Explaining in your own words | self-explanation, generative notes | write a note on anything |
 | Arranging things in space | Space to Think, spatial hypertext | move anything anywhere; proximity counts |
 | Coming back to it | note review | the board is exactly as you left it |
 
 Everything else in the spec is plumbing for these four.
 
-## 3. The four primitives
+## 4. Two views of one board
 
-The whole tool is built from four things. Each does several jobs so that there are only four.
+A paper is opened in one of two views, and you switch between them at any time. Switching never moves anything.
 
-### 3.1 Piece
+**Paper view.** The PDF itself, full width, as the authors laid it out. Every cut you have made is painted on it as a highlight. This is the only place you cut: drag over any text, figure, or equation and it becomes a piece. Overlapping cuts are allowed, so the same paragraph can be cut three ways in three passes and each is its own piece.
 
-Anything on the board. Created by the tool or by the reader.
+**Board view.** The canvas. Every cut is a piece here, and this is where you arrange, connect, group, tag, and write notes. Clicking any piece with a source link jumps the paper view to where it came from.
+
+One capture, both views. A highlight in the paper is a piece on the board, a highlight in the paper again when you go back, and a line in the export.
+
+**First open.** The paper view, with an empty board behind it. The first gesture is a highlight. One line on the empty board says: highlight anything in the paper, or split it into the authors' sections.
+
+**Split.** One command adds one piece per section and one per figure or table, using the extracted structure, laid out in the paper's order down the left with figures in a column beside them, all collapsed. That is the uncut paper as the authors divided it. It is a starting point you can ask for, not a decision made for you. You can split, cut a section again by highlighting inside it in the paper view, or never split at all.
+
+## 5. The four primitives
+
+Each does several jobs so that there are only four.
+
+### 5.1 Piece
+
+Anything on the board.
 
 | Comes from | What it is | Source link |
 |---|---|---|
-| the tool, on open | one piece per section, one per figure or table | yes |
-| the reader, by highlighting | an excerpt cut from a section, figure, or another excerpt | yes |
-| the reader, by writing | a note, any length, Markdown | no, unless attached |
-| the reader, by pasting a title and URL | a reference to another paper | the URL |
+| highlighting in the paper view | an excerpt: text, a figure, or an equation | yes |
+| the split command | one piece per section, one per figure or table | yes |
+| writing | a note, any length, Markdown, URLs inside if you have a source | no |
 
 Every piece has the same operations: move, resize, collapse or expand, open source, tag, connect, group. There are no piece-specific operations.
 
-A section piece collapsed shows its heading, a line or two, and a count of what has been attached to it. Expanded, it shows the full text and can be highlighted in place, as many times as you like, in as many passes as you like. Figures and equations are rendered clips from the PDF. The PDF itself opens in a side panel from any piece with a source link.
+A section or excerpt piece collapsed shows its first line or two and a count of what is connected to it. Expanded, it shows the full text, in the paper's own words. Figures and equations are rendered clips from the PDF. Text in pieces is read, not highlighted; to cut again, open the source and highlight in the paper.
 
-Highlighting is deliberately forgiving: a rough drag across a paragraph excerpts the whole paragraph, and exact selection is there when you want it. Cutting an excerpt never changes the section. Cutting from an excerpt never changes the excerpt. The paper is never edited.
+Highlighting is deliberately forgiving: a rough drag across a paragraph excerpts the whole paragraph, and exact selection is there when you want it. Cutting never changes the paper.
 
-### 3.2 Tag
+An excerpt is anchored by page and rectangle, with a hash of the text under it. It re-anchors by text hash first, rectangle second, and is flagged if neither matches.
+
+### 5.2 Tag
 
 A word with a colour. Attached to any piece or connection. Filter the board by tag.
 
-Tags are one thing doing the jobs the previous drafts gave to three:
+Tags do the jobs the earlier drafts gave to four separate things:
 
-- **Reading role.** `problem`, `claim`, `method`, `evidence`, `assumption` are preset tags because those are the questions every reading guide converges on (RESEARCH.md section 1) and the facets Scim found useful.
-- **Pass.** `pass 1`, `pass 2` are preset tags. Add `pass 3`, `pass 7`, or none. A highlight made in the second pass over a section already highlighted in the first is just a highlight with a different tag. Filter to `pass 1` to see what you knew after pass 1.
-- **Not yet understood.** `question` is a preset tag. The board lists every `question`-tagged piece that has no note attached. That list is the queue of things to go look up. Attaching a note clears it.
+- **Reading role.** `problem`, `claim`, `method`, `evidence`, `assumption` are presets because those are the questions every reading guide converges on (RESEARCH.md section 1).
+- **Pass.** `pass 1`, `pass 2` are presets. Add `pass 3`, `pass 7`, or none. Filter to `pass 1` to see what you knew after pass 1.
+- **Connection kind.** `supports`, `contradicts` are presets. A tag on a connection colours the line.
+- **Not yet understood.** `question` is a preset. The board lists every `question`-tagged piece with no note connected to it. That list is the queue of things to go look up. Connecting a note clears it.
 
-Presets can be renamed, recoloured, or deleted. New tags are one click. No piece needs a tag. Tags are global across all boards, never per paper.
+Presets can be renamed, recoloured, or deleted. New tags are one click. No piece or connection needs a tag. Tags are global across all boards, never per paper.
 
-### 3.3 Connection
+### 5.3 Connection
 
-A line between two pieces, with an optional label. `supports`, `contradicts`, `assumes`, `defines`, or anything typed. Or no label.
+A line between two pieces. Tag it or leave it plain. There is no other label on a line. If you want to say something about a connection, that is a note piece connected to the same pieces.
 
-A note that belongs to several sections is a note piece with a connection to each. There is no separate "attach to many" feature because connections already do that.
+A note that belongs to several excerpts is a note with a connection to each. There is no separate "attach to many" feature because connections already do that.
 
-### 3.4 Group
+### 5.4 Group
 
-A named rectangle. Anything inside it is together. Move the group, everything moves.
+A rectangle, with a name if you want one. Anything inside it is together. Move the group, everything moves. Groups nest.
 
-Groups are the cheap way to say "these belong together" without deciding how. They cover: a pile of pieces for one idea, everything gathered in one pass, three sections you want to read as a unit, a note plus the excerpts it explains. Groups can nest.
+Groups are the cheap way to say "these belong together" before deciding how. They cover: a pile of pieces for one idea, everything gathered in one pass, three sections you want to read as a unit, a note plus the excerpts it explains.
 
-Proximity without a group also counts. The research says readers use position as meaning long before they can name it. The tool never asks them to.
+Proximity without a group also counts. Readers use position as meaning long before they can name it. The tool never asks them to.
 
-## 4. Things that are not primitives
-
-**Concept notes.** A note can be promoted to a concept. Concepts live outside any board and are shared. The same concept placed on two boards is the same file. This is the only cross-paper mechanism in v1, and it is a note with a different home, not a new kind of thing.
+## 6. Things that are not primitives
 
 **Reading goal.** One optional line at the top of the board: why am I reading this. It is a note pinned to the header.
 
-**Summary export.** One command writes the board to a single Markdown file in the paper's own order, with figure clips as images, not placeholders: the goal, then each section with its excerpts and notes, then the concept links and references. Filtered by tag if you want, so "export pass 1" or "export claims and evidence" is the same command. This is the literature note. No separate summary is ever written by hand.
+**Split.** A command, described in section 4. It adds pieces; it is not a kind of piece.
 
-**Initial layout.** On open, sections in the paper's order down the left, figures in a column beside them, all collapsed. That is the uncut paper. Everything after is the reader's, and the tool never rearranges anything.
+**Question list.** A filter over pieces, described in section 5.2.
 
-## 5. Files
+**Export.** One command writes the board to a single Markdown file in the paper's own order, with figure clips as images, not placeholders: the goal, then each section with its excerpts and the notes connected to them, then any notes connected to nothing. Filtered by tag if you want, so "export pass 1" or "export claims and evidence" is the same command. This is the literature note.
+
+## 7. Files
 
 ```
+tags.json            # global tags: name, colour
 papers/<paper-id>/
   paper.pdf
-  source.json      # sections, figures, anchors. Generated. Never hand-edited.
-  board.json       # pieces, positions, sizes, tags, connections, groups, goal
-  notes/<id>.md    # one file per note, front matter holds id and anchors
-concepts/<id>.md   # shared across boards
+  source.json        # sections, figures, anchors. Generated. Never hand-edited.
+  board.json         # pieces, positions, sizes, anchors, tags, connections, groups, goal
+  notes/<id>.md      # one file per note, front matter holds id
 ```
 
-Re-running extraction rewrites `source.json` only. Excerpts re-anchor by text hash first, bounding box second, and are flagged if neither matches. Notes, tags, connections, groups, and positions are never touched by extraction.
+Re-running extraction rewrites `source.json` only. Excerpts re-anchor as described in 5.1. Notes, tags, connections, groups, and positions are never touched by extraction.
 
-## 6. Architecture
+## 8. Architecture
 
-Standalone. Python backend, browser front end, runs locally.
+Standalone. Python backend, browser front end, runs locally. The tool is open source under an AGPL-compatible licence, which PyMuPDF requires.
 
-| Job | Component | License |
+| Job | Component | Licence |
 |---|---|---|
-| sections, paragraphs, figures, with PDF coordinates | GROBID via `grobid_client_python` | Apache 2.0 |
-| text under a rectangle, rendered clips, page geometry | PyMuPDF (or `pypdfium2` if AGPL matters) | AGPL 3.0 / Apache 2.0 |
+| sections and figures with page coordinates, for split and export | GROBID or Docling, decided in build step 1 | Apache 2.0 / MIT |
+| text under a rectangle, rendered clips, page geometry | PyMuPDF | AGPL 3.0 |
 | API and file storage | FastAPI over plain files | MIT |
 | pieces, connections, groups on a canvas | React Flow | MIT |
-| PDF side panel with text selection | `react-pdf-highlighter` or PDF.js | MIT / Apache 2.0 |
+| paper view: rendering, text selection, highlights | PDF.js, via `react-pdf-highlighter` | Apache 2.0 / MIT |
 
-API: get source, get and put board, get and put note, get clip for a page and rectangle, list open questions, export.
+API: get source, get and put board, get and put note, get text under a rectangle, get clip for a page and rectangle, list questions, export.
 
-## 7. Not in v1
+## 9. Not in v1
 
-- Any generated text: summaries, explanations, suggested tags, suggested connections. The research says the reader doing this work is where the effect comes from.
-- A fixed number of passes, a fixed reading order, or any required label.
+- Any generated text: summaries, explanations, suggested tags, suggested connections. Principle 1.
+- A fixed number of passes, a fixed reading order, or any required label. Principle 2.
+- Highlighting inside pieces on the board. The paper is the only cut surface.
+- Free-text labels on connections. Tags only.
+- Concept notes shared across boards. A note is a note. Cross-paper arrives with multi-paper, if it arrives.
 - Citation graphs, paper discovery, library management, multi-paper canvases.
 - Templates, themes, folders.
 - Editing source text.
 
-## 8. Build plan
+## 10. Build plan
 
 | Step | Deliverable | Test on a real paper |
 |---|---|---|
-| 1 | `paperboard extract paper.pdf` writes `source.json` with sections and figures. Python only. | Three papers, one with heavy math. Are the boundaries right? Are the figures found? |
-| 2 | FastAPI serving source, board, notes, clips. | curl. |
-| 3 | Board: section and figure pieces, initial layout, move, resize, collapse, groups, persistence. | Cut it up, arrange it, close, reopen. Same board. |
-| 4 | Highlight in an expanded section or the PDF panel. Excerpt becomes a piece. Tags. | Highlight the abstract in one colour, then again in another. Filter by each. |
-| 5 | Notes, connections, concept promotion, question queue, export. | Reconstruct one paper's argument. Export it. |
+| 1 | Extraction experiment. Run GROBID and Docling on three papers, one with heavy math. Pick one. `paperboard extract paper.pdf` writes `source.json` with sections and figures. Python only. | Are the section boundaries right? Are the figures found? Prefer the one that installs without Docker if the results are close. |
+| 2 | FastAPI serving source, board, notes, text under a rectangle, clips. | curl. |
+| 3 | Paper view with highlighting. A highlight becomes an excerpt piece, persisted with its anchor. Board view shows pieces: move, resize, switch between views. | Highlight five passages, close, reopen. Same highlights in the paper, same pieces on the board. |
+| 4 | Split command, figure clips, groups, collapse and expand. | Split, pile things up, close, reopen. |
+| 5 | Tags, connections, notes, question list, export. | Reconstruct one paper's argument. Export it. |
 | 6 | Acceptance test. | Below. |
 
-Step 1 carries the risk and none of the UI. It starts first.
+Step 1 starts first because it is the experiment and needs no UI. Step 3 is where the tool either works or does not: a cut in the paper must become a piece on the board and survive reopening.
 
-## 9. Acceptance test
+## 11. Acceptance test
 
 Take a paper you need to read. Using only the board:
 
@@ -137,12 +167,23 @@ Take a paper you need to read. Using only the board:
 3. Show one connection you drew that the paper does not state.
 4. Filter to your first-pass tag. Does it match what you knew after ten minutes?
 5. Close, reopen. Everything is where it was.
+6. Switch views. Every highlight in the paper matches a piece on the board, and every piece with a source jumps to its highlight.
 
 If any step fails, the tool is not done.
 
-## 10. Open for review
+## 12. Decisions taken in this revision
 
-1. **Four primitives, or three?** Groups could be dropped if connections plus proximity are enough. The research says people want piles before they want links, so groups stay for now.
-2. **Preset tags.** Ship with `problem`, `claim`, `method`, `evidence`, `assumption`, `question`, `pass 1`, `pass 2`. Or ship with none and let them grow. Proposed: ship the presets, since they encode the reading guides, but make them deletable.
-3. **PyMuPDF licence.** AGPL is fine for an open-source tool. Otherwise `pypdfium2`.
-4. **Name.** "Paper Board" is a placeholder.
+Recorded so the reasoning is not lost.
+
+| Question | Decision | Why |
+|---|---|---|
+| Groups: keep or drop? | Keep, name optional | Readers want piles before links. A pile you cannot name yet is the normal case. |
+| Preset tags? | Ship ten, all deletable | Structure that is available, not forced. They encode the reading guides. |
+| PyMuPDF licence | Keep PyMuPDF; tool is AGPL-compatible open source | Decided by the tool being open source. |
+| Concept notes | Deferred | No visible payoff with one board per paper. Cannot pass the acceptance test. |
+| Reference piece | Folded into notes | A reference is a note with a URL in it. |
+| Connection labels | Tags only | Two vocabularies for one thing. A sentence about a connection is a note. |
+| Where you cut | Paper view only | One gesture, one anchoring path. The board is where you arrange. |
+| First open | Empty board, split on request | The tool must not decide the layout before the reader has read a word. |
+| Extractor | GROBID or Docling, decided in step 1 | The spec should not pretend to know what step 1 exists to find out. |
+| Name | Still a placeholder | Decides nothing. |
