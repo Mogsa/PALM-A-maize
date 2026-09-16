@@ -1,5 +1,6 @@
 """Extraction over `pymupdf-layout`. See SPEC-ADDENDUM.md sections 3 and 3.1."""
 
+import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,7 +9,15 @@ import pymupdf
 from pymupdf4llm.helpers.document_layout import OCRMode, parse_document
 
 from paperboard.geometry import Rect, area, normalise, pad
-from paperboard.source_model import Figure, PageInfo, PageRect, PageText, Section
+from paperboard.source_model import (
+    Figure,
+    LayoutRegion,
+    PageInfo,
+    PageRect,
+    PageText,
+    Section,
+    SourceDocument,
+)
 
 EXTRACTOR_NAME = "pymupdf-layout/1.28.2"
 
@@ -300,3 +309,42 @@ def read_page_text(pdf_path: Path) -> list[PageText]:
     """
     with pymupdf.open(pdf_path) as doc:
         return [PageText(page=i, text=doc[i].get_text()) for i in range(doc.page_count)]
+
+
+_ARXIV = re.compile(r"arXiv:\s*(\d{4}\.\d{4,5})", re.IGNORECASE)
+_SLUG_TRIM = re.compile(r"[^a-z0-9]+")
+SLUG_WORDS = 6
+
+
+def paper_id_for(pdf_path: Path, title: str, first_page_text: str) -> str:
+    """A stable folder name: slugified title plus arXiv id, else a content hash.
+
+    It never changes for a given file, because it is the folder the board lives in.
+    """
+    words = _SLUG_TRIM.sub("-", title.lower()).strip("-").split("-")
+    slug = "-".join(w for w in words if w)[:60].strip("-")
+    match = _ARXIV.search(first_page_text)
+    suffix = match.group(1) if match else hashlib.sha256(
+        pdf_path.read_bytes()
+    ).hexdigest()[:10]
+    return f"{slug}-{suffix}" if slug else suffix
+
+
+def extract_document(pdf_path: Path) -> SourceDocument:
+    """Read a PDF into a SourceDocument. The whole package's entry point."""
+    pages, regions = read_regions(pdf_path)
+    sections = build_sections(pages, regions)
+    page_text = read_page_text(pdf_path)
+    title = next(
+        (r.text for r in regions if r.label == "title" and r.page == 0),
+        sections[0].title if sections else pdf_path.stem,
+    )
+    return SourceDocument(
+        paper_id=paper_id_for(pdf_path, title, page_text[0].text if page_text else ""),
+        extractor=EXTRACTOR_NAME,
+        pages=pages,
+        sections=sections,
+        figures=build_figures(pdf_path, pages, regions),
+        regions=[LayoutRegion(page=r.page, rect=r.rect, label=r.label) for r in regions],
+        page_text=page_text,
+    )
