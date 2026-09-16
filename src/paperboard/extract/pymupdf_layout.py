@@ -7,8 +7,8 @@ from pathlib import Path
 import pymupdf
 from pymupdf4llm.helpers.document_layout import OCRMode, parse_document
 
-from paperboard.geometry import Rect, normalise
-from paperboard.source_model import PageInfo, PageRect, Section
+from paperboard.geometry import Rect, area, normalise, pad
+from paperboard.source_model import Figure, PageInfo, PageRect, Section
 
 EXTRACTOR_NAME = "pymupdf-layout/1.28.2"
 
@@ -173,3 +173,118 @@ def _extent(span: list[Region]) -> list[PageRect]:
         px0, py0, px1, py1 = by_page[region.page]
         by_page[region.page] = (min(px0, x0), min(py0, y0), max(px1, x1), max(py1, y1))
     return [PageRect(page=page, rect=rect) for page, rect in sorted(by_page.items())]
+
+
+# A caption, not a reference to one: "Figure 3." or "Table 2:" but not "Table 3 shows".
+_CAPTION = re.compile(r"^\s*(Figure|Fig\.?|Table)\s*(\d+)\s*[.:]", re.IGNORECASE)
+_CAPTION_LABELS = {"caption", "text"}
+
+CAPTION_PAD = 4.0          # points; a tight clip cuts the bottom row of glyphs
+MIN_FIGURE_AREA = 2500.0   # square points; smaller boxes are rules and separators
+SAME_COLUMN_RATIO = 0.3    # horizontal overlap needed to count as the same column
+
+
+def _caption_key(text: str) -> tuple[str, str] | None:
+    match = _CAPTION.match(text)
+    if not match:
+        return None
+    word = match.group(1).lower()
+    kind = "table" if word.startswith("table") else "figure"
+    return kind, match.group(2)
+
+
+def _same_column(a: Rect, b: Rect) -> bool:
+    """Two rects share a column if their horizontal spans overlap enough.
+
+    Two-column papers put an unrelated figure directly above a caption in the
+    other column, which is the failure this guards against.
+    """
+    ax0, _, ax1, _ = a
+    bx0, _, bx1, _ = b
+    width = min(ax1 - ax0, bx1 - bx0)
+    if width <= 0:
+        return False
+    return (min(ax1, bx1) - max(ax0, bx0)) / width >= SAME_COLUMN_RATIO
+
+
+def build_figures(pdf_path: Path, pages: list[PageInfo], regions: list[Region]) -> list[Figure]:
+    """Pair each caption with the artwork it names.
+
+    Proximity matching, because pymupdf-layout does not link the two. Recorded as a
+    deliberate trade in SPEC.md section 12: a miss costs one figure piece, which the
+    reader cuts by hand in seconds.
+    """
+    figures: list[Figure] = []
+    with pymupdf.open(pdf_path) as doc:
+        captions = [r for r in regions if r.label in _CAPTION_LABELS and _CAPTION.match(r.text)]
+        for caption in captions:
+            kind, number = _caption_key(caption.text)
+            found = _find_artwork(doc, regions, caption, kind)
+            if found is None:
+                continue
+            rect, confidence = found
+            figures.append(
+                Figure(
+                    id=f"{'tab' if kind == 'table' else 'fig'}-{number}",
+                    kind=kind,
+                    label=f"{'Table' if kind == 'table' else 'Figure'} {number}",
+                    caption=caption.text,
+                    caption_rect=PageRect(page=caption.page, rect=caption.rect),
+                    rect=PageRect(page=caption.page, rect=pad(rect, CAPTION_PAD)),
+                    confidence=confidence,
+                )
+            )
+    return _dedupe(figures)
+
+
+def _find_artwork(doc, regions, caption: Region, kind: str):
+    """Three branches, cheapest and most trustworthy first."""
+    wanted = "table" if kind == "table" else "picture"
+    candidates = [
+        r
+        for r in regions
+        if r.page == caption.page
+        and r.label == wanted
+        and _same_column(r.rect, caption.rect)
+        and area(r.rect) >= MIN_FIGURE_AREA
+    ]
+    if candidates:
+        # Nearest above the caption, else nearest below: most papers caption
+        # figures underneath and tables on top, and neither is universal.
+        above = [r for r in candidates if r.rect[3] <= caption.rect[1] + 1]
+        pick = max(above, key=lambda r: r.rect[3]) if above else min(
+            candidates, key=lambda r: r.rect[1]
+        )
+        return pick.rect, "region"
+
+    page = doc[caption.page]
+    images = [
+        normalise((i["bbox"][0], i["bbox"][1], i["bbox"][2], i["bbox"][3]))
+        for i in page.get_image_info()
+    ]
+    near = [r for r in images if _same_column(r, caption.rect) and area(r) >= MIN_FIGURE_AREA]
+    if near:
+        above = [r for r in near if r[3] <= caption.rect[1] + 1]
+        return (max(above, key=lambda r: r[3]) if above else near[0]), "image"
+
+    clusters = [
+        normalise((c.x0, c.y0, c.x1, c.y1))
+        for c in page.cluster_drawings()
+    ]
+    near = [r for r in clusters if _same_column(r, caption.rect) and area(r) >= MIN_FIGURE_AREA]
+    if near:
+        above = [r for r in near if r[3] <= caption.rect[1] + 1]
+        return (max(above, key=lambda r: r[3]) if above else near[0]), "drawings"
+
+    return None
+
+
+def _dedupe(figures: list[Figure]) -> list[Figure]:
+    """Keep the most trusted entry when two captions claim the same number."""
+    rank = {"region": 0, "image": 1, "drawings": 2}
+    best: dict[str, Figure] = {}
+    for figure in figures:
+        current = best.get(figure.id)
+        if current is None or rank[figure.confidence] < rank[current.confidence]:
+            best[figure.id] = figure
+    return [best[k] for k in sorted(best)]
