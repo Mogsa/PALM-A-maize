@@ -265,7 +265,8 @@ def _find_artwork(doc, regions, caption: Region, kind: str):
     near = [r for r in images if _same_column(r, caption.rect) and area(r) >= MIN_FIGURE_AREA]
     if near:
         above = [r for r in near if r[3] <= caption.rect[1] + 1]
-        return (max(above, key=lambda r: r[3]) if above else near[0]), "image"
+        pick = max(above, key=lambda r: r[3]) if above else min(near, key=lambda r: r[1])
+        return pick, "image"
 
     clusters = [
         normalise((c.x0, c.y0, c.x1, c.y1))
@@ -274,7 +275,8 @@ def _find_artwork(doc, regions, caption: Region, kind: str):
     near = [r for r in clusters if _same_column(r, caption.rect) and area(r) >= MIN_FIGURE_AREA]
     if near:
         above = [r for r in near if r[3] <= caption.rect[1] + 1]
-        return (max(above, key=lambda r: r[3]) if above else near[0]), "drawings"
+        pick = max(above, key=lambda r: r[3]) if above else min(near, key=lambda r: r[1])
+        return pick, "drawings"
 
     return None
 
