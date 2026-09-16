@@ -9,6 +9,7 @@ geometry. Coordinates come out in PyMuPDF page space because PyMuPDF is the
 only thing that produces them.
 """
 
+import bisect
 from dataclasses import dataclass
 
 import pymupdf
@@ -76,6 +77,62 @@ def _similarity(a: str, b: str) -> float:
     return fuzz.ratio(a, b) / 100.0
 
 
+def _flank_pad(needle: str) -> int:
+    """How far past `partial_ratio_alignment`'s window to look for the real
+    edge. Ruling R7: about half the needle's length each side."""
+    return max(1, len(needle) // 2)
+
+
+def _best_flank_start(needle: str, haystack: str, approx: int, pad: int) -> int:
+    """The position near `approx` where `needle` and `haystack` agree for the
+    longest *exact*, character-for-character run starting there.
+
+    `partial_ratio_alignment` returns a window exactly as long as `needle`,
+    which is the wrong length whenever the matched occurrence gained or lost
+    a word relative to the needle (addendum 5.2's fuzzy step is meant for
+    exactly that case). Re-aligning with another fuzzy comparison over a
+    padded window re-introduces the same problem one level down: with
+    edit-distance scoring, a short coincidental run just before the real
+    match (for instance the "Le" that both "Learning" and "Let us..." start
+    with) can score as well as the real, much longer run and win on a tie.
+    Exact matching does not have that failure mode -- a coincidental run is
+    almost always one or two characters, while the real, unedited flank of
+    the needle matches for many characters before the edit point, so the
+    longest exact run reliably identifies the true edge even when a repeated
+    short substring sits right next to it.
+    """
+    best_len, best_at = -1, approx
+    n = len(needle)
+    lo, hi = max(0, approx - pad), min(len(haystack), approx + pad)
+    for cand in range(lo, hi + 1):
+        window = haystack[cand:cand + n]
+        i = 0
+        limit = min(n, len(window))
+        while i < limit and needle[i] == window[i]:
+            i += 1
+        if i > best_len:
+            best_len, best_at = i, cand
+    return best_at
+
+
+def _best_flank_end(needle: str, haystack: str, approx: int, pad: int) -> int:
+    """The mirror of `_best_flank_start`: the position near `approx` where
+    `needle` and `haystack` agree for the longest exact run ending there."""
+    best_len, best_at = -1, approx
+    n = len(needle)
+    lo, hi = max(0, approx - pad), min(len(haystack), approx + pad)
+    for cand in range(lo, hi + 1):
+        start = max(0, cand - n)
+        window = haystack[start:cand]
+        i = 0
+        limit = min(n, len(window))
+        while i < limit and needle[n - 1 - i] == window[len(window) - 1 - i]:
+            i += 1
+        if i > best_len:
+            best_len, best_at = i, cand
+    return best_at
+
+
 def _candidates_on_page(page: PageIndex, quote: str) -> list[tuple[int, int, float]]:
     """(stripped start, stripped end, quote score) for every plausible hit."""
     hits: list[tuple[int, int, float]] = []
@@ -88,7 +145,12 @@ def _candidates_on_page(page: PageIndex, quote: str) -> list[tuple[int, int, flo
     alignment = fuzz.partial_ratio_alignment(quote, page.stripped, score_cutoff=MIN_QUOTE_SCORE * 100)
     if alignment is None:
         return hits
-    return [(alignment.dest_start, alignment.dest_end, alignment.score / 100.0)]
+    pad = _flank_pad(quote)
+    start = _best_flank_start(quote, page.stripped, alignment.dest_start, pad)
+    end = _best_flank_end(quote, page.stripped, alignment.dest_end, pad)
+    if end <= start:
+        start, end = alignment.dest_start, alignment.dest_end
+    return [(start, end, alignment.score / 100.0)]
 
 
 def find_quote(index: list[PageIndex], quote: QuoteSelector, position: int, page_hint: int) -> Match | None:
@@ -125,7 +187,15 @@ def rects_for_text(page: pymupdf.Page, text: str) -> Rect | None:
     """Bounding box of the lines that carry `text`, via PyMuPDF's own search.
     A long passage may straddle a hyphenated line break that search_for cannot
     cross; then the first and last few words are searched separately and the
-    box spans between them."""
+    box spans between them.
+
+    This unions *every* place `text` occurs on the page, so it is only correct
+    when `text` occurs once. When a matched occurrence might repeat elsewhere
+    on the page, use `rect_for_offsets` instead, which reads geometry off the
+    specific characters that were matched and never touches another
+    occurrence's rectangle (ruling R6). This function stays as the fallback
+    for when that fails, and for callers, such as a fresh selection with no
+    stored offsets yet, that have only text to search for."""
     hits = page.search_for(text)
     if hits:
         rect = None
@@ -142,19 +212,87 @@ def rects_for_text(page: pymupdf.Page, text: str) -> Rect | None:
     return union(tuple(head[0]), tuple(tail[-1]))
 
 
+def _char_boxes(page: pymupdf.Page) -> list[Rect]:
+    """One bounding box per non-whitespace character, in the same reading
+    order PyMuPDF's plain `get_text()` produces. Measured (scratch script,
+    all pages of all three fixture papers): the whitespace-stripped character
+    sequence from `rawdict` is identical, page for page, to `PageIndex.stripped`
+    built from `get_text()`, so index `i` here is the box for `stripped[i]`."""
+    boxes: list[Rect] = []
+    raw = page.get_text("rawdict")
+    for block in raw["blocks"]:
+        if block.get("type") != 0:  # text blocks only; images carry no chars
+            continue
+        for line in block["lines"]:
+            for span in line["spans"]:
+                for ch in span["chars"]:
+                    if not ch["c"].isspace():
+                        boxes.append(normalise(tuple(ch["bbox"])))
+    return boxes
+
+
+def rect_for_offsets(page: pymupdf.Page, page_index: PageIndex, start: int, end: int) -> Rect | None:
+    """The bounding box of exactly the characters at `page_index.text[start:end]`
+    (unstripped offsets, the same convention as `Match.start`/`Match.end`),
+    built from PyMuPDF's per-character boxes rather than a text search.
+
+    Ruling R6: `rects_for_text` unions every occurrence `search_for` finds, so
+    a repeated phrase (measured: "shortcut connections" occurs 5 times on
+    ResNet page 1) comes back as a box spanning every occurrence, not the one
+    `find_quote` chose. Reading the boxes off the matched characters
+    themselves cannot pick up another occurrence, because it never searches
+    for text at all.
+    """
+    if end <= start:
+        return None
+    offsets = page_index.offsets
+    s = bisect.bisect_left(offsets, start)
+    e = bisect.bisect_left(offsets, end - 1) + 1
+    if s >= e:
+        return None
+    boxes = _char_boxes(page)
+    e = min(e, len(boxes))
+    if s >= e:
+        return None
+    rect = boxes[s]
+    for box in boxes[s + 1:e]:
+        rect = union(rect, box)
+    return rect
+
+
 def _same_place(a: Rect, b: Rect) -> bool:
     return all(abs(x - y) <= SAME_PLACE_POINTS for x, y in zip(normalise(a), normalise(b)))
+
+
+def _recover_rect(pdf: pymupdf.Document, index: list[PageIndex], match: Match) -> Rect | None:
+    """The matched occurrence's own rectangle: character boxes first (exact to
+    the occurrence, ruling R6), the old text-search as a fallback for the rare
+    case a character box cannot be read (for instance a character PyMuPDF
+    reports in the text stream but does not place, such as certain ligature
+    or hyphenation artifacts)."""
+    page_index = index[match.page]
+    rect = rect_for_offsets(pdf[match.page], page_index, match.start, match.end)
+    if rect is not None:
+        return rect
+    found_text = page_index.text[match.start:match.end]
+    return rects_for_text(pdf[match.page], found_text)
 
 
 def resolve_highlight(anchor: HighlightAnchor, index: list[PageIndex], pdf: pymupdf.Document) -> HighlightAnchor:
     match = find_quote(index, anchor.quote, anchor.position, anchor.page)
     if match is None:
         return anchor.model_copy(update={"state": "orphaned"})
-    found_text = index[match.page].text[match.start:match.end]
-    rect = rects_for_text(pdf[match.page], found_text)
-    if rect is None:
-        return anchor.model_copy(update={"state": "orphaned"})
+    rect = _recover_rect(pdf, index, match)
     position = global_position(index, match.page, match.start)
+    if rect is None:
+        # The quote itself was found; only its geometry could not be rebuilt
+        # (finding I-3). That is not the same as the quote being gone: on the
+        # stored page the stored rect still means something, so keep it and
+        # stay anchored. Only orphan when the match also moved to a different
+        # page, where the stored rect no longer corresponds to anything.
+        if match.page == anchor.page:
+            return anchor.model_copy(update={"state": "anchored", "position": position})
+        return anchor.model_copy(update={"state": "orphaned"})
     if match.page == anchor.page and _same_place(rect, anchor.rect):
         return anchor.model_copy(update={"state": "anchored", "position": position})
     return anchor.model_copy(update={"page": match.page, "rect": rect, "position": position, "state": "relocated"})
@@ -194,7 +332,7 @@ def resolve_chunk(anchor: ChunkAnchor, index: list[PageIndex], pdf: pymupdf.Docu
     def located(match: Match | None, fallback: PageRect) -> tuple[int, Rect]:
         if match is None:
             return fallback.page, fallback.rect
-        rect = rects_for_text(pdf[match.page], index[match.page].text[match.start:match.end])
+        rect = _recover_rect(pdf, index, match)
         return (match.page, rect) if rect else (fallback.page, fallback.rect)
 
     start_at = located(start, anchor.rects[0])

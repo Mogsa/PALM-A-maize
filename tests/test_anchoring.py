@@ -6,6 +6,7 @@ from paperboard.anchoring import (
     build_index,
     find_quote,
     global_position,
+    rect_for_offsets,
     rects_for_text,
     resolve_chunk,
     resolve_highlight,
@@ -120,6 +121,48 @@ def test_resolve_highlight_states(resnet):
 
     gone = resolve_highlight(HighlightAnchor(page=2, rect=true_rect, quote=QuoteSelector(exact="never in the paper, not once, not ever"), position=0), index, pdf)
     assert gone.state == "orphaned" and gone.rect == true_rect
+
+
+def test_fuzzy_match_edges_cover_only_the_matched_text(resnet):
+    doc, index, _ = resnet
+    text = doc.page_text[2].text
+
+    inserted, at = _selector(text, "Let us consider H(x) as an underlying mapping")
+    inserted.exact = "Let us consider carefully H(x) as an underlying mapping"
+    match = find_quote(index, inserted, global_position(index, 2, at), page_hint=2)
+    assert match is not None
+    found, _ = strip_whitespace(index[match.page].text[match.start:match.end])
+    assert found.startswith("Letus") and found.endswith("mapping")
+
+    deleted, at2 = _selector(text, "Let us consider H(x) as an underlying mapping")
+    deleted.exact = "Let us consider H(x) as an mapping"
+    match2 = find_quote(index, deleted, global_position(index, 2, at2), page_hint=2)
+    assert match2 is not None
+    found2, _ = strip_whitespace(index[match2.page].text[match2.start:match2.end])
+    assert found2.startswith("Letus") and found2.endswith("mapping")
+
+
+def test_repeated_phrase_on_an_unchanged_page_stays_anchored(resnet):
+    doc, index, pdf = resnet
+    text = doc.page_text[1].text
+    # confirmed by measurement: "shortcut connections" occurs 5 times,
+    # stripped, on ResNet page 1.
+    assert index[1].stripped.count("shortcutconnections") == 5
+
+    quote, at = _selector(text, "shortcut connections")
+    position = global_position(index, 1, at)
+    match = find_quote(index, quote, position, page_hint=1)
+    assert match is not None and match.page == 1
+
+    true_rect = rect_for_offsets(pdf[1], index[1], match.start, match.end)
+    assert true_rect is not None
+
+    anchor = HighlightAnchor(page=1, rect=true_rect, quote=quote, position=position)
+    resolved = resolve_highlight(anchor, index, pdf)
+    assert resolved.state == "anchored"
+    assert resolved.rect == true_rect
+    x0, _y0, x1, _y1 = resolved.rect
+    assert (x1 - x0) < 300
 
 
 def test_resolve_chunk_keeps_rects_when_both_ends_hold(resnet):
