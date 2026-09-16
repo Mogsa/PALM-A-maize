@@ -273,6 +273,9 @@ definitions.
 }
 ```
 
+`version` is an integer, default 0, incremented by the server on every accepted write
+(section 7).
+
 ### 4.0 Chunks and highlights
 
 SPEC.md section 4 puts highlights on the paper and chunks on the board. In the file:
@@ -425,7 +428,9 @@ whose PDF anchoring is the mature reference implementation.
   silently the moment extraction changes, which is exactly what SPEC.md section 7 says
   must not happen.
 - `rect` is the geometry for painting the highlight, and the fallback when the quote
-  cannot be found.
+  cannot be found. A moved rect is recovered from the matched words themselves (their
+  character boxes, with `page.search_for` as the fallback), so a relocated highlight's
+  rect is the text's real bounding box, never a shifted copy of the stored one.
 - `state` is one of `anchored`, `relocated`, `orphaned`. A relocated or orphaned piece is
   flagged in the UI, per SPEC.md section 5.1.
 
@@ -456,13 +461,16 @@ in 5.2; the region is rebuilt as the span between them, one rectangle per page. 
 one of the two anchors, the chunk is `relocated` with the found end and the stored
 rectangle for the other; if neither, `orphaned`. A chunk made by split takes its `rects`
 from the section's `extent` and its quotes from the heading and the section's last line.
-A figure chunk has a single rectangle and `start` holding the caption.
+A figure chunk has a single rectangle and `start` holding the caption. A chunk with no
+quotable text at either end, such as a figure with no text layer, anchors on its geometry
+alone.
 
 ### 5.2 The re-anchoring algorithm
 
 Runs in Python, server side, on load and after re-extraction.
 
-1. Sort pages by distance from the page implied by `position`. Search nearest first.
+1. Score every page; the page implied by `position` breaks ties. Measured: scoring all
+   pages of a paper takes a few milliseconds.
 2. Per page, **strip all whitespace** from both the page text and the quote, match, then
    map offsets back to the unstripped text. Non-negotiable for PDFs: different extraction
    paths emit different inter-word spacing, and this step alone is most of the robustness.
@@ -472,7 +480,9 @@ Runs in Python, server side, on load and after re-extraction.
    0..1. Position is a tie-breaker only, by design.
 5. Best score `>= 0.5` and geometry unchanged: `anchored`. Best score `>= 0.5` but the
    rectangle moved: `relocated`, rect updated from the matched text's own rects. No
-   candidate: `orphaned`, keep the stored rect, flag it.
+   candidate: `orphaned`, keep the stored rect, flag it. Geometry is unchanged when the
+   matched text's bounding box has its midpoint inside a stored rectangle on the page it
+   was found on (for a chunk, each end), and then the stored geometry is kept as drawn.
 
 **[CHOICE]** Anchoring runs in Python, not the browser. The backend owns re-extraction and
 already has the page text, the logic lives in one place, and — decisive for build step 6 —
@@ -497,6 +507,8 @@ excerpts the whole paragraph". The rule:
 > **A modifier key held during the drag skips this entirely** (`snap: false`) and keeps
 > exactly what was selected, whatever the coverage. Use Alt: no browser claims it during a
 > text drag on macOS, Windows or Linux.
+
+Snapping applies only to single-page selections in v1.
 
 The modifier is the escape hatch a threshold alone cannot provide. Without it a reader who
 wants a precise half-sentence inside a paragraph is overruled by the snap every time with
@@ -531,8 +543,9 @@ FastAPI, bound to localhost only. All geometry per section 2.
 | `PUT` | `/api/papers/{id}/board` | `board.json` + `If-Match: <version>` | `{version}` |
 | `GET` | `/api/papers/{id}/notes/{node_id}` | — | `{markdown}` |
 | `PUT` | `/api/papers/{id}/notes/{node_id}` | `{markdown}` | `204` |
-| `POST` | `/api/papers/{id}/text` | `{rects: [{page, rect}], snap}` | `{text, rects, start, end, region_label}` |
-| `GET` | `/api/papers/{id}/clip` | `?page=&rect=&dpi=` | `image/png` |
+| `POST` | `/api/papers/{id}/text` | `{rects: [{page, rect}], snap}` | `Selection`: `{text, rects, region_label, highlight, chunk}` |
+| `PUT` | `/api/papers/{id}/clips/{node_id}` | `{page, rect, dpi}` | `{clip, clip_size}`; renders and stores the PNG |
+| `GET` | `/api/papers/{id}/clips/{node_id}.png` | — | `image/png` |
 | `GET` | `/api/papers/{id}/questions` | — | `[{node_id, text}]` |
 | `POST` | `/api/papers/{id}/export` | `{tags: [tag_id]}` | `{path}` |
 | `GET` | `/api/tags` / `PUT` `/api/tags` | `tags.json` | `tags.json` |
@@ -544,10 +557,14 @@ failure with the extractor's message passed through.
 `snap` defaults to true; the browser sends false while a modifier key is held, which is
 SPEC.md's "exact selection when you want it". `POST /text` is where the forgiving-highlight rule of section 5.3 is applied — the browser
 sends the raw selection, one rectangle per page it touches, and receives the snapped
-rectangles back with the `start` and `end` quote selectors already built, so the rule has
-exactly one implementation and it is the testable one. A highlight and a cut send the same
-request; the browser decides afterwards whether the result becomes a `highlights` entry
-or a chunk node.
+rectangles back with `highlight`, a ready-to-store highlight anchor (null for a multi-page
+selection), and `chunk`, a ready-to-store chunk anchor, so the rule has exactly one
+implementation and it is the testable one. A highlight and a cut send the same request;
+the browser decides afterwards, per the gesture, which anchor to keep.
+
+Clips are rendered and stored by `PUT /clips/{node_id}` and served by
+`GET /clips/{node_id}.png`, rather than rendered on request, because the client cannot
+write files and the board references clips by path.
 
 The question list is a server-side filter, defined precisely as: every highlight or node
 carrying the `question` tag that has no edge connecting it to a node of type `note`.
@@ -580,7 +597,8 @@ each task also needs something runnable unattended.
 are not committed: all three are under arXiv's non-exclusive licence, which grants no
 redistribution right, and an earlier draft wrongly assumed CC-BY. `SOURCES.md` beside them
 records the licences. One is maths-heavy. A missing fixture fails the suite with the fetch
-command in the message; the fetch script is the only network use in the project.
+command in the message; the fetch script is the only network use in the project. The
+`extracted` session fixture in `tests/conftest.py` is how every test gets a parsed paper.
 
 **Python, pytest.**
 - `extract/`: golden `source.json` per fixture. Assert section count, section titles, and
