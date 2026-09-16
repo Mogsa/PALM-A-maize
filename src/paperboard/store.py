@@ -7,7 +7,8 @@ folder you can copy; this module is what keeps that true.
 import os
 import re
 import tempfile
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -59,6 +60,9 @@ def atomic_write(path: Path, data: bytes) -> None:
 @dataclass
 class Store:
     root: Path
+    # FastAPI runs sync routes in a thread pool: without this, two writes of the
+    # same version can both read it, both pass the check, and both succeed.
+    _board_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
 
     @property
     def papers_dir(self) -> Path:
@@ -123,12 +127,13 @@ class Store:
     def write_board(self, paper_id: str, board: Board, expected_version: int | None) -> int:
         """Refuse unless the caller proves it saw the current version. Two open
         tabs must never silently overwrite each other (addendum section 7)."""
-        current = self.read_board(paper_id).version
-        if expected_version is None or expected_version != current:
-            raise VersionConflict(current)
-        board = board.model_copy(update={"version": current + 1, "paper_id": paper_id})
-        atomic_write(self.paper_dir(paper_id) / "board.json", dump_board(board).encode())
-        return board.version
+        with self._board_lock:
+            current = self.read_board(paper_id).version
+            if expected_version is None or expected_version != current:
+                raise VersionConflict(current)
+            board = board.model_copy(update={"version": current + 1, "paper_id": paper_id})
+            atomic_write(self.paper_dir(paper_id) / "board.json", dump_board(board).encode())
+            return board.version
 
     # -- notes --------------------------------------------------------------
 

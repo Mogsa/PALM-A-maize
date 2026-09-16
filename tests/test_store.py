@@ -1,10 +1,14 @@
+import contextlib
 import os
+import threading
 
 import pytest
 
 from paperboard.board_model import Board, NoteNode, PRESET_TAGS
 from paperboard.store import PaperNotFound, Store, VersionConflict, atomic_write
 from conftest import FIXTURES
+
+BARRIER_SECONDS = 1.0  # how long one board write waits for the other to have read
 
 
 def _note(id="n-n"):
@@ -54,6 +58,40 @@ def test_board_is_empty_until_written_and_versions_advance(store_root):
         store.write_board(paper_id, stale, expected_version=0)
     assert conflict.value.current == 1
     assert store.read_board(paper_id).goal == ""
+
+
+def test_two_writes_of_the_same_version_at_once_let_exactly_one_through(store_root):
+    """FastAPI runs sync routes in a thread pool, so two tabs' PUTs can arrive
+    together. Each write's read of the current version waits (up to a timeout)
+    for the other write to read too: without a lock both read version 0 and
+    both succeed; with one, the second cannot read until the first has
+    written, so the wait times out and the second sees version 1."""
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    both_read = threading.Barrier(2, timeout=BARRIER_SECONDS)
+    real_read = store.read_board
+
+    def read_then_wait(pid):
+        board = real_read(pid)
+        with contextlib.suppress(threading.BrokenBarrierError):
+            both_read.wait()
+        return board
+
+    store.read_board = read_then_wait
+    outcomes = []
+
+    def write():
+        try:
+            outcomes.append(store.write_board(paper_id, Board(paper_id=paper_id), expected_version=0))
+        except VersionConflict as conflict:
+            outcomes.append(f"conflict at {conflict.current}")
+
+    threads = [threading.Thread(target=write) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(outcomes, key=str) == [1, "conflict at 1"]
 
 
 def test_write_board_with_no_expected_version_is_refused(store_root):

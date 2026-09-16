@@ -14,6 +14,9 @@ from paperboard.board_model import (
     QuoteSelector,
 )
 from paperboard.export import export_markdown, highlights_in
+from paperboard.geometry import contains_point, midpoint
+from paperboard.snap import text_under
+from paperboard.source_model import PageRect
 
 
 @pytest.fixture(scope="module")
@@ -143,3 +146,34 @@ def test_highlight_note_field_and_edge_agreeing_prints_once(resnet):
     assert md.index("a passage inside 3.1 again") < md.index("Agreeing note body.")
     assert md.count("Agreeing note body.") == 1
     assert "## Notes" not in md
+
+
+def test_a_one_line_cut_sorts_by_the_region_it_sits_in(resnet):
+    """A cut of one line matches no region by "region midpoint inside the
+    node's rect", so it used to sort after everything on its page (final
+    review M7). ResNet page 0: the Introduction's first paragraph is in the
+    left column and reads before Figure 1 in the right column, although the
+    figure sits higher on the page."""
+    doc, pdf = resnet
+    intro = next(s for s in doc.sections if s.number == "1")
+    figure = next(f for f in doc.figures if f.label == "Figure 1")
+    paragraph = next(r for r in doc.regions if r.page == 0 and r.label == "text"
+                     and contains_point(intro.extent[0].rect, *midpoint(r.rect)))
+    first_line = text_under(pdf[0], paragraph.rect).splitlines()[0]
+    line = pdf[0].search_for(first_line)[0]
+    cut = PageRect(page=0, rect=(paragraph.rect[0], line.y0, paragraph.rect[2], line.y1))
+    assert cut.rect[1] > figure.rect.rect[3]  # the cut sits lower on the page than the figure
+    board = Board(
+        paper_id=doc.paper_id,
+        nodes=[
+            FigureNode(id="n-fig", type="figure", position={"x": 0, "y": 0},
+                       data={"tags": [], "collapsed": False,
+                             "region": ChunkAnchor(rects=[figure.rect], start=QuoteSelector(exact=figure.caption), end=QuoteSelector(exact=figure.caption)).model_dump(),
+                             "clip": "clips/n-fig.png", "clip_size": {"width": 436, "height": 300}, "caption": figure.caption}),
+            ChunkNode(id="n-cut", type="chunk", position={"x": 0, "y": 0},
+                      data={"tags": [], "collapsed": False, "text": first_line,
+                            "region": ChunkAnchor(rects=[cut], start=QuoteSelector(exact=first_line), end=QuoteSelector(exact=first_line)).model_dump()}),
+        ],
+    )
+    md = export_markdown(doc, board, {}, pdf, tags=[])
+    assert md.index(f"## {first_line}") < md.index("## Figure 1")

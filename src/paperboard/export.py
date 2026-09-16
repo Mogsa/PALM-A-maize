@@ -8,6 +8,7 @@ from paperboard.geometry import contains_point, midpoint, normalise
 from paperboard.source_model import SourceDocument
 
 TITLE_CHARS = 80
+TOP_INSET_POINTS = 1.0   # how far below a rect's top edge its "top-centre" point sits
 
 
 def highlights_in(board: Board, node: ChunkNode | FigureNode) -> list[Highlight]:
@@ -33,12 +34,27 @@ def _title(node: ChunkNode | FigureNode) -> str:
 
 
 def _region_index(doc: SourceDocument, page: int, rect) -> int | None:
-    """Index in `doc.regions` of the first layout region on `page` whose
-    midpoint lies inside `rect`. `doc.regions` is stored in extraction order,
-    which is reading order (the same assumption anchoring's `_regions_between`
-    makes), so this index doubles as a reading-order position."""
-    for i, region in enumerate(doc.regions):
-        if region.page == page and contains_point(rect, *midpoint(region.rect)):
+    """Index in `doc.regions` of the layout region a node's first rect starts
+    in. `doc.regions` is stored in extraction order, which is reading order
+    (the same assumption anchoring's `_regions_between` makes), so this index
+    doubles as a reading-order position.
+
+    Ruling R14 (M7): the region that holds the rect's top-centre point, the
+    same point-in-region direction anchoring uses, so a one-line cut finds the
+    paragraph it was cut from. Measured on the fixtures, that point falls in
+    no region for every figure rect (padded a few points beyond its picture
+    region) and for 10 of 67 section extents (a short heading narrower than
+    the column its extent spans, e.g. ResNet "1. Introduction"). Those still
+    match by ruling R1's rule, the first region whose midpoint lies inside
+    the rect."""
+    x0, y0, x1, _y1 = normalise(rect)
+    top_centre = ((x0 + x1) / 2, y0 + TOP_INSET_POINTS)
+    on_page = [(i, region) for i, region in enumerate(doc.regions) if region.page == page]
+    for i, region in on_page:
+        if contains_point(region.rect, *top_centre):
+            return i
+    for i, region in on_page:
+        if contains_point(rect, *midpoint(region.rect)):
             return i
     return None
 
@@ -50,11 +66,9 @@ def _order_key(doc: SourceDocument, node: ChunkNode | FigureNode):
     left column while Figure 1 sits at y0 220 in the right column: sorting by
     `(page, y0, x0)` would put the figure first, but SPEC.md section 6 wants
     "the paper's own order" and the introduction reads before the figure.
-    Instead, order by where the node's first rect falls among the page's
-    layout regions, which are stored in reading order. A rect that matches no
-    region midpoint (its own midpoint may fall in a gap, e.g. a figure clip
-    that isn't itself a layout region) sorts after the matched nodes on its
-    page, by `(y0, x0)`.
+    Instead, order by the layout region the node's first rect starts in
+    (`_region_index`). A rect that matches no region sorts after the matched
+    nodes on its page, by `(y0, x0)`.
     """
     first = node.data.region.rects[0]
     idx = _region_index(doc, first.page, first.rect)
