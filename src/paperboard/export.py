@@ -65,11 +65,23 @@ def _order_key(doc: SourceDocument, node: ChunkNode | FigureNode):
 def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pdf: pymupdf.Document, tags: list[str]) -> str:
     nodes = {n.id: n for n in board.nodes}
     notes_for: dict[str, list[str]] = {}
+
+    def link_note(owner: str, note_id: str) -> None:
+        linked = notes_for.setdefault(owner, [])
+        if note_id not in linked:
+            linked.append(note_id)
+
     for edge in board.edges:
         for a, handle, b in ((edge.source, edge.sourceHandle, edge.target), (edge.target, edge.targetHandle, edge.source)):
             other = nodes.get(b)
             if isinstance(other, NoteNode):
-                notes_for.setdefault(handle or a, []).append(other.id)
+                link_note(handle or a, other.id)
+    for h in board.highlights:
+        # `Highlight.note` is a cache of the edge's note id (addendum 4.0); a
+        # highlight can carry it with no matching edge, so it must be
+        # consulted directly too, not only reached by walking `board.edges`.
+        if h.note is not None:
+            link_note(h.id, h.note)
     used_notes: set[str] = set()
 
     def note_lines(owner: str) -> list[str]:

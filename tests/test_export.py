@@ -99,3 +99,47 @@ def test_tag_filter_keeps_only_tagged_things(resnet):
     assert "1. Introduction" in md
     assert "3.1. Residual Learning" not in md
     assert "Figure 1" not in md
+
+
+def test_highlight_note_field_links_a_note_without_an_edge(resnet):
+    doc, pdf = resnet
+    anchor = HighlightAnchor(page=9, rect=(60.0, 300.0, 280.0, 320.0),
+                              quote=QuoteSelector(exact="a lone highlight"))
+    board = Board(
+        paper_id=doc.paper_id,
+        nodes=[NoteNode(id="n-1", type="note", position={"x": 0, "y": 0},
+                         data={"tags": [], "collapsed": False, "note": "notes/n-1.md"})],
+        highlights=[Highlight(id="h-x", tags=[], note="n-1", anchor=anchor)],
+    )
+    notes = {"n-1": "This is the note body.\n"}
+    md = export_markdown(doc, board, notes, pdf, tags=[])
+    assert md.index("a lone highlight") < md.index("This is the note body.")
+    assert md.count("This is the note body.") == 1
+    assert "## Notes" not in md
+
+
+def test_highlight_note_field_and_edge_agreeing_prints_once(resnet):
+    doc, pdf = resnet
+    method = next(s for s in doc.sections if s.number == "3.1")
+    region = ChunkAnchor(rects=method.extent, start=QuoteSelector(exact=method.title),
+                          end=QuoteSelector(exact=method.text[-40:]))
+    inside = HighlightAnchor(page=method.extent[0].page,
+                              rect=(method.extent[0].rect[0] + 2, method.extent[0].rect[1] + 20,
+                                    method.extent[0].rect[2] - 2, method.extent[0].rect[1] + 40),
+                              quote=QuoteSelector(exact="a passage inside 3.1 again"))
+    board = Board(
+        paper_id=doc.paper_id,
+        nodes=[
+            ChunkNode(id="n-method", type="chunk", position={"x": 0, "y": 0},
+                      data={"tags": [], "collapsed": False, "region": region.model_dump(), "text": method.text}),
+            NoteNode(id="n-1", type="note", position={"x": 0, "y": 0},
+                     data={"tags": [], "collapsed": False, "note": "notes/n-1.md"}),
+        ],
+        edges=[Edge(id="e-1", source="n-method", sourceHandle="h-x", target="n-1")],
+        highlights=[Highlight(id="h-x", tags=[], note="n-1", anchor=inside)],
+    )
+    notes = {"n-1": "Agreeing note body.\n"}
+    md = export_markdown(doc, board, notes, pdf, tags=[])
+    assert md.index("a passage inside 3.1 again") < md.index("Agreeing note body.")
+    assert md.count("Agreeing note body.") == 1
+    assert "## Notes" not in md
