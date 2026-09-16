@@ -8,7 +8,7 @@ import pymupdf
 from pymupdf4llm.helpers.document_layout import OCRMode, parse_document
 
 from paperboard.geometry import Rect, area, normalise, pad
-from paperboard.source_model import Figure, PageInfo, PageRect, Section
+from paperboard.source_model import Figure, PageInfo, PageRect, PageText, Section
 
 EXTRACTOR_NAME = "pymupdf-layout/1.28.2"
 
@@ -290,3 +290,13 @@ def _dedupe(figures: list[Figure]) -> list[Figure]:
         if current is None or rank[figure.confidence] < rank[current.confidence]:
             best[figure.id] = figure
     return [best[k] for k in sorted(best)]
+
+
+def read_page_text(pdf_path: Path) -> list[PageText]:
+    """Full text per page, whitespace preserved.
+
+    Preserved because the anchoring matcher strips whitespace itself and needs the
+    original to map offsets back. See SPEC-ADDENDUM.md section 5.2.
+    """
+    with pymupdf.open(pdf_path) as doc:
+        return [PageText(page=i, text=doc[i].get_text()) for i in range(doc.page_count)]
