@@ -41,8 +41,10 @@ test("highlights and cuts survive a reload and the views mirror each other", asy
   await page.getByRole("button", { name: "Board" }).click();
   await expect(page.locator(".node.chunk")).toHaveCount(3);
 
-  const first = page.locator(".node.chunk").first();
-  await first.locator("[data-testid=open-source]").click();
+  // the cut from page index 2 (spans 50-70); its title is the first line of its text, whatever the node order
+  const pageThreeChunk = page.locator(".node.chunk", { hasText: "explicitly let these layers approximate a residual" });
+  await expect(pageThreeChunk).toHaveCount(1);
+  await pageThreeChunk.locator("[data-testid=open-source]").click();
   await expect(page.locator(".react-pdf__Page")).toHaveCount(12);
   const target = page.locator(`.react-pdf__Page[data-page-number="3"]`);
   await expect(target).toBeInViewport();
