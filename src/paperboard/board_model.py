@@ -179,6 +179,9 @@ class Board(BaseModel):
     nodes: list[Node] = []
     edges: list[Edge] = []
     highlights: list[Highlight] = []
+    # Fingerprint of the source text the anchors were last resolved against
+    # (anchoring.anchor_basis). Loading re-finds anchors only when it differs.
+    anchor_basis: str | None = None
 
     @model_validator(mode="after")
     def _consistent(self) -> "Board":

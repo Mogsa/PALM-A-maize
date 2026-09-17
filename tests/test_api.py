@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from conftest import FIXTURES
 from fastapi.testclient import TestClient
@@ -176,3 +178,64 @@ def test_reextract_reports_states_and_touches_only_source(client, resnet_id, sto
     assert response.status_code == 200
     assert response.json()["states"] == {"h-1": "anchored"}
     assert (store_root / "papers" / resnet_id / "board.json").read_bytes() == board_before
+
+
+def _board_with_misplaced_highlight(client, resnet_id):
+    """A board holding one highlight whose quote is on page 2 but whose stored rect
+    is deliberately somewhere else. Re-finding it would move it; returning it as
+    stored would not. That difference is what these tests observe."""
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    region = _first_text_region(source, 2)
+    selection = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()
+    anchor = {**selection["highlight"], "rect": [60.0, 700.0, 200.0, 710.0]}
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["highlights"] = [{"id": "h-1", "tags": [], "note": None, "anchor": anchor}]
+    return board, anchor
+
+
+def _put(client, resnet_id, board):
+    response = client.put(f"/api/papers/{resnet_id}/board", json=board, headers={"If-Match": str(board["version"])})
+    assert response.status_code == 200, response.text
+
+
+def test_loading_a_board_re_finds_nothing_when_the_source_is_unchanged(client, resnet_id):
+    board, anchor = _board_with_misplaced_highlight(client, resnet_id)
+    basis = client.get(f"/api/papers/{resnet_id}/board").json()["anchor_basis"]
+    assert basis
+    board["anchor_basis"] = basis
+    _put(client, resnet_id, board)
+    got = client.get(f"/api/papers/{resnet_id}/board").json()
+    assert got["highlights"][0]["anchor"]["rect"] == anchor["rect"]
+    assert got["highlights"][0]["anchor"]["state"] == "anchored"
+    assert got["anchor_basis"] == basis
+
+
+def test_loading_a_board_with_no_basis_re_finds_once_and_stamps_it(client, resnet_id):
+    board, anchor = _board_with_misplaced_highlight(client, resnet_id)
+    board.pop("anchor_basis", None)
+    _put(client, resnet_id, board)
+    got = client.get(f"/api/papers/{resnet_id}/board").json()
+    assert got["highlights"][0]["anchor"]["state"] == "relocated"
+    assert got["highlights"][0]["anchor"]["rect"] != anchor["rect"]
+    assert got["anchor_basis"]
+
+
+def test_loading_a_board_re_finds_when_the_source_text_changed(client, resnet_id, store_root):
+    board, _anchor = _board_with_misplaced_highlight(client, resnet_id)
+    board["anchor_basis"] = client.get(f"/api/papers/{resnet_id}/board").json()["anchor_basis"]
+    _put(client, resnet_id, board)
+    path = store_root / "papers" / resnet_id / "source.json"
+    source = json.loads(path.read_text())
+    source["page_text"][0]["text"] += " "
+    path.write_text(json.dumps(source))
+    got = client.get(f"/api/papers/{resnet_id}/board").json()
+    assert got["highlights"][0]["anchor"]["state"] == "relocated"
+    assert got["anchor_basis"] != board["anchor_basis"]
+
+
+def test_reextracting_an_unchanged_paper_re_finds_nothing(client, resnet_id):
+    board, anchor = _board_with_misplaced_highlight(client, resnet_id)
+    board["anchor_basis"] = client.get(f"/api/papers/{resnet_id}/board").json()["anchor_basis"]
+    _put(client, resnet_id, board)
+    assert client.post(f"/api/papers/{resnet_id}/extract").json()["states"] == {"h-1": "anchored"}
+    assert client.get(f"/api/papers/{resnet_id}/board").json()["highlights"][0]["anchor"]["rect"] == anchor["rect"]

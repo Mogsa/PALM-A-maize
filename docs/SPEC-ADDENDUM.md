@@ -467,7 +467,7 @@ alone.
 
 ### 5.2 The re-anchoring algorithm
 
-Runs in Python, server side, on load and after re-extraction.
+Runs in Python, server side, on load and after re-extraction, but only when the source has changed. `board.json` stores `anchor_basis`, a sha256 of the page text and layout regions the anchors were last resolved against. When it equals the current source's fingerprint, loading returns stored anchors untouched: on an unchanged source, re-finding measurably shifts some anchors (ruling R16 in the API branch) and cannot correct any. Re-extracting an unchanged paper keeps the same fingerprint, so it re-finds nothing either.
 
 1. Score every page; the page implied by `position` breaks ties. Measured: scoring all
    pages of a paper takes a few milliseconds.

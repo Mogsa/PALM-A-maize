@@ -10,6 +10,8 @@ only thing that produces them.
 """
 
 import bisect
+import hashlib
+import json
 from dataclasses import dataclass, field
 
 import pymupdf
@@ -44,6 +46,21 @@ class Match:
     start: int
     end: int
     score: float
+
+
+def anchor_basis(doc: SourceDocument) -> str:
+    """Fingerprint of everything re-finding an anchor reads: the page text and the
+    layout regions. Not the extraction timestamp, so re-extracting an unchanged paper
+    keeps the same basis. When a board's stored basis matches, its anchors were made
+    against this exact text and re-finding them can only add error, never fix any."""
+    payload = json.dumps(
+        {
+            "page_text": [[p.page, p.text] for p in doc.page_text],
+            "regions": [[r.page, list(r.rect), r.label] for r in doc.regions],
+        },
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def strip_whitespace(text: str) -> tuple[str, list[int]]:

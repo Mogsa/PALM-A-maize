@@ -10,7 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
 
-from paperboard.anchoring import build_index, resolve_chunk, resolve_highlight
+from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
 from paperboard.board_model import Board, ChunkNode, FigureNode, NoteNode, TagFile
 from paperboard.clips import DEFAULT_DPI, render_clip
 from paperboard.export import export_markdown
@@ -54,8 +54,15 @@ def create_app(root: Path) -> FastAPI:
             pdf.close()
 
     def resolved_board(paper_id: str) -> Board:
+        """The board with anchors re-found, but only when the source text they were
+        made against has changed. On an unchanged source the stored anchors are the
+        truth: re-finding them measurably shifts some (SPEC-ADDENDUM section 5.2,
+        ruling R16), and the frontend autosaves whatever it loads."""
         board = store.read_board(paper_id)
         doc = store.read_source(paper_id)
+        basis = anchor_basis(doc)
+        if board.anchor_basis == basis:
+            return board
         index = build_index(doc)
         with opened(paper_id) as pdf:
             highlights = [h.model_copy(update={"anchor": resolve_highlight(h.anchor, index, pdf)}) for h in board.highlights]
@@ -65,7 +72,7 @@ def create_app(root: Path) -> FastAPI:
                     region = resolve_chunk(node.data.region, index, pdf, doc)
                     node = node.model_copy(update={"data": node.data.model_copy(update={"region": region})})
                 nodes.append(node)
-        return board.model_copy(update={"highlights": highlights, "nodes": nodes})
+        return board.model_copy(update={"highlights": highlights, "nodes": nodes, "anchor_basis": basis})
 
     # -- error shape --------------------------------------------------------
 

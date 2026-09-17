@@ -227,3 +227,20 @@ def test_resolve_chunk_rebuilds_rects_from_regions_when_moved(resnet):
     hx0, _hy0, _hx1, hy1 = section.heading_rect.rect
     assert any(r.rect[0] <= hx0 and r.rect[3] >= hy1 for r in resolved.rects)
     assert all((r.rect[2] - r.rect[0]) < 300 for r in resolved.rects)
+
+
+def test_anchor_basis_ignores_the_timestamp_and_follows_page_text_and_regions(extracted):
+    from datetime import UTC, datetime
+
+    from paperboard.anchoring import anchor_basis
+
+    doc = extracted["resnet"]
+    same_text_later = doc.model_copy(update={"extracted_at": datetime(2030, 1, 1, tzinfo=UTC)})
+    assert anchor_basis(same_text_later) == anchor_basis(doc)
+
+    pages = [p.model_copy() for p in doc.page_text]
+    pages[2] = pages[2].model_copy(update={"text": pages[2].text + " "})
+    assert anchor_basis(doc.model_copy(update={"page_text": pages})) != anchor_basis(doc)
+
+    regions = list(doc.regions[1:])
+    assert anchor_basis(doc.model_copy(update={"regions": regions})) != anchor_basis(doc)
