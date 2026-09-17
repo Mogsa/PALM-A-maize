@@ -18,8 +18,9 @@ test("highlights and cuts survive a reload and the views mirror each other", asy
   await page.locator("select").selectOption({ index: 1 });
   await expect(page.locator(".react-pdf__Page").first()).toBeVisible();
 
-  // five highlights on page 3 (index 2), three cuts on pages 3 and 4, each within one column
-  for (const [from, to] of [[4, 6], [10, 12], [20, 22], [30, 31], [40, 43]]) {
+  // five highlights on page 3 (index 2), three cuts on pages 3 and 4, each within one column.
+  // The last highlight (spans 55-57) lies inside the first cut (spans 50-70), so it must show through that chunk.
+  for (const [from, to] of [[4, 6], [10, 12], [20, 22], [30, 31], [55, 57]]) {
     await selectSpan(page, 2, from, to);
     await page.getByRole("button", { name: "Highlight" }).click();
     await expect(page.locator(".popover")).toBeHidden();
@@ -45,6 +46,9 @@ test("highlights and cuts survive a reload and the views mirror each other", asy
   const cutText = "explicitly let these layers approximate a residual";
   const pageThreeChunk = page.locator(".node.chunk", { hasText: cutText });
   await expect(pageThreeChunk).toHaveCount(1);
+  await expect(pageThreeChunk.locator("mark")).toHaveCount(1);   // SPEC 11.6: every mark shows through its chunk
+  const nodeId = await page.locator(".react-flow__node", { has: pageThreeChunk }).getAttribute("data-id");
+  expect(nodeId).toMatch(/^n-/);
   await pageThreeChunk.locator("[data-testid=open-source]").click();
 
   // Only a real jump satisfies these once the pages have rendered: page 1 has scrolled away and
@@ -53,5 +57,5 @@ test("highlights and cuts survive a reload and the views mirror each other", asy
   const pageThree = page.locator(`.react-pdf__Page[data-page-number="3"]`);
   await expect(pageThree.locator(".react-pdf__Page__canvas")).toBeVisible();
   await expect(page.locator(`.react-pdf__Page[data-page-number="1"]`)).not.toBeInViewport();
-  await expect(page.locator(`.overlay .outline[title*="${cutText}"]`)).toBeInViewport();
+  await expect(page.locator(`.overlay .outline[data-node-id="${nodeId}"]`).first()).toBeInViewport();
 });

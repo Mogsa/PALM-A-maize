@@ -16,9 +16,9 @@ export function PageOverlay({ page, scale, board, onOutlineClick }: Props) {
   return (
     <div className="overlay">
       {chunks.flatMap((node) => node.data.region.rects.filter((r) => r.page === page).map((r, i) => (
-        <div key={`${node.id}-${i}`} className={`outline ${node.data.region.state}`} style={px(r.rect, scale)}
-             title={node.data.region.start.exact.slice(0, 60)}>
-          <div className="outline-tab" onClick={() => onOutlineClick(node.id)} />
+        <div key={`${node.id}-${i}`} className={`outline ${node.data.region.state}`} style={px(r.rect, scale)} data-node-id={node.id}>
+          {/* The title sits on the tab: the outline's box takes no pointer events, so a tooltip there never shows. */}
+          <div className="outline-tab" onClick={() => onOutlineClick(node.id)} title={node.data.region.start.exact.slice(0, 60)} />
         </div>
       )))}
       {board.highlights.filter((h) => h.anchor.page === page).map((h) => (
