@@ -9,9 +9,10 @@ export type Box = { x: number; y: number; width: number; height: number };
 
 /** Change a node's parent without moving it on screen. React Flow does not convert for you (addendum 4.2).
  *  Never sets `extent: "parent"`: the spike measured that it clamps a node the moment it is re-parented
- *  and stops it from ever being dragged back out (findings, section 2). */
+ *  and stops it from ever being dragged back out (findings, section 2). Also drops `dragging`: a node is
+ *  re-parented on drop, and the node handed in predates React Flow's final dragging:false change. */
 export function reparent(node: BoardNode, newParentId: string | null, nodeAbsolute: XY, parentAbsolute: XY | null): BoardNode {
-  const { parentId: _p, extent: _e, ...rest } = node;
+  const { parentId: _p, extent: _e, dragging: _d, ...rest } = node;
   if (newParentId === null || parentAbsolute === null) {
     return { ...rest, position: { ...nodeAbsolute } } as BoardNode;
   }

@@ -22,6 +22,13 @@ describe("reparent", () => {
     expect(out.extent).toBeUndefined();
     expect(out.position).toEqual({ x: 700, y: 300 });
   });
+  it("a node re-parented on drop is no longer dragging, into a group or out of one", () => {
+    // onNodeDragStop builds the replacement from nodes that predate React Flow's final dragging:false
+    // change, so a stale dragging:true would otherwise stick to the node (final review, finding 3).
+    const held = { ...note, dragging: true } as BoardNode;
+    expect(reparent(held, "n-g", { x: 700, y: 300 }, { x: 400, y: 120 }).dragging).toBeUndefined();
+    expect(reparent({ ...held, parentId: "n-g" }, null, { x: 700, y: 300 }, null).dragging).toBeUndefined();
+  });
   it("fitsInside needs the whole box inside, edges inclusive", () => {
     const group = { x: 100, y: 100, width: 480, height: 480 };
     expect(fitsInside({ x: 100, y: 100, width: 480, height: 480 }, group)).toBe(true);
