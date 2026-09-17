@@ -220,7 +220,6 @@ definitions.
       "type": "chunk",
       "position": { "x": 24, "y": 40 },
       "parentId": "n-01J8Z3K",
-      "extent": "parent",
       "width": 320,
       "data": {
         "tags": ["t-claim", "t-pass1"],
@@ -307,6 +306,10 @@ Nodes: `id`, `type`, `position`, `data`, `parentId`, `extent`, `width`, `height`
 Edges: `id`, `type`, `source`, `sourceHandle`, `target`, `targetHandle`, `data`.
 Plus top-level `viewport`.
 
+The tool itself never writes `extent`: the spike measured that `extent: "parent"` clamps a
+node the moment it is re-parented and traps it inside the group. It stays in the list above
+because a hand-written board may carry it.
+
 **Never persisted, and stripped on every write:** `selected`, `dragging`, `resizing`,
 `measured`, `handles`. React Flow *mutates your node objects* with these during
 interaction, so they arrive uninvited. And `internals` must never be touched — it holds a
@@ -314,17 +317,22 @@ circular reference back to the node and throws on `JSON.stringify`.
 
 **Do not use `toObject()`.** It is a bare shallow copy that does no cleaning, so it writes
 selection and drag state into the file and the board churns on every click. Serialize with
-an explicit field pick. Drop `undefined` keys and sort nodes by `id` before writing, so a
-board that did not change produces a byte-identical file.
+an explicit field pick. Drop `undefined` keys and order nodes parents-first, otherwise
+stable (array order), before writing, so a board that did not change produces a
+byte-identical file.
 
 ### 4.2 Rules that will bite
 
 - **Parents precede children in the `nodes` array.** Violate it and React Flow warns and
-  misrenders. Topologically sort on write.
+  misrenders a child listed before its parent at its relative position, as if it were
+  absolute (spike section 3). Sort parents-first, otherwise stable, and use that order on
+  every path into React Flow, not only on write.
 - **A child's `position` is relative to its parent.** Absolute position is runtime-only.
   Re-parenting — dragging a piece into a group — does *not* convert coordinates for you.
   Convert explicitly: `child.position = absolute - parentAbsolute`. This is the single
   most likely bug in the whole front end and deserves its own test.
+- **On drop, a node joins the smallest group whose box wholly contains it, or none.**
+  Partial overlap does not join (spike section 2).
 - **`width`/`height` are the authoritative resize result**, written by `applyNodeChanges`.
   `measured` is DOM-derived; never persist it. A freshly created note uses
   `initialWidth`/`initialHeight` so it sizes to its content, and switches to `width`/
@@ -332,7 +340,9 @@ board that did not change produces a byte-identical file.
 - **A tag on a connection goes in `data`, not `label`.** React Flow types `label` as
   `ReactNode`, which is not JSON-safe.
 - **Deleting a group deletes its children by default.** Intercept with `onBeforeDelete`:
-  dissolving a group must leave the pieces.
+  dissolving a group lifts only its direct children into the nearest surviving ancestor
+  (or the root) without moving them on screen, leaves nested groups intact, and keeps the
+  edges of surviving pieces.
 
 **[CHOICE]** The tag filter is view state — one top-level `active_tags` — and `hidden` is
 computed at render. Persisting `hidden` per node would rewrite hundreds of nodes every
@@ -556,11 +566,14 @@ failure with the extractor's message passed through.
 
 `snap` defaults to true; the browser sends false while a modifier key is held, which is
 SPEC.md's "exact selection when you want it". `POST /text` is where the forgiving-highlight rule of section 5.3 is applied — the browser
-sends the raw selection, one rectangle per page it touches, and receives the snapped
-rectangles back with `highlight`, a ready-to-store highlight anchor (null for a multi-page
-selection), and `chunk`, a ready-to-store chunk anchor, so the rule has exactly one
-implementation and it is the testable one. A highlight and a cut send the same request;
-the browser decides afterwards, per the gesture, which anchor to keep.
+sends the raw selection, one rectangle per column run — a run continues while the next
+rect is on the same page, does not start above the run, and either overlaps it sideways
+or starts below it — because the spike measured that a per-page union of a two-column
+selection covers both columns. It receives the snapped rectangles back with `highlight`, a
+ready-to-store highlight anchor (null unless the selection is a single run, since a
+highlight anchor holds one rect), and `chunk`, a ready-to-store chunk anchor, so the rule
+has exactly one implementation and it is the testable one. A highlight and a cut send the
+same request; the browser decides afterwards, per the gesture, which anchor to keep.
 
 Clips are rendered and stored by `PUT /clips/{node_id}` and served by
 `GET /clips/{node_id}.png`, rather than rendered on request, because the client cannot
