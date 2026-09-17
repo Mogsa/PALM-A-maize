@@ -20,16 +20,25 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
       setSource(s);
       dispatch({ type: "load", board: b });
     });
-    persistence.current = createPersistence({
+    // Callbacks are bound to this paper. After cleanup they are ignored, so a late save of this paper
+    // cannot change the state of the next one; the save itself still goes to this paper's route.
+    const persist = createPersistence({
       save: (board, version) => api.putBoard(paperId, board, version),
       reload: () => api.getBoard(paperId),
-      onSaved: (version, revision) => dispatch({ type: "saved", version, revision }),
-      onReload: (board) => dispatch({ type: "load", board }),
-      onConflict: setNotice,
+      onSaved: (version, revision) => { if (live) { setNotice(null); dispatch({ type: "saved", version, revision }); } },
+      onReload: (board) => { if (live) dispatch({ type: "load", board }); },
+      onConflict: (message) => { if (live) setNotice(message); },
+      onError: (message) => { if (live) setNotice(message); },
     });
-    const flushOnLeave = () => persistence.current?.flush();
+    persistence.current = persist;
+    const flushOnLeave = () => persist.flush();
     window.addEventListener("beforeunload", flushOnLeave);
-    return () => { live = false; window.removeEventListener("beforeunload", flushOnLeave); persistence.current?.dispose(); };
+    return () => {
+      live = false;
+      window.removeEventListener("beforeunload", flushOnLeave);
+      void persist.flush();   // takes the pending board now, so the dispose below cannot cancel it
+      persist.dispose();
+    };
   }, [paperId]);
 
   useEffect(() => {

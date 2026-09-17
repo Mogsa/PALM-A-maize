@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPersistence } from "./persistence";
+import { createPersistence, SAVE_FAILED_MESSAGE } from "./persistence";
 import { emptyBoard, type Board } from "../model/types";
 
 describe("createPersistence", () => {
@@ -49,8 +49,9 @@ describe("createPersistence", () => {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => { resolve = r; });
-  return { promise, resolve };
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
 }
 
 type SaveResult = { version: number } | { conflict: true; current: number };
@@ -127,5 +128,86 @@ describe("createPersistence, ruling 7", () => {
     expect(onReload).toHaveBeenCalledWith(fresh);
     expect(save).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
+  });
+});
+
+describe("createPersistence, fix round 1", () => {
+  it("(1) a stale board scheduled after a conflict reload has landed is not saved", async () => {
+    vi.useFakeTimers();
+    const fresh = { ...emptyBoard("p"), version: 9, goal: "theirs" };
+    const save = vi.fn(async (_board: Board, _version: number): Promise<SaveResult> => ({ conflict: true, current: 9 }));
+    const p = createPersistence({ save, reload: async () => fresh, onConflict: () => {}, onSaved: () => {}, delayMs: 500 });
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "mine" });
+    await vi.advanceTimersByTimeAsync(501);                          // 409, reload resolved
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "mine, from a late effect" });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(save).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("(2) a failed save reports once, keeps the change, and a flush retries it", async () => {
+    vi.useFakeTimers();
+    const save = vi.fn(async (_board: Board, _version: number): Promise<SaveResult> => {
+      if (save.mock.calls.length === 1) throw new TypeError("Failed to fetch");
+      return { version: 2 };
+    });
+    const onError = vi.fn();
+    const saved: number[] = [];
+    const p = createPersistence({ save, reload: async () => emptyBoard("p"), onConflict: () => {}, onError, onSaved: (v) => saved.push(v), delayMs: 500 });
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "a" });
+    await vi.advanceTimersByTimeAsync(501);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(SAVE_FAILED_MESSAGE);
+    await p.flush();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0].goal).toBe("a");
+    expect(saved).toEqual([2]);
+    vi.useRealTimers();
+  });
+
+  it("(2) a failed save does not restore over a newer board scheduled while it was in flight", async () => {
+    vi.useFakeTimers();
+    const failing = deferred<SaveResult>();
+    const save = vi.fn((_board: Board, _version: number): Promise<SaveResult> =>
+      save.mock.calls.length === 1 ? failing.promise : Promise.resolve({ version: 2 }));
+    const p = createPersistence({ save, reload: async () => emptyBoard("p"), onConflict: () => {}, onError: () => {}, onSaved: () => {}, delayMs: 10_000 });
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "a" });
+    const first = p.flush();
+    await vi.advanceTimersByTimeAsync(0);
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "b" });
+    failing.reject(new TypeError("Failed to fetch"));
+    await first;
+    await p.flush();
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0].goal).toBe("b");
+    vi.useRealTimers();
+  });
+
+  it("(2) a failed save does not restore over a newer board already queued behind it", async () => {
+    vi.useFakeTimers();
+    const failing = deferred<SaveResult>();
+    const save = vi.fn((_board: Board, _version: number): Promise<SaveResult> =>
+      save.mock.calls.length === 1 ? failing.promise : Promise.resolve({ version: 2 }));
+    const p = createPersistence({ save, reload: async () => emptyBoard("p"), onConflict: () => {}, onError: () => {}, onSaved: () => {}, delayMs: 500 });
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "a" });
+    await vi.advanceTimersByTimeAsync(501);                          // a in flight
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "b" });
+    await vi.advanceTimersByTimeAsync(501);                          // b's debounce fired; b queued behind a
+    failing.reject(new TypeError("Failed to fetch"));
+    await vi.advanceTimersByTimeAsync(0);                            // a fails, b saves
+    await p.flush();
+    expect(save.mock.calls.map((c) => c[0].goal)).toEqual(["a", "b"]);
+    vi.useRealTimers();
+  });
+
+  it("(3) dispose right after flush does not cancel the flush", async () => {
+    const save = vi.fn(async (_board: Board, _version: number) => ({ version: 1 }));
+    const p = createPersistence({ save, reload: async () => emptyBoard("p"), onConflict: () => {}, onSaved: () => {}, delayMs: 10_000 });
+    p.schedule({ ...emptyBoard("p"), goal: "a" });
+    const flushed = p.flush();
+    p.dispose();
+    await flushed;
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save.mock.calls[0][0].goal).toBe("a");
   });
 });
