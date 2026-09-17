@@ -211,3 +211,52 @@ describe("createPersistence, fix round 1", () => {
     expect(save.mock.calls[0][0].goal).toBe("a");
   });
 });
+
+describe("createPersistence, final review finding 1", () => {
+  it("hasUnsaved is true while a board is scheduled, while its save is in flight, and false once saved", async () => {
+    vi.useFakeTimers();
+    const saving = deferred<SaveResult>();
+    const save = vi.fn((_board: Board, _version: number) => saving.promise);
+    const p = createPersistence({ save, reload: async () => emptyBoard("p"), onConflict: () => {}, onSaved: () => {}, delayMs: 500 });
+    expect(p.hasUnsaved()).toBe(false);
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "a" });
+    expect(p.hasUnsaved()).toBe(true);                               // timer armed, board pending
+    await vi.advanceTimersByTimeAsync(501);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(p.hasUnsaved()).toBe(true);                               // save in flight
+    saving.resolve({ version: 2 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(p.hasUnsaved()).toBe(false);
+    vi.useRealTimers();
+  });
+
+  it("hasUnsaved stays true after a failed save, which keeps the change", async () => {
+    vi.useFakeTimers();
+    const save = vi.fn(async (_board: Board, _version: number): Promise<SaveResult> => { throw new TypeError("Failed to fetch"); });
+    const p = createPersistence({ save, reload: async () => emptyBoard("p"), onConflict: () => {}, onError: () => {}, onSaved: () => {}, delayMs: 500 });
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "a" });
+    await vi.advanceTimersByTimeAsync(501);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(p.hasUnsaved()).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it("flush while a save is in flight saves the newer board after it, with the version it returned", async () => {
+    vi.useFakeTimers();
+    const first = deferred<SaveResult>();
+    const save = vi.fn((_board: Board, _version: number): Promise<SaveResult> =>
+      save.mock.calls.length === 1 ? first.promise : Promise.resolve({ version: 3 }));
+    const p = createPersistence({ save, reload: async () => emptyBoard("p"), onConflict: () => {}, onSaved: () => {}, delayMs: 500 });
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "a" });
+    await vi.advanceTimersByTimeAsync(501);                          // a in flight
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "b" });
+    const flushed = p.flush();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(save).toHaveBeenCalledTimes(1);                           // b waits behind a
+    first.resolve({ version: 2 });
+    await flushed;
+    expect(save.mock.calls.map((c) => [c[0].goal, c[1]])).toEqual([["a", 1], ["b", 2]]);
+    expect(p.hasUnsaved()).toBe(false);
+    vi.useRealTimers();
+  });
+});

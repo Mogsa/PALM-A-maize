@@ -31,7 +31,15 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
       onError: (message) => { if (live) setNotice(message); },
     });
     persistence.current = persist;
-    const flushOnLeave = () => persist.flush();
+    // A flush alone cannot survive the tab closing: its PUT waits behind a microtask or a save in flight,
+    // and the browser aborts it. So while anything is unsaved, ask the browser to show its leave prompt,
+    // which holds the page long enough for the flush to land. (keepalive is no answer: 64 KB body cap.)
+    const flushOnLeave = (event: BeforeUnloadEvent) => {
+      if (!persist.hasUnsaved()) return;
+      event.preventDefault();
+      event.returnValue = "";   // older browsers show the prompt only when returnValue is set
+      void persist.flush();
+    };
     window.addEventListener("beforeunload", flushOnLeave);
     return () => {
       live = false;

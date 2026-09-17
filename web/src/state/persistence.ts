@@ -35,6 +35,7 @@ export function createPersistence(opts: PersistenceOptions) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   // Every run waits for the one before it, so there is never more than one PUT in flight.
   let queue: Promise<void> = Promise.resolve();
+  let inFlight = 0;   // runs queued or running; a board taken off `pending` is unsaved until its run ends
 
   const reportError = (error: unknown) => {
     if (opts.onError) opts.onError(SAVE_FAILED_MESSAGE);
@@ -70,7 +71,8 @@ export function createPersistence(opts: PersistenceOptions) {
     const item = pending;
     pending = null;
     if (!item) return queue;
-    queue = queue.then(() => run(item)).catch(reportError);
+    inFlight++;
+    queue = queue.then(() => run(item)).catch(reportError).finally(() => { inFlight--; });
     return queue;
   };
 
@@ -92,5 +94,9 @@ export function createPersistence(opts: PersistenceOptions) {
 
   const dispose = () => { if (timer) clearTimeout(timer); pending = null; };
 
-  return { schedule, flush, dispose };
+  /** True while any change of the reader's is not yet on the server: a board waiting for its debounce,
+   *  a failed one kept for retry, or a save still in flight. Closing the tab now would lose it. */
+  const hasUnsaved = () => pending !== null || timer !== null || inFlight > 0;
+
+  return { schedule, flush, dispose, hasUnsaved };
 }

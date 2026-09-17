@@ -1,4 +1,4 @@
-import { act, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyBoard, type Highlight, type Source } from "../model/types";
 
@@ -26,7 +26,13 @@ function Probe() {
   return <span data-testid="notice">{ctx.notice ?? ""}</span>;
 }
 
-afterEach(() => { ctx = null; vi.clearAllMocks(); });
+// Unmount first and let its flush run, so a save left over from one test is never counted in the next.
+afterEach(async () => {
+  cleanup();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  ctx = null;
+  vi.clearAllMocks();
+});
 
 describe("BoardProvider", () => {
   it("saves a change still inside the debounce when it unmounts", async () => {
@@ -44,5 +50,24 @@ describe("BoardProvider", () => {
     await waitFor(() => expect(ctx).not.toBeNull());
     act(() => ctx!.dispatch({ type: "addHighlight", highlight }));
     expect(await findByText(SAVE_FAILED_MESSAGE, {}, { timeout: 2000 })).toBeTruthy();
+  });
+
+  it("asks the browser to hold the page and flushes when the tab closes with an unsaved change", async () => {
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    act(() => ctx!.dispatch({ type: "addHighlight", highlight }));
+    const event = new Event("beforeunload", { cancelable: true });
+    act(() => { window.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(api.putBoard).toHaveBeenCalledTimes(1));   // flushed now, not after the 500 ms debounce
+  });
+
+  it("lets the tab close without a prompt when nothing is unsaved", async () => {
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    const event = new Event("beforeunload", { cancelable: true });
+    act(() => { window.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(false);
+    expect(api.putBoard).not.toHaveBeenCalled();
   });
 });
