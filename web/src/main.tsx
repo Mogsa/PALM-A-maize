@@ -1,8 +1,5 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import App from "./App";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <p>paper board</p>
-  </StrictMode>,
-);
+createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
