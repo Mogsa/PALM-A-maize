@@ -29,7 +29,7 @@ export function PaperScreen({ focus, onOpenOnBoard }: { focus: PageRect | null; 
         dispatch({ type: "addHighlight", highlight: { id: newId("h"), tags: [], note: null, anchor: selection.highlight } });
       } else {
         const node: ChunkNode = {
-          id: newId("n"), type: "chunk", position: nextChunkPosition(state.board.nodes), initialWidth: CHUNK_WIDTH,
+          id: newId("n"), type: "chunk", position: nextChunkPosition(state.board.nodes), width: CHUNK_WIDTH,
           data: { tags: [], collapsed: false, region: selection.chunk, text: selection.text, user_sized: false, source_id: null },
         };
         dispatch({ type: "addNode", node });
