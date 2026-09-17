@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow, type Node, type OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { planDelete } from "../model/dissolve";
 import { newId } from "../model/ids";
 import { fitsInside, isDescendant, reparent, type Box } from "../model/reparent";
 import { parentsFirst } from "../model/serialize";
@@ -60,15 +61,12 @@ function Inner({ onOpenInPaper }: { onOpenInPaper: (rect: PageRect) => void }) {
         onEdgesChange={(changes) => dispatch({ type: "edges", changes })}
         onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick}
         onBeforeDelete={async ({ nodes: toDelete, edges: edgesToDelete }) => {
-          // Dissolving a group must leave its pieces (addendum 4.2). React Flow hands us
-          // the group AND its children here; lift the children out and return a set
-          // without them, because returning `true` would delete everything it listed.
-          const groupIds = new Set(toDelete.filter((n) => n.type === "group").map((n) => n.id));
-          for (const child of state.board.nodes.filter((n) => n.parentId && groupIds.has(n.parentId))) {
-            const absolute = getInternalNode(child.id)!.internals.positionAbsolute;
-            dispatch({ type: "replaceNode", node: reparent(child, null, absolute, null) });
-          }
-          return { nodes: toDelete.filter((n) => !(n.parentId && groupIds.has(n.parentId))), edges: edgesToDelete };
+          // Dissolving a group must leave its pieces (addendum 4.2). React Flow hands us the group, all its
+          // descendants and every edge touching them; planDelete keeps what the reader did not choose.
+          const absolute = (id: string) => getInternalNode(id)!.internals.positionAbsolute;
+          const plan = planDelete(state.board.nodes, toDelete, edgesToDelete, absolute);
+          for (const node of plan.lifted) dispatch({ type: "replaceNode", node });
+          return { nodes: plan.nodes, edges: plan.edges };
         }}
         defaultViewport={state.board.viewport}
         onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
