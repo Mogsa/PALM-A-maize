@@ -6,15 +6,20 @@ const px = (rect: Rect, scale: number) => ({
   left: rect[0] * scale, top: rect[1] * scale, width: (rect[2] - rect[0]) * scale, height: (rect[3] - rect[1]) * scale,
 });
 
-/** Marks and outlines for one page, drawn over the text layer. Pointer events stay off
- *  so the reader can still select text underneath; outlines take clicks on their border only. */
+/** Marks and outlines for one page, drawn over the text layer. The overlay and each outline's
+ *  box are pointer-events: none, so a drag anywhere over a page -- including inside a cut
+ *  region -- still selects the text underneath (fix round 1, finding 2: an outline's whole box
+ *  used to capture pointer events, so text inside a cut could never be selected). Only the
+ *  small tab at an outline's top-left corner takes clicks, to open it. */
 export function PageOverlay({ page, scale, board, onOutlineClick }: Props) {
   const chunks = board.nodes.filter((n): n is ChunkNode | FigureNode => n.type === "chunk" || n.type === "figure");
   return (
     <div className="overlay">
       {chunks.flatMap((node) => node.data.region.rects.filter((r) => r.page === page).map((r, i) => (
         <div key={`${node.id}-${i}`} className={`outline ${node.data.region.state}`} style={px(r.rect, scale)}
-             title={node.data.region.start.exact.slice(0, 60)} onClick={() => onOutlineClick(node.id)} />
+             title={node.data.region.start.exact.slice(0, 60)}>
+          <div className="outline-tab" onClick={() => onOutlineClick(node.id)} />
+        </div>
       )))}
       {board.highlights.filter((h) => h.anchor.page === page).map((h) => (
         <div key={h.id} className={`mark ${h.anchor.state}`} style={px(h.anchor.rect, scale)} title={h.anchor.quote.exact.slice(0, 80)} />

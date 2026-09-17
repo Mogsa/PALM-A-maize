@@ -64,4 +64,36 @@ describe("selectionToPageRects", () => {
   it("returns nothing when no line lies on a page", () => {
     expect(selectionToPageRects([{ left: 0, top: 0, right: 10, bottom: 10 }], frames)).toEqual([]);
   });
+
+  // Fix round 1, finding 1: run splitting must use the run's accumulated hull, not just the
+  // previous line's top, or an ordinary single-column selection breaks into many rects
+  // whenever it starts mid-line or a span rises inside the column (equation tags, superscripts).
+
+  it("keeps a run going when a mid-line start's hull misses the next line's short first span", () => {
+    const lines = [
+      { left: 400, top: 1500, right: 720, bottom: 1512 },   // mid-line start: hull ~[262, 542] pt
+      { left: 150, top: 1514, right: 300, bottom: 1526 },   // next line's first span starts at the margin: ~[44, 175] pt
+    ];
+    expect(selectionToPageRects(lines, frames)).toHaveLength(1);
+  });
+
+  it("keeps a run going when a span rises more than LINE_SLACK_PT inside the column", () => {
+    const lines = [
+      { left: 150, top: 1500, right: 400, bottom: 1512 },
+      { left: 150, top: 1514, right: 420, bottom: 1526 },
+      { left: 380, top: 1505, right: 400, bottom: 1517 },   // an equation tag/superscript, rises well above line 2's top
+    ];
+    expect(selectionToPageRects(lines, frames)).toHaveLength(1);
+  });
+
+  it("still splits into two runs when a selection starts at the top of the left column and crosses into the right column", () => {
+    const lines = [
+      { left: 150, top: 1010, right: 400, bottom: 1022 },   // left column, top of page
+      { left: 150, top: 1200, right: 420, bottom: 1212 },   // left column, further down
+      { left: 453, top: 1010, right: 700, bottom: 1022 },   // right column, also at the top of the page
+    ];
+    const rects = selectionToPageRects(lines, frames);
+    expect(rects).toHaveLength(2);
+    expect(rects[0].rect[2]).toBeLessThan(rects[1].rect[0]);
+  });
 });
