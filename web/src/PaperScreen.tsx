@@ -4,10 +4,11 @@ import { newId } from "./model/ids";
 import type { ChunkNode, PageRect } from "./model/types";
 import { PaperView } from "./paper/PaperView";
 import { SelectionPopover } from "./paper/SelectionPopover";
+import { previewText } from "./paper/preview";
 import { nextChunkPosition, CHUNK_WIDTH } from "./board/layout";
 import { useBoard } from "./state/BoardProvider";
 
-type Pending = { rects: PageRect[]; at: DOMRect; exact: boolean };
+type Pending = { rects: PageRect[]; at: DOMRect; exact: boolean; preview: string };
 
 export const SELECTION_FAILED_MESSAGE = "Could not read that selection from the paper. Nothing was added.";
 
@@ -47,9 +48,12 @@ export function PaperScreen({ focus, onOpenOnBoard }: { focus: PageRect | null; 
   return (
     <>
       <PaperView paperId={paperId} source={source} board={state.board} focus={focus}
-                 onSelect={(rects, at, exact) => { setError(null); setPending({ rects, at, exact }); }}
+                 onSelect={(rects, at, exact) => {
+                   setError(null);
+                   setPending({ rects, at, exact, preview: previewText(window.getSelection()?.toString() ?? "") });
+                 }}
                  onOutlineClick={onOpenOnBoard} />
-      {pending && <SelectionPopover at={pending.at} busy={busy} canHighlight={pending.rects.length === 1} onHighlight={() => choose("highlight")} onCut={() => choose("cut")} onDismiss={() => setPending(null)} />}
+      {pending && <SelectionPopover at={pending.at} preview={pending.preview} busy={busy} canHighlight={pending.rects.length === 1} onHighlight={() => choose("highlight")} onCut={() => choose("cut")} onDismiss={() => setPending(null)} />}
       {error && <p className="selection-error" role="alert" onClick={() => setError(null)}>{error}</p>}
     </>
   );

@@ -51,7 +51,7 @@ export function PaperView({ paperId, source, board, focus, onSelect, onOutlineCl
 
   return (
     <div ref={container} className="paper" onMouseUp={onMouseUp}>
-      <Document file={api.pdfUrl(paperId)} onLoadSuccess={() => setReady(true)} loading={<p>Loading paper</p>}>
+      <Document file={api.pdfUrl(paperId)} onLoadSuccess={() => setReady(true)} loading={<div className="loading">Loading the paper</div>}>
         {source.pages.map((p) => (
           <div key={p.index} className="page-wrap">
             <Page pageIndex={p.index} width={PAGE_WIDTH_PX} renderAnnotationLayer={false} renderTextLayer />
