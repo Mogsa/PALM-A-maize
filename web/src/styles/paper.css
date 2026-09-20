@@ -15,9 +15,10 @@
 .overlay .outline.relocated { border-color: var(--moved); }
 .overlay .outline.orphaned { border-color: var(--lost); background: transparent; }
 .overlay .outline-tab {
-  position: absolute; top: -1px; left: -1px; width: 18px; height: 18px; padding: 0;
+  /* hangs just outside the region's left edge, so it never covers the first words of the cut */
+  position: absolute; top: -1px; left: -21px; width: 18px; height: 18px; padding: 0;
   display: grid; place-content: center; pointer-events: auto; cursor: pointer;
-  border: 0; border-radius: 3px 0 var(--radius-small) 0; background: var(--cut); color: var(--surface); opacity: 0.8;
+  border: 0; border-radius: var(--radius-small) 0 0 var(--radius-small); background: var(--cut); color: var(--surface); opacity: 0.8;
 }
 .overlay .outline-tab:hover { opacity: 1; }
 .overlay .outline.relocated .outline-tab { background: var(--moved); }
