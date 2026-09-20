@@ -64,7 +64,12 @@ function Inner({ onOpenInPaper, focusNode, onFocusHandled }: Props) {
     node.type === "chunk" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node), [state.board.nodes]);
   return (
     <div className="board">
-      <div className="board-tools"><button onClick={addGroup}>New group</button></div>
+      <div className="board-tools">
+        <button onClick={addGroup} title="A rectangle to pile pieces in. Drag pieces wholly inside it."><span aria-hidden="true">▢</span> New group</button>
+      </div>
+      {state.board.nodes.length === 0 && (
+        <div className="empty-hint"><p>Nothing here yet. In the paper, select some text and choose <b>Cut</b> to place it on the board.</p></div>
+      )}
       <ReactFlow<BoardNode, BoardEdge>
         nodes={nodes} edges={state.board.edges} nodeTypes={nodeTypes}
         onNodesChange={(changes) => dispatch({ type: "nodes", changes })}
