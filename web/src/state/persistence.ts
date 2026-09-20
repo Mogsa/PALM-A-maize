@@ -18,6 +18,7 @@ export type PersistenceOptions = {
 export const SAVE_DELAY_MS = 500;
 export const CONFLICT_MESSAGE = "This board was changed in another window. Reloaded it; your last change was not saved.";
 export const SAVE_FAILED_MESSAGE = "Could not save the board. Your change is kept and will be saved with your next change.";
+export const CONFLICT_RELOAD_FAILED_MESSAGE = "This board changed in another window, but could not be reloaded. Your local changes remain unsaved. The next change will retry the reload.";
 
 type Pending = { board: Board; revision?: number; seq: number };
 
@@ -25,6 +26,7 @@ type Pending = { board: Board; revision?: number; seq: number };
 export function createPersistence(opts: PersistenceOptions) {
   const delay = opts.delayMs ?? SAVE_DELAY_MS;
   let pending: Pending | null = null;
+  let conflictPending = false; // retry recovery with GET, never overwrite a conflicted board
   let scheduled = 0;   // bumped by every schedule, so a failed run can tell whether a newer board exists
   // The newest version this tab has seen, from a save or a reload. A board scheduled while a save was in
   // flight still carries the version before that save; sending it would 409 against this tab's own write.
@@ -38,8 +40,9 @@ export function createPersistence(opts: PersistenceOptions) {
   let inFlight = 0;   // runs queued or running; a board taken off `pending` is unsaved until its run ends
 
   const reportError = (error: unknown) => {
-    if (opts.onError) opts.onError(SAVE_FAILED_MESSAGE);
-    else console.error(SAVE_FAILED_MESSAGE, error);
+    const message = conflictPending ? CONFLICT_RELOAD_FAILED_MESSAGE : SAVE_FAILED_MESSAGE;
+    if (opts.onError) opts.onError(message);
+    else console.error(message, error);
   };
 
   const run = async (item: Pending) => {
@@ -47,14 +50,24 @@ export function createPersistence(opts: PersistenceOptions) {
     if (board.version < reloadedVersion) return;
     let result: SaveResult;
     try {
-      result = await opts.save(toBoardJson(board), Math.max(board.version, knownVersion));
+      result = conflictPending ? { conflict: true, current: knownVersion }
+        : await opts.save(toBoardJson(board), Math.max(board.version, knownVersion));
     } catch (error) {
       if (item.seq === scheduled) pending = item;   // keep the change for the next flush unless a newer board exists
       reportError(error);
       return;
     }
     if ("conflict" in result) {
-      const fresh = await opts.reload();
+      conflictPending = true;
+      let fresh: Board;
+      try {
+        fresh = await opts.reload();
+      } catch (error) {
+        if (item.seq === scheduled) pending = item;
+        reportError(error);
+        return;
+      }
+      conflictPending = false;
       knownVersion = fresh.version;
       reloadedVersion = fresh.version;
       opts.onReload?.(fresh);
@@ -96,7 +109,7 @@ export function createPersistence(opts: PersistenceOptions) {
 
   /** True while any change of the reader's is not yet on the server: a board waiting for its debounce,
    *  a failed one kept for retry, or a save still in flight. Closing the tab now would lose it. */
-  const hasUnsaved = () => pending !== null || timer !== null || inFlight > 0;
+  const hasUnsaved = () => conflictPending || pending !== null || timer !== null || inFlight > 0;
 
   return { schedule, flush, dispose, hasUnsaved };
 }

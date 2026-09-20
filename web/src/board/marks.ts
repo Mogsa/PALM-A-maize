@@ -18,8 +18,21 @@ export function paintMarks(text: string, marks: Highlight[]): Run[] {
   for (const mark of marks) {
     const needle = stripped(mark.anchor.quote.exact).s;
     if (!needle) continue;
-    const at = s.indexOf(needle);
-    if (at === -1) continue;
+    const prefix = stripped(mark.anchor.quote.prefix).s;
+    const suffix = stripped(mark.anchor.quote.suffix).s;
+    const candidates: Array<{ at: number; score: number }> = [];
+    for (let at = s.indexOf(needle); at !== -1; at = s.indexOf(needle, at + 1)) {
+      // Compare adjacent context, allowing it to be clipped by the chunk boundary.
+      // This is exact disambiguation, not another fuzzy anchoring implementation.
+      let before = 0, after = 0;
+      while (before < prefix.length && before < at && s[at - before - 1] === prefix[prefix.length - before - 1]) before++;
+      const end = at + needle.length;
+      while (after < suffix.length && end + after < s.length && s[end + after] === suffix[after]) after++;
+      candidates.push({ at, score: before + after });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    if (!candidates.length || (candidates.length > 1 && candidates[0].score === candidates[1].score)) continue;
+    const at = candidates[0].at;
     spans.push({ start: offsets[at], end: offsets[at + needle.length - 1] + 1, id: mark.id });
   }
   spans.sort((a, b) => a.start - b.start);

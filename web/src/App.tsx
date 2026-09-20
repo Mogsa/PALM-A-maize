@@ -15,6 +15,7 @@ export default function App() {
   const [papers, setPapers] = useState<PaperSummary[]>([]);
   const [paperId, setPaperId] = useState<string | null>(null);
   const [view, setView] = useState<"paper" | "board">("paper");
+  const [focusNode, setFocusNode] = useState<string | null>(null);
   const [focusRect, setFocusRect] = useState<PageRect | null>(null);
   useEffect(() => { api.listPapers().then(setPapers); }, []);
 
@@ -23,7 +24,7 @@ export default function App() {
       {paperId ? (
         <BoardProvider key={paperId} paperId={paperId}>
           <div className="topbar">
-            <select value={paperId} onChange={(e) => { setFocusRect(null); setPaperId(e.target.value || null); }}>
+            <select value={paperId} onChange={(e) => { setFocusRect(null); setFocusNode(null); setPaperId(e.target.value || null); }}>
               {papers.map((p) => <option key={p.paper_id} value={p.paper_id}>{p.title}</option>)}
             </select>
             <button onClick={() => setView(view === "paper" ? "board" : "paper")}>{view === "paper" ? "Board" : "Paper"}</button>
@@ -31,8 +32,8 @@ export default function App() {
           </div>
           {/* A fresh focusRect every time, so the paper view scrolls again even for the same chunk. */}
           {view === "paper"
-            ? <PaperScreen focus={focusRect} onOpenOnBoard={() => setView("board")} />
-            : <BoardView onOpenInPaper={(rect) => { setFocusRect({ ...rect }); setView("paper"); }} />}
+            ? <PaperScreen focus={focusRect} onOpenOnBoard={(id) => { setFocusNode(id); setView("board"); }} />
+            : <BoardView focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={(rect) => { setFocusRect({ ...rect }); setView("paper"); }} />}
         </BoardProvider>
       ) : (
         <div className="topbar">

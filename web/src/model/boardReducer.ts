@@ -68,7 +68,9 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
         edges: board.edges.filter((e) => e.source !== action.id && e.target !== action.id),
       }, true);
     case "viewport":
-      return next(state, { ...board, viewport: action.viewport }, false);
+      if (board.viewport.x === action.viewport.x && board.viewport.y === action.viewport.y
+          && board.viewport.zoom === action.viewport.zoom) return state;
+      return next(state, { ...board, viewport: action.viewport }, true);
     case "saved": {
       // A save without a revision (or of the latest revision) settles the board; an older one does not.
       const current = action.revision === undefined || action.revision === state.revision;

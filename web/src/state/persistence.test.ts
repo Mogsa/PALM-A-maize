@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPersistence, SAVE_FAILED_MESSAGE } from "./persistence";
+import { createPersistence, SAVE_FAILED_MESSAGE, CONFLICT_RELOAD_FAILED_MESSAGE } from "./persistence";
 import { emptyBoard, type Board } from "../model/types";
 
 describe("createPersistence", () => {
@@ -258,5 +258,27 @@ describe("createPersistence, final review finding 1", () => {
     expect(save.mock.calls.map((c) => [c[0].goal, c[1]])).toEqual([["a", 1], ["b", 2]]);
     expect(p.hasUnsaved()).toBe(false);
     vi.useRealTimers();
+  });
+});
+
+
+describe("conflict recovery", () => {
+  it("keeps close protection on a failed reload and retries only the GET", async () => {
+    const save = vi.fn(async (): Promise<SaveResult> => ({ conflict: true, current: 9 }));
+    const fresh = { ...emptyBoard("p"), version: 9, goal: "theirs" };
+    const reload = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(fresh);
+    const onReload = vi.fn();
+    const onError = vi.fn();
+    const p = createPersistence({ save, reload, onReload, onSaved: vi.fn(), onConflict: vi.fn(), onError });
+    p.schedule({ ...emptyBoard("p"), version: 1, goal: "mine" });
+    await p.flush();
+    expect(p.hasUnsaved()).toBe(true);
+    expect(onError).toHaveBeenCalledWith(CONFLICT_RELOAD_FAILED_MESSAGE);
+    await p.flush();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledTimes(2);
+    expect(onReload).toHaveBeenCalledWith(fresh);
+    expect(p.hasUnsaved()).toBe(false);
+    p.dispose();
   });
 });

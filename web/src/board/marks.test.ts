@@ -21,3 +21,17 @@ describe("paintMarks", () => {
     expect(runs.map((r) => r.highlightId)).toEqual([null, "h-a", null, "h-b"]);
   });
 });
+
+
+it("uses context to paint both occurrences of a repeated phrase", () => {
+  const first = mark("h-first", "claim");
+  first.anchor.quote = {exact: "claim", prefix: "First ", suffix: ". Second claim."};
+  const second = mark("h-second", "claim");
+  second.anchor.quote = {exact: "claim", prefix: "First claim. Second ", suffix: "."};
+  const runs = paintMarks("First claim. Second claim.", [second, first]);
+  expect(runs.filter(r => r.highlightId).map(r => r.highlightId)).toEqual(["h-first", "h-second"]);
+});
+
+it("does not guess between indistinguishable occurrences", () => {
+  expect(paintMarks("claim and claim", [mark("h-1", "claim")])).toEqual([{text: "claim and claim", highlightId: null}]);
+});

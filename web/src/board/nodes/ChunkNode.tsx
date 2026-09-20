@@ -6,6 +6,8 @@ import { paintMarks } from "../marks";
 
 export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const { state, dispatch } = useBoard();
+  // NodeProps.height also includes automatic measurements; only a stored height fixes the box size.
+  const height = state.board.nodes.find((node) => node.id === id)?.height;
   const marks = highlightsIn(state.board.highlights, data.region);
   const title = data.region.start.exact.split("\n")[0].slice(0, 80);
   const toggle = () => {
@@ -13,8 +15,8 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
     dispatch({ type: "replaceNode", node: { ...node, data: { ...data, collapsed: !data.collapsed } } as ChunkNodeType });
   };
   return (
-    <div className={`node chunk ${data.region.state}`}>
-      <NodeResizer isVisible={selected} minWidth={200} minHeight={60} />
+    <div className={`node chunk ${data.region.state}${height !== undefined && !data.collapsed ? " sized" : ""}`}>
+      <NodeResizer isVisible={selected && !data.collapsed} minWidth={200} minHeight={60} />
       <div className="node-head">
         <button className="quiet" onClick={toggle} title={data.collapsed ? "Expand" : "Collapse"}>{data.collapsed ? "▸" : "▾"}</button>
         <span className="title">{title}</span>

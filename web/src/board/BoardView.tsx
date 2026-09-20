@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from "react";
-import { Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow, type Node, type OnNodeDrag } from "@xyflow/react";
+import { useCallback, useEffect, useMemo } from "react";
+import { Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized, type Node, type OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { planDelete } from "../model/dissolve";
 import { newId } from "../model/ids";
@@ -14,9 +14,17 @@ import { NoteNode } from "./nodes/NoteNode";
 
 const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group: GroupNode };
 
-function Inner({ onOpenInPaper }: { onOpenInPaper: (rect: PageRect) => void }) {
+type Props = { onOpenInPaper: (rect: PageRect) => void; focusNode?: string | null; onFocusHandled?: () => void };
+
+function Inner({ onOpenInPaper, focusNode, onFocusHandled }: Props) {
   const { state, dispatch } = useBoard();
-  const { getInternalNode } = useReactFlow<BoardNode>();
+  const { getInternalNode, fitView, getZoom } = useReactFlow<BoardNode>();
+  const initialized = useNodesInitialized();
+  useEffect(() => {
+    if (!initialized || !focusNode) return;
+    void fitView({ nodes: [{ id: focusNode }], minZoom: 0.2, maxZoom: getZoom() });
+    onFocusHandled?.();
+  }, [initialized, focusNode, fitView, getZoom, onFocusHandled]);
 
   /** On drop, a node belongs to the smallest group that wholly contains it, or to none. This one rule
    *  covers dropping in, dragging out, moving between groups, and nesting groups. Whole containment,
@@ -51,7 +59,9 @@ function Inner({ onOpenInPaper }: { onOpenInPaper: (rect: PageRect) => void }) {
 
   // Every path into <ReactFlow> goes through parentsFirst, not only saving: a node re-parented into a
   // group created after it would otherwise be listed before its parent (findings, section 3).
-  const nodes = useMemo(() => parentsFirst(state.board.nodes), [state.board.nodes]);
+  // Collapse only the rendered height, retaining the expanded size in the saved board.
+  const nodes = useMemo(() => parentsFirst(state.board.nodes).map((node) =>
+    node.type === "chunk" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node), [state.board.nodes]);
   return (
     <div className="board">
       <div className="board-tools"><button onClick={addGroup}>New group</button></div>
@@ -79,6 +89,6 @@ function Inner({ onOpenInPaper }: { onOpenInPaper: (rect: PageRect) => void }) {
   );
 }
 
-export function BoardView(props: { onOpenInPaper: (rect: PageRect) => void }) {
+export function BoardView(props: Props) {
   return <ReactFlowProvider><Inner {...props} /></ReactFlowProvider>;
 }

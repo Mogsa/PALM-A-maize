@@ -84,3 +84,12 @@ describe("boardReducer, ruling 7", () => {
     expect(s.board.nodes[0].height).toBe(300);
   });
 });
+
+
+it("saves changed viewport but ignores identical restore events", () => {
+  const loaded = boardReducer(initialBoardState, { type: "load", board: emptyBoard("p") });
+  expect(boardReducer(loaded, {type: "viewport", viewport: loaded.board.viewport})).toBe(loaded);
+  const moved = boardReducer(loaded, {type: "viewport", viewport: {x: 120, y: 50, zoom: 1.4}});
+  expect(moved.dirty).toBe(true);
+  expect(moved.revision).toBe(loaded.revision + 1);
+});

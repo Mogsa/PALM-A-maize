@@ -25,6 +25,6 @@ try {
   console.error("e2e server: extract failed", failure.message);
   process.exit(1);
 }
-server = spawn(paperboard, ["serve", "--root", root, "--web", join(repo, "web", "dist"), "--port", "8765"], { stdio: "inherit" });
+server = spawn(paperboard, ["serve", "--root", root, "--web", join(repo, "web", "dist"), "--port", process.env.PAPERBOARD_API_PORT ?? "8765"], { stdio: "inherit" });
 server.on("error", (failure) => { console.error("e2e server: could not start paperboard", failure.message); process.exit(1); });
 server.on("exit", (code) => process.exit(code ?? 1));

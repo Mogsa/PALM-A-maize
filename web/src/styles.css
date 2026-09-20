@@ -32,3 +32,8 @@ body { margin: 0; font-family: system-ui, sans-serif; color: var(--ink); }
 .react-flow .react-flow__node-group { padding: 0; border: 0; background: none; }
 .group-name { padding: 4px 8px; font-weight: 600; }
 button.quiet { border: 0; background: none; cursor: pointer; font: inherit; }
+
+/* A resized chunk fills React Flow's box; its body gets the remaining reading space. */
+.node.chunk.sized { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+.node.chunk.sized .node-head { flex-shrink: 0; }
+.node.chunk.sized .node-body { flex: 1; min-height: 0; max-height: none; }
