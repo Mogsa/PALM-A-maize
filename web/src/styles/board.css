@@ -27,7 +27,7 @@
 .node:hover .node-head .open-source, .react-flow__node.selected .open-source { opacity: 1; }
 .node-head .open-source:hover { color: var(--cut); }
 
-.node-body { position: relative; padding: 8px 10px 10px; font-family: var(--font-read); font-size: var(--text-read); line-height: var(--leading-read); white-space: pre-wrap; max-height: 320px; overflow: auto; user-select: none; }
+.node-body { position: relative; padding: 8px 10px 10px; font-family: var(--font-read); font-size: var(--text-read); line-height: var(--leading-read); white-space: pre-line; max-height: 320px; overflow: auto; user-select: none; }
 .node-body mark { background: var(--hl); color: inherit; border-radius: 2px; padding: 0 1px; }
 .node.chunk.overflowing::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 28px; pointer-events: none; border-radius: 0 0 var(--radius) var(--radius); background: linear-gradient(to bottom, transparent, var(--surface)); }
 .node-body .clip { max-width: 100%; height: auto; display: block; border-radius: var(--radius-small); }
