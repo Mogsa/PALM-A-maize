@@ -7,7 +7,7 @@ export function NoteNode({ id, data, selected }: NodeProps<NoteNodeType>) {
   return (
     <div className="node note">
       <NodeResizer isVisible={selected} minWidth={160} minHeight={60} />
-      <div className="node-head"><span className="title">Note</span></div>
+      <div className="node-head"><span className="badge note-badge">note</span><span className="title">Note</span></div>
       {!data.collapsed && <div className="node-body">{data.note}</div>}
       <Handle id={`${id}-in`} type="target" position={Position.Left} />
       <Handle id={`${id}-out`} type="source" position={Position.Right} />

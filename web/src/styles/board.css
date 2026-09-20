@@ -1,20 +1,58 @@
-.board { height: 100%; position: relative; }
-.board-tools { position: absolute; z-index: 5; top: 8px; left: 8px; }
-.node { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 3px; font-size: 12px; min-width: 200px; }
-.node.chunk.relocated { border-color: var(--moved); } .node.chunk.orphaned { border-color: var(--lost); }
-.node-head { display: flex; gap: 6px; align-items: center; padding: 4px 6px; border-bottom: 1px solid var(--border); }
-.node-head .title { flex: 1; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.node-head .count { color: var(--ink-muted); }
-.node-body { padding: 6px 8px; white-space: pre-wrap; max-height: 320px; overflow: auto; user-select: none; }
-.node-body mark { background: var(--hl); }
-.node.group { background: var(--surface-muted); border: 1px dashed var(--ink-muted); width: 100%; height: 100%; }
+/* the board: pieces of the paper laid out on a table */
+.board { height: 100%; position: relative; background: var(--bg-board); }
+.board .react-flow__background { color: var(--bg-board-dot); }
+.board-tools { position: absolute; z-index: 5; top: 12px; left: 12px; display: flex; gap: 6px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); }
+.board-tools button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; border-radius: var(--radius-small); background: transparent; font-weight: 500; }
+.board-tools button:hover { background: var(--surface-muted); }
+.empty-hint { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; color: var(--ink-muted); }
+.empty-hint p { max-width: 36ch; margin: 0; font-size: 14px; line-height: 1.5; }
+
+/* cards */
+.node { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); font-size: var(--text-ui); min-width: 200px; transition: box-shadow 120ms ease, border-color 120ms ease; }
+.node:hover { border-color: var(--border-strong); }
+.react-flow__node.selected .node { border-color: var(--cut); box-shadow: 0 0 0 3px var(--cut-tint), var(--shadow-raised); }
+.node.chunk { border-left: 3px solid var(--cut); }
+.node.chunk.relocated { border-left-color: var(--moved); }
+.node.chunk.orphaned { border-left-color: var(--lost); }
+.node.figure { border-left: 3px solid var(--cut); }
+.node.note { border-left: 3px solid var(--hl-solid); }
+
+.node-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; background: var(--surface); }
+.node-head .title { flex: 1; min-width: 0; font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node-head .badge { flex: none; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--surface-muted); color: var(--ink-muted); font-family: var(--font-mono); font-size: 10.5px; }
+.node-head .note-badge { text-transform: uppercase; letter-spacing: 0.04em; font-family: var(--font-ui); }
+.node-head .count { flex: none; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--hl); color: var(--ink); font-size: 10.5px; font-weight: 600; }
+.node-head .toggle { width: 18px; color: var(--ink-muted); }
+.node-head .open-source { color: var(--ink-faint); opacity: 0; transition: opacity 120ms ease; }
+.node:hover .node-head .open-source, .react-flow__node.selected .open-source { opacity: 1; }
+.node-head .open-source:hover { color: var(--cut); }
+
+.node-body { position: relative; padding: 8px 10px 10px; font-family: var(--font-read); font-size: var(--text-read); line-height: var(--leading-read); white-space: pre-wrap; max-height: 320px; overflow: auto; user-select: none; }
+.node-body mark { background: var(--hl); color: inherit; border-radius: 2px; padding: 0 1px; }
+.node.chunk.overflowing::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 28px; pointer-events: none; border-radius: 0 0 var(--radius) var(--radius); background: linear-gradient(to bottom, transparent, var(--surface)); }
+.node-body .clip { max-width: 100%; height: auto; display: block; border-radius: var(--radius-small); }
+
+/* a resized chunk fills React Flow's box; its body gets the remaining reading space */
+.node.chunk.sized { height: 100%; display: flex; flex-direction: column; }
+.node.chunk.sized .node-head { flex-shrink: 0; }
+.node.chunk.sized .node-body { flex: 1; min-height: 0; max-height: none; }
+
+/* groups: a tinted region with a name */
+.node.group { width: 100%; height: 100%; background: var(--surface-muted); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: none; }
+.node.group.selected { border-color: var(--cut); }
 /* React Flow's style.css pads, borders and fills its "group" wrapper; the dashed .node.group draws the group.
    Two classes so this wins whatever order the stylesheets load in. The wrapper's box stays the node's width/height. */
 .react-flow .react-flow__node-group { padding: 0; border: 0; background: none; }
-.group-name { padding: 4px 8px; font-weight: 600; }
-button.quiet { border: 0; background: none; cursor: pointer; font: inherit; }
+.group-name { display: inline-block; margin: 8px; padding: 2px 10px; border-radius: var(--radius-pill); background: var(--surface); border: 1px solid var(--border); font-weight: 600; font-size: 12px; }
+.group-name.unnamed { color: var(--ink-faint); font-weight: 500; }
 
-/* A resized chunk fills React Flow's box; its body gets the remaining reading space. */
-.node.chunk.sized { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
-.node.chunk.sized .node-head { flex-shrink: 0; }
-.node.chunk.sized .node-body { flex: 1; min-height: 0; max-height: none; }
+/* handles and resize corners: present, quiet, visible on hover */
+.node .react-flow__handle { width: 9px; height: 9px; background: var(--surface); border: 1.5px solid var(--cut); opacity: 0; transition: opacity 120ms ease; }
+.node:hover .react-flow__handle, .react-flow__node.selected .react-flow__handle { opacity: 1; }
+.react-flow__resize-control.line { border-color: var(--cut-edge); }
+.react-flow__resize-control.handle { width: 8px; height: 8px; background: var(--surface); border: 1.5px solid var(--cut); border-radius: 2px; }
+.react-flow__controls { box-shadow: var(--shadow-card); border: 1px solid var(--border); border-radius: var(--radius-small); overflow: hidden; }
+.react-flow__controls button { background: var(--surface); border-bottom: 1px solid var(--border); }
+.react-flow__attribution { display: none; }
+
+button.quiet { border: 0; background: none; cursor: pointer; font: inherit; }

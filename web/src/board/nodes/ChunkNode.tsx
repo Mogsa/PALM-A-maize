@@ -3,6 +3,7 @@ import { highlightsIn } from "../../model/geometry";
 import type { ChunkNode as ChunkNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
 import { paintMarks } from "../marks";
+import { useOverflow } from "../overflow";
 
 export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const { state, dispatch } = useBoard();
@@ -10,21 +11,25 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const height = state.board.nodes.find((node) => node.id === id)?.height;
   const marks = highlightsIn(state.board.highlights, data.region);
   const title = data.region.start.exact.split("\n")[0].slice(0, 80);
+  const page = data.region.rects[0].page + 1;
+  const [bodyRef, overflowing] = useOverflow<HTMLDivElement>();
   const toggle = () => {
     const node = state.board.nodes.find((n) => n.id === id)!;
     dispatch({ type: "replaceNode", node: { ...node, data: { ...data, collapsed: !data.collapsed } } as ChunkNodeType });
   };
+  const classes = ["node", "chunk", data.region.state, height !== undefined && !data.collapsed ? "sized" : "", overflowing ? "overflowing" : ""].filter(Boolean).join(" ");
   return (
-    <div className={`node chunk ${data.region.state}${height !== undefined && !data.collapsed ? " sized" : ""}`}>
+    <div className={classes}>
       <NodeResizer isVisible={selected && !data.collapsed} minWidth={200} minHeight={60} />
       <div className="node-head">
-        <button className="quiet" onClick={toggle} title={data.collapsed ? "Expand" : "Collapse"}>{data.collapsed ? "▸" : "▾"}</button>
+        <button className="quiet toggle" onClick={toggle} title={data.collapsed ? "Expand" : "Collapse"} aria-label={data.collapsed ? "Expand" : "Collapse"}>{data.collapsed ? "▸" : "▾"}</button>
+        <span className="badge" title={`Page ${page}`}>p{page}</span>
         <span className="title">{title}</span>
-        <span className="count">{marks.length ? `${marks.length} marks` : ""}</span>
-        <button className="quiet open-source" data-testid="open-source" title="Open in paper">↗</button>
+        {marks.length > 0 && <span className="count" title={`${marks.length} highlight${marks.length === 1 ? "" : "s"} inside`}>{marks.length}</span>}
+        <button className="quiet open-source" data-testid="open-source" title="Open in paper" aria-label="Open in paper">↗</button>
       </div>
       {!data.collapsed && (
-        <div className="node-body">
+        <div className="node-body" ref={bodyRef}>
           {paintMarks(data.text, marks).map((run, i) => run.highlightId ? <mark key={i}>{run.text}</mark> : <span key={i}>{run.text}</span>)}
         </div>
       )}
