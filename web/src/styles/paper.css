@@ -1,0 +1,14 @@
+.paper { overflow: auto; height: 100%; box-sizing: border-box; background: var(--bg-paper); padding: 16px 0; }
+.page-wrap { position: relative; width: 760px; margin: 0 auto 16px; box-shadow: var(--shadow-raised); }
+.overlay { position: absolute; inset: 0; pointer-events: none; }
+.overlay .mark { position: absolute; background: var(--hl); mix-blend-mode: multiply; }
+.overlay .mark.relocated { outline: 1px dashed var(--moved); }
+.overlay .mark.orphaned { background: var(--lost); opacity: .25; }
+.overlay .outline { position: absolute; border: 1.5px dashed var(--cut); pointer-events: none; background: transparent; }
+.overlay .outline.orphaned { border-color: var(--lost); }
+.overlay .outline-tab { position: absolute; top: -1px; left: -1px; width: 10px; height: 10px; background: var(--cut); pointer-events: auto; cursor: pointer; }
+.overlay .outline.orphaned .outline-tab { background: var(--lost); }
+.popover { position: fixed; display: flex; gap: 4px; padding: 4px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 4px; box-shadow: var(--shadow-raised); z-index: 10; }
+.popover button { font: inherit; padding: 4px 10px; }
+.popover .quiet { border: 0; background: none; }
+.selection-error { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); margin: 0; padding: 6px 12px; background: var(--surface); border: 1px solid var(--lost); border-radius: 4px; color: var(--lost); font-size: 13px; z-index: 10; cursor: pointer; }

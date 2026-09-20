@@ -1,0 +1,40 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; font-family: var(--font-ui); font-size: var(--text-ui); color: var(--ink); background: var(--bg-board); -webkit-font-smoothing: antialiased; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.app { display: grid; grid-template-rows: var(--topbar-height) 1fr; height: 100%; }
+
+/* top bar: wordmark, paper title (a select in disguise), view switch, save state */
+.topbar { display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.wordmark { font-weight: 600; letter-spacing: 0.01em; color: var(--ink-muted); white-space: nowrap; }
+.paper-title { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.paper-title select {
+  appearance: none; -webkit-appearance: none; max-width: 100%; padding: 6px 28px 6px 8px; margin-left: -8px;
+  border: 1px solid transparent; border-radius: var(--radius-small); background: transparent;
+  font-weight: 600; font-size: 14px; text-overflow: ellipsis; cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5l3 3 3-3' fill='none' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+.paper-title select:hover { border-color: var(--border); background-color: var(--surface-muted); }
+
+.segmented { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface-muted); }
+.segmented button { padding: 4px 12px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--ink-muted); font-weight: 500; }
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-card); }
+
+.notice { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-ui-small); color: var(--ink-muted); white-space: nowrap; }
+.notice::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.notice.unsaved::before { background: var(--ink-faint); }
+.notice.warn::before { background: var(--moved); }
+
+/* start screen: no paper chosen yet */
+.start { display: grid; place-content: center; height: 100%; text-align: center; gap: 12px; }
+.start h1 { margin: 0; font-size: 22px; font-weight: 600; }
+.start p { margin: 0; color: var(--ink-muted); }
+.start select { padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); background: var(--surface); min-width: 320px; }
+.start .how { margin-top: 12px; font-size: var(--text-ui-small); color: var(--ink-faint); }
+.start .how code { font-family: var(--font-mono); }
+
+.loading { display: grid; place-content: center; height: 100%; color: var(--ink-muted); }

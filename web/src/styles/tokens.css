@@ -1,0 +1,48 @@
+/* The only file with literal colours, fonts, radii or shadows. Everything else uses these names. */
+:root {
+  /* grounds and surfaces */
+  --bg-paper: #f3f1ec;          /* the desk the paper lies on: warm */
+  --bg-board: #f6f7f9;          /* the board: cool */
+  --bg-board-dot: #d9dde3;
+  --surface: #ffffff;
+  --surface-muted: #f4f5f7;
+  --border: #e3e5e9;
+  --border-strong: #c9cdd3;
+
+  /* text */
+  --ink: #1b1f24;
+  --ink-muted: #6b7280;
+  --ink-faint: #9aa1ab;
+
+  /* meaning */
+  --hl: rgba(255, 224, 76, 0.55);        /* a highlight on the paper and in a card */
+  --hl-solid: #f5d445;
+  --cut: #2f6fed;                        /* a cut region and its card */
+  --cut-tint: rgba(47, 111, 237, 0.07);
+  --cut-edge: rgba(47, 111, 237, 0.6);
+  --moved: #b7791f;                      /* a piece the paper's text moved under */
+  --lost: #c53030;                       /* a piece whose text is gone */
+  --ok: #2f855a;
+  --focus: rgba(47, 111, 237, 0.35);
+
+  /* type */
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-read: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, "Times New Roman", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --text-ui: 13px;
+  --text-ui-small: 11.5px;
+  --text-read: 13.5px;
+  --leading-read: 1.5;
+
+  /* shape */
+  --radius: 8px;
+  --radius-small: 5px;
+  --radius-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(20, 24, 31, 0.06), 0 1px 1px rgba(20, 24, 31, 0.04);
+  --shadow-raised: 0 4px 16px rgba(20, 24, 31, 0.12), 0 1px 3px rgba(20, 24, 31, 0.08);
+  --shadow-page: 0 1px 3px rgba(20, 24, 31, 0.10), 0 8px 24px rgba(20, 24, 31, 0.06);
+
+  /* layout */
+  --topbar-height: 48px;
+  --page-width: 760px;
+}
