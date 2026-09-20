@@ -87,3 +87,34 @@ def test_a_page_outside_the_document_is_rejected(resnet):
     doc, pdf = resnet
     with pytest.raises(ValueError):
         select(doc, pdf, [PageRect(page=999, rect=(0, 0, 10, 10))], snap=False)
+
+
+def _text_regions(doc, page):
+    """The page's text regions in reading order, so a test can take a paragraph and its neighbours."""
+    return [r for r in doc.regions if r.page == page and r.label == "text"]
+
+
+def test_text_under_ignores_glyphs_that_only_touch_the_rect(resnet):
+    """A rect whose edges run through a neighbouring line's descenders must not pick up
+    fragments of that line. Measured on an AAAI paper: a cut came back starting 'gi\\np\\np';
+    on this page, character-level extraction gave nine junk lines ('Thi', 'f', 'l i', ...)."""
+    doc, pdf = resnet
+    above, region, below = _text_regions(doc, 2)[1:4]   # three adjacent paragraphs, 3 pt apart
+    x0, y0, x1, y1 = region.rect
+    exact = text_under(pdf[2], region.rect)
+    # push the edges 1 pt into the paragraphs above and below; the words inside must not change
+    # (the neighbours' line boxes are 8.9 pt tall here, so a 1 pt overlap is far below half)
+    grown = text_under(pdf[2], (x0, above.rect[3] - 1.0, x1, below.rect[1] + 1.0))
+    assert grown == exact
+    # shrink it by 2 pt; the first and last lines lose at most their partially covered words,
+    # and nothing that was not there before appears
+    shrunk = text_under(pdf[2], (x0, y0 + 2.0, x1, y1 - 2.0))
+    assert set(shrunk.split()) <= set(exact.split())
+
+
+def test_text_under_keeps_line_breaks_and_reading_order(resnet):
+    doc, pdf = resnet
+    region = _text_regions(doc, 2)[2]
+    lines = text_under(pdf[2], region.rect).strip().split("\n")
+    assert len(lines) > 3
+    assert all(line == line.strip() and "  " not in line for line in lines)
