@@ -6,7 +6,7 @@
 
 **Architecture:** Additions to the `web/` app from the core plan. New state actions on the same reducer, new panels in the same shell, and the routes the API plan already serves: `/text`, `/clips`, `/notes`, `/questions`, `/export`, `/tags`. Every rule that is not a React component is a plain module with a vitest file. No new server code: if something here needs a route the API does not have, that is a plan defect to raise, not a workaround to write.
 
-**Tech Stack:** As the core plan. One addition: none. Notes are shown as plain wrapped text in this plan; Markdown rendering is a later choice and is noted at the end.
+**Tech Stack:** As the core plan. One addition: none. The restyle plan (`2026-09-20-ui-restyle.md`) landed before this one: colours, fonts, radii and shadows come from `web/src/styles/tokens.css` and nothing else, and styles live in `shell.css`, `paper.css`, `board.css`, not in `styles.css`. Notes are shown as plain wrapped text in this plan; Markdown rendering is a later choice and is noted at the end.
 
 **Spec:** `docs/SPEC.md` sections 4, 5, 6, 11; `docs/SPEC-ADDENDUM.md` sections 4, 4.3, 6; `docs/superpowers/plans/2026-09-16-api-and-storage.md` Tasks 2, 6, 7, 8; `docs/superpowers/plans/2026-09-16-frontend-core.md` for every module this plan modifies. The core plan must be merged first.
 
@@ -437,14 +437,14 @@ const onHeadingClick = async (section: Section) => {
 
 with `paperId` and `source` from `useBoard()`. `App.tsx` also shows the same button on the empty-board hint line from SPEC.md section 4: when the board has no nodes and no highlights, the board view shows a centred line "Highlight anything in the paper, cut anything, or split it into the authors' sections" with the Split button under it.
 
-Add to `styles.css`:
+Add to `web/src/styles/paper.css` (the first three rules) and `web/src/styles/board.css` (the last). Tokens only; `tokens.css` is the only file with literals (restyle plan, Global Constraints):
 
 ```css
-.rubber-band { position: fixed; border: 1px dashed var(--outline); background: rgba(29, 78, 216, 0.08); pointer-events: none; z-index: 9; }
+.rubber-band { position: fixed; border: 1px dashed var(--cut-edge); background: var(--cut-tint); pointer-events: none; z-index: 9; }
 .overlay .heading-zone { position: absolute; pointer-events: auto; cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><text y='13' font-size='13'>✂</text></svg>") 8 8, pointer; }
-.overlay .heading-zone:hover { outline: 1px solid var(--outline); }
-.empty-hint { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: #555; pointer-events: none; }
-.empty-hint button { pointer-events: auto; margin-top: 8px; }
+.overlay .heading-zone:hover { outline: 1px solid var(--cut-edge); }
+/* .empty-hint already exists in board.css from the restyle; it only needs the button rule */
+.empty-hint button { pointer-events: auto; margin-top: 8px; padding: 6px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); background: var(--surface); }
 ```
 
 - [ ] **Step 6: Run it and check**
@@ -652,13 +652,14 @@ The rename uses `prompt`, which is a modal the browser owns. It is the one place
 - `PageOverlay`: marks not passing `isVisible(board.active_tags, h.tags)` get class `dimmed` (opacity 0.25); outlines likewise by node tags.
 - `App.tsx`: wrap everything in `<TagsProvider>`, and put `<FilterBar active={state.board.active_tags} onChange={(tags) => dispatch({ type: "setActiveTags", tags })} />` in the top bar.
 
-Add to `styles.css`:
+Add to `web/src/styles/shell.css` (chips, filter bar), `web/src/styles/board.css` (tag picker) and `web/src/styles/paper.css` (dimmed). Tokens only:
 
 ```css
 .chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
-.chip { font-size: 11px; padding: 0 6px; border: 1px solid; border-radius: 999px; background: #fff; cursor: default; }
-.filter-bar .chip { cursor: pointer; opacity: .6; } .filter-bar .chip.on { opacity: 1; font-weight: 600; }
-.tag-picker { border-top: 1px solid #eee; padding: 4px 6px; font-size: 12px; }
+.chip { font-size: var(--text-ui-small); padding: 0 8px; border: 1px solid; border-radius: var(--radius-pill); background: var(--surface); cursor: default; line-height: 18px; }
+.filter-bar { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.filter-bar .chip { cursor: pointer; opacity: .55; } .filter-bar .chip.on { opacity: 1; font-weight: 600; }
+.tag-picker { border-top: 1px solid var(--border); padding: 6px 8px; font-size: var(--text-ui); background: var(--surface-muted); border-radius: 0 0 var(--radius) var(--radius); }
 .tag-row { display: flex; gap: 6px; align-items: center; }
 .overlay .dimmed { opacity: .25; }
 ```
@@ -888,16 +889,16 @@ export function MarkPopover({ highlight, at, onClose, onOpenBoard }: { highlight
 
 `GroupNode.tsx`: the name becomes an `<input className="nodrag" />` on double-click; blur dispatches `replaceNode` with the new `data.name` (empty string stored as `null`).
 
-Add to `styles.css`:
+Add to `web/src/styles/paper.css` (popover, margin note) and `web/src/styles/board.css` (note textarea, hint, group name). Tokens only; `.popover` from the restyle is the base:
 
 ```css
-.popover.column { flex-direction: column; align-items: stretch; min-width: 240px; }
-.popover .quote { font-size: 12px; color: #444; border-left: 3px solid var(--hl); padding-left: 6px; max-height: 60px; overflow: hidden; }
+.popover.column { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.popover .quote { font-family: var(--font-read); font-size: 12.5px; color: var(--ink-muted); border-left: 3px solid var(--hl-solid); padding-left: 8px; max-height: 60px; overflow: hidden; }
 .overlay .mark { pointer-events: auto; cursor: pointer; }
-.margin-note { position: absolute; left: 100%; margin-left: 12px; width: 180px; font-size: 11px; color: #444; background: #fffef5; border: 1px solid #e7e2b8; padding: 4px 6px; }
-.node.note textarea { width: 100%; min-height: 100px; font: inherit; border: 0; padding: 6px 8px; resize: none; }
-.hint { color: #999; }
-.group-name input { font: inherit; font-weight: 600; }
+.margin-note { position: absolute; left: 100%; margin-left: 12px; width: 180px; font-size: var(--text-ui-small); color: var(--ink-muted); background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--hl-solid); border-radius: var(--radius-small); padding: 4px 8px; box-shadow: var(--shadow-card); }
+.node.note textarea { width: 100%; min-height: 100px; font: inherit; border: 0; padding: 8px 10px; resize: none; background: transparent; }
+.hint { color: var(--ink-faint); }
+.group-name input { font: inherit; font-weight: 600; border: 0; background: transparent; }
 ```
 
 - [ ] **Step 6: Run the tests, then check by hand**
@@ -981,14 +982,17 @@ export function ExportDialog() {
 
 `App.tsx` top bar, inside the provider: the paper select, the goal input, the filter bar, a "Questions" toggle, the Export button, the view switch, the Notice. The question panel sits to the right of whichever view is open. `onFocus` for a highlight row sets `focusRect` from the highlight's anchor and switches to the paper; for a node row, switches to the board and dispatches a select change for that node (`{ type: "nodes", changes: [{ type: "select", id, selected: true }] }`) after `fitView` on it through a `focusNode` prop on `BoardView` that calls `useReactFlow().fitView({ nodes: [{ id }], duration: 300 })`.
 
-Add to `styles.css`:
+Add to `web/src/styles/shell.css`. Tokens only; the question colour is the `question` preset's colour read from the tag itself, not a literal:
 
 ```css
-.goal { flex: 1; font: inherit; border: 0; border-bottom: 1px dashed #bbb; background: none; padding: 2px 4px; }
-.panel { width: 280px; border-left: 1px solid #ddd; padding: 8px 12px; overflow: auto; font-size: 13px; }
-.panel .kind { color: #7c3aed; font-size: 11px; text-transform: uppercase; margin-right: 4px; }
-.dialog { position: fixed; inset: 60px 10% auto 10%; max-height: 70vh; overflow: auto; background: #fff; border: 1px solid #bbb; box-shadow: 0 4px 24px rgba(0,0,0,.25); padding: 12px; z-index: 20; }
-.dialog pre { white-space: pre-wrap; font-size: 12px; }
+.goal { flex: 1; min-width: 160px; border: 0; border-bottom: 1px dashed var(--border-strong); background: none; padding: 2px 4px; color: var(--ink); }
+.goal::placeholder { color: var(--ink-faint); }
+.panel { width: 280px; border-left: 1px solid var(--border); padding: 12px 14px; overflow: auto; background: var(--surface); }
+.panel h3 { margin: 0 0 8px; font-size: var(--text-ui); font-weight: 600; }
+.panel ul { list-style: none; margin: 0; padding: 0; } .panel li { padding: 4px 0; border-top: 1px solid var(--border); }
+.panel .kind { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 4px; color: var(--ink-muted); }
+.dialog { position: fixed; inset: 60px 10% auto 10%; max-height: 70vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-raised); padding: 14px; z-index: 20; }
+.dialog pre { white-space: pre-wrap; font-family: var(--font-read); font-size: var(--text-read); line-height: var(--leading-read); }
 .with-panel { display: grid; grid-template-columns: 1fr auto; height: 100%; }
 ```
 
