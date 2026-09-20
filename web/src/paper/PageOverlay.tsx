@@ -18,7 +18,10 @@ export function PageOverlay({ page, scale, board, onOutlineClick }: Props) {
       {chunks.flatMap((node) => node.data.region.rects.filter((r) => r.page === page).map((r, i) => (
         <div key={`${node.id}-${i}`} className={`outline ${node.data.region.state}`} style={px(r.rect, scale)} data-node-id={node.id}>
           {/* The title sits on the tab: the outline's box takes no pointer events, so a tooltip there never shows. */}
-          <div className="outline-tab" onClick={() => onOutlineClick(node.id)} title={node.data.region.start.exact.slice(0, 60)} />
+          <button type="button" className="outline-tab" onClick={() => onOutlineClick(node.id)}
+                  title={`Open on the board: ${node.data.region.start.exact.slice(0, 60)}`} aria-label="Open this piece">
+            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 8l6-6M4 2h4v4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
         </div>
       )))}
       {board.highlights.filter((h) => h.anchor.page === page).map((h) => (
