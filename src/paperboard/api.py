@@ -201,7 +201,7 @@ def create_app(root: Path) -> FastAPI:
     @app.post("/api/papers/{paper_id}/export")
     def export(paper_id: str, body: ExportRequest):
         doc = store.read_source(paper_id)
-        board = store.read_board(paper_id)
+        board = resolved_board(paper_id)
         notes = {}
         for n in board.nodes:
             if isinstance(n, NoteNode):

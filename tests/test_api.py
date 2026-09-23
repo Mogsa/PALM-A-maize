@@ -208,6 +208,22 @@ def _put(client, resnet_id, board):
     assert response.status_code == 200, response.text
 
 
+def test_export_reads_the_board_with_anchors_resolved(client, resnet_id):
+    """The same board GET /board returns: a highlight stored at a stale rect is
+    re-found inside its chunk first, so the export places it under that chunk."""
+    board, anchor = _board_with_misplaced_highlight(client, resnet_id)
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    region = _first_text_region(source, 2)
+    chunk = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()["chunk"]
+    board["nodes"] = [{"id": "n-chunk", "type": "chunk", "position": {"x": 0, "y": 0},
+                       "data": {"tags": [], "collapsed": False, "region": chunk, "text": "chunk"}}]
+    board.pop("anchor_basis", None)
+    _put(client, resnet_id, board)
+    markdown = client.post(f"/api/papers/{resnet_id}/export", json={"tags": []}).json()["markdown"]
+    assert anchor["quote"]["exact"].strip()[:40] in markdown
+    assert "Highlights outside any chunk" not in markdown
+
+
 def test_loading_a_board_re_finds_nothing_when_the_source_is_unchanged(client, resnet_id):
     board, anchor = _board_with_misplaced_highlight(client, resnet_id)
     basis = client.get(f"/api/papers/{resnet_id}/board").json()["anchor_basis"]
