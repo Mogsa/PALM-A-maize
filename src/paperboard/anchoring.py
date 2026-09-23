@@ -19,7 +19,7 @@ from rapidfuzz import fuzz
 
 from paperboard.board_model import ChunkAnchor, HighlightAnchor, QuoteSelector
 from paperboard.geometry import Rect, column_runs, contains_point, midpoint, normalise, union
-from paperboard.source_model import PageRect, SourceDocument
+from paperboard.source_model import FURNITURE, PageRect, SourceDocument
 
 MIN_SCORE = 0.5            # below this, a quote is orphaned
 MIN_QUOTE_SCORE = 0.6      # the quote itself must match at least this well to be a candidate
@@ -360,8 +360,9 @@ def resolve_highlight(anchor: HighlightAnchor, index: list[PageIndex], pdf: pymu
 def _regions_between(doc: SourceDocument, start: tuple[int, Rect], end: tuple[int, Rect]) -> list[tuple[int, Rect]]:
     """Layout regions in reading order from the one holding `start` to the one
     holding `end`, inclusive. Regions are stored in extraction order, which is
-    reading order, so this is a slice."""
-    regions = [(r.page, r.rect) for r in doc.regions]
+    reading order, so this is a slice. Page furniture is left out, as it is
+    from section extents."""
+    regions = [(r.page, r.rect) for r in doc.regions if r.label not in FURNITURE]
 
     def holding(target: tuple[int, Rect]) -> int | None:
         page, rect = target
