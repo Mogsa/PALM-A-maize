@@ -1,25 +1,27 @@
 """The board as one Markdown file in the paper's order. SPEC.md section 6: this
 is the literature note, and nothing else is ever written by hand."""
 
+from typing import Literal
+
 import pymupdf
 
-from paperboard.board_model import Board, ChunkNode, FigureNode, Highlight, NoteNode
+from paperboard.board_model import Board, ChunkNode, FigureNode, Highlight, NoteNode, TextBlock
 from paperboard.geometry import contains_point, midpoint, normalise
 from paperboard.source_model import SourceDocument
 
 TITLE_CHARS = 80
 TOP_INSET_POINTS = 1.0   # how far below a rect's top edge its "top-centre" point sits
 
+ExportOrder = Literal["paper", "template"]
+
 
 def highlights_in(board: Board, node: ChunkNode | FigureNode) -> list[Highlight]:
-    """Every highlight whose rect midpoint lies inside one of the node's rects.
-    Nothing stores the relation (addendum 4.0)."""
-    out = []
-    for h in board.highlights:
-        point = midpoint(h.anchor.rect)
-        if any(r.page == h.anchor.page and contains_point(r.rect, *point) for r in node.data.region.rects):
-            out.append(h)
-    return out
+    """Every highlight with at least one line rect whose midpoint lies inside one
+    of the node's rects on the same page. Nothing stores the relation (addendum 4.0)."""
+    regions = node.data.region.rects
+    return [h for h in board.highlights
+            if any(r.page == line.page and contains_point(r.rect, *midpoint(line.rect))
+                   for line in h.anchor.rects for r in regions)]
 
 
 def _wanted(tags: list[str], have: list[str]) -> bool:
@@ -29,8 +31,10 @@ def _wanted(tags: list[str], have: list[str]) -> bool:
 def _title(node: ChunkNode | FigureNode) -> str:
     if isinstance(node, FigureNode):
         return node.data.caption.split(":")[0].split(".")[0].strip() or node.id
-    first = node.data.region.start.exact.strip().splitlines()[0] if node.data.region.start.exact.strip() else node.data.text.strip()[:TITLE_CHARS]
-    return first[:TITLE_CHARS]
+    if node.data.region.start.exact.strip():
+        return node.data.region.start.exact.strip().splitlines()[0][:TITLE_CHARS]
+    text = "\n".join(b.text for b in node.data.blocks if isinstance(b, TextBlock))
+    return text.strip()[:TITLE_CHARS]
 
 
 def _region_index(doc: SourceDocument, page: int, rect) -> int | None:
@@ -75,8 +79,9 @@ def _order_key(doc: SourceDocument, node: ChunkNode | FigureNode):
 
 
 def _mark_key(doc: SourceDocument, highlight: Highlight):
-    """A highlight's place in reading order, by the same rule as a node's."""
-    return _reading_key(doc, highlight.anchor.page, highlight.anchor.rect)
+    """A highlight's place in reading order, by the same rule as a node's: its first line."""
+    first = highlight.anchor.rects[0]
+    return _reading_key(doc, first.page, first.rect)
 
 
 def _reading_key(doc: SourceDocument, page: int, rect):
@@ -86,7 +91,10 @@ def _reading_key(doc: SourceDocument, page: int, rect):
     return (page, idx if idx is not None else float("inf"), y0, x0)
 
 
-def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pdf: pymupdf.Document, tags: list[str]) -> str:
+def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pdf: pymupdf.Document, tags: list[str],
+                    order: ExportOrder = "paper") -> str:
+    """The literature note. `order="template"` (addendum 6.1, D19) is the
+    export task's; until it lands every export is in paper order."""
     nodes = {n.id: n for n in board.nodes}
     notes_for: dict[str, list[str]] = {}
 
@@ -95,17 +103,12 @@ def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pd
         if note_id not in linked:
             linked.append(note_id)
 
+    # A note belongs to whatever it is connected to, a highlight or a node, in
+    # either direction; nothing caches it (addendum 4.0, D7).
     for edge in board.edges:
-        for a, handle, b in ((edge.source, edge.sourceHandle, edge.target), (edge.target, edge.targetHandle, edge.source)):
-            other = nodes.get(b)
-            if isinstance(other, NoteNode):
-                link_note(handle or a, other.id)
-    for h in board.highlights:
-        # `Highlight.note` is a cache of the edge's note id (addendum 4.0); a
-        # highlight can carry it with no matching edge, so it must be
-        # consulted directly too, not only reached by walking `board.edges`.
-        if h.note is not None:
-            link_note(h.id, h.note)
+        for end, other in ((edge.from_, edge.to), (edge.to, edge.from_)):
+            if isinstance(nodes.get(other), NoteNode):
+                link_note(end, other)
     used_notes: set[str] = set()
 
     def note_lines(owner: str) -> list[str]:
@@ -152,7 +155,7 @@ def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pd
     if loose:
         out += ["## Highlights outside any chunk", ""]
         for h in sorted(loose, key=lambda h: _mark_key(doc, h)):
-            out += [f"> {h.anchor.quote.exact.strip()}  (page {h.anchor.page + 1})"]
+            out += [f"> {h.anchor.quote.exact.strip()}  (page {h.anchor.rects[0].page + 1})"]
             out += note_lines(h.id)
             out += [""]
 

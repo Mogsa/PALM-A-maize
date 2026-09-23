@@ -11,7 +11,8 @@ from paperboard.anchoring import (
     rect_for_stripped,
     strip_whitespace,
 )
-from paperboard.board_model import CONTEXT_CHARS, ChunkAnchor, HighlightAnchor, QuoteSelector
+from paperboard.blocks import chunk_blocks
+from paperboard.board_model import CONTEXT_CHARS, Block, ChunkAnchor, HighlightAnchor, QuoteSelector
 from paperboard.geometry import Rect, area, contains_point, intersection, midpoint, union
 from paperboard.source_model import PageRect, SourceDocument
 from paperboard.words import text_under
@@ -24,8 +25,9 @@ class Selection(BaseModel):
     text: str
     rects: list[PageRect]
     region_label: str | None
-    highlight: HighlightAnchor | None
+    highlight: HighlightAnchor
     chunk: ChunkAnchor
+    blocks: list[Block]
 
 
 def _smallest_region_at(doc: SourceDocument, page: int, point: tuple[float, float]):
@@ -110,9 +112,10 @@ def select(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRect], sn
     position = global_position(index, first.page, start_at)
     chunk = ChunkAnchor(rects=rects, start=start, end=end, position=position)
 
-    highlight = None
-    if len(rects) == 1:
-        quote, at = _selector(pdf[first.page], index[first.page], text.strip(), first.rect)
-        highlight = HighlightAnchor(page=rects[0].page, rect=rects[0].rect, quote=quote,
-                                    position=global_position(index, rects[0].page, at))
-    return Selection(text=text, rects=rects, region_label=label, highlight=highlight, chunk=chunk)
+    # per-line: task 2A -- one rect per run, not per line, and the quote is
+    # looked up on the first run's page only, so a quote that crosses a page has
+    # no prefix, suffix or position.
+    quote, at = _selector(pdf[first.page], index[first.page], text.strip(), first.rect)
+    highlight = HighlightAnchor(rects=rects, quote=quote, position=global_position(index, first.page, at))
+    return Selection(text=text, rects=rects, region_label=label, highlight=highlight, chunk=chunk,
+                     blocks=chunk_blocks(doc, pdf, rects))

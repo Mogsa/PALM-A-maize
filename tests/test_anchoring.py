@@ -149,15 +149,15 @@ def test_resolve_highlight_states(resnet):
     quote, at = _selector(text, "Let us consider H(x) as an underlying mapping")
     true_rect = rects_for_text(pdf[2], quote.exact)
 
-    anchored = resolve_highlight(HighlightAnchor(page=2, rect=true_rect, quote=quote, position=global_position(index, 2, at)), index, pdf)
-    assert anchored.state == "anchored" and anchored.rect == true_rect
+    anchored = resolve_highlight(HighlightAnchor(rects=[PageRect(page=2, rect=true_rect)], quote=quote, position=global_position(index, 2, at)), index, pdf)
+    assert anchored.state == "anchored" and anchored.rects == [PageRect(page=2, rect=true_rect)]
 
-    moved = resolve_highlight(HighlightAnchor(page=2, rect=(50.0, 700.0, 286.0, 720.0), quote=quote, position=0), index, pdf)
+    moved = resolve_highlight(HighlightAnchor(rects=[PageRect(page=2, rect=(50.0, 700.0, 286.0, 720.0))], quote=quote, position=0), index, pdf)
     assert moved.state == "relocated"
-    assert overlap_ratio(moved.rect, true_rect) > 0.9
+    assert len(moved.rects) == 1 and overlap_ratio(moved.rects[0].rect, true_rect) > 0.9
 
-    gone = resolve_highlight(HighlightAnchor(page=2, rect=true_rect, quote=QuoteSelector(exact="never in the paper, not once, not ever"), position=0), index, pdf)
-    assert gone.state == "orphaned" and gone.rect == true_rect
+    gone = resolve_highlight(HighlightAnchor(rects=[PageRect(page=2, rect=true_rect)], quote=QuoteSelector(exact="never in the paper, not once, not ever"), position=0), index, pdf)
+    assert gone.state == "orphaned" and gone.rects == [PageRect(page=2, rect=true_rect)]
 
 
 def test_fuzzy_match_edges_cover_only_the_matched_text(resnet):
@@ -194,11 +194,11 @@ def test_repeated_phrase_on_an_unchanged_page_stays_anchored(resnet):
     true_rect = rect_for_offsets(pdf[1], index[1], match.start, match.end)
     assert true_rect is not None
 
-    anchor = HighlightAnchor(page=1, rect=true_rect, quote=quote, position=position)
+    anchor = HighlightAnchor(rects=[PageRect(page=1, rect=true_rect)], quote=quote, position=position)
     resolved = resolve_highlight(anchor, index, pdf)
     assert resolved.state == "anchored"
-    assert resolved.rect == true_rect
-    x0, _y0, x1, _y1 = resolved.rect
+    assert resolved.rects == [PageRect(page=1, rect=true_rect)]
+    x0, _y0, x1, _y1 = resolved.rects[0].rect
     assert (x1 - x0) < 300
 
 
