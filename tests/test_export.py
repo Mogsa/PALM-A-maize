@@ -8,6 +8,7 @@ from paperboard.board_model import (
     ChunkNode,
     Edge,
     FigureNode,
+    GroupNode,
     Highlight,
     HighlightAnchor,
     NoteNode,
@@ -249,3 +250,212 @@ def test_a_highlight_is_in_a_chunk_when_any_of_its_lines_is(resnet):
     mark = Highlight(id="h-two", tags=[], anchor=HighlightAnchor(rects=lines, quote=QuoteSelector(exact="two lines")))
     board = Board(paper_id=doc.paper_id, nodes=[_chunk("n-method", method.extent)], highlights=[mark])
     assert [h.id for h in highlights_in(board, board.nodes[0])] == ["h-two"]
+
+
+# -- D6, D14: the paper-order file, piece by piece (addendum 6.1) -------------
+
+TAG_NAMES = {"t-question": "question", "t-method": "method", "t-supports": "supports"}
+
+
+def _note_node(id, tags=(), origin="reader", parent=None):
+    return NoteNode(id=id, type="note", position={"x": 0, "y": 0}, parentId=parent,
+                    data={"tags": list(tags), "collapsed": False, "note": f"notes/{id}.md", "origin": origin})
+
+
+def _group(id, name, prompt=None, parent=None):
+    return GroupNode(id=id, type="group", position={"x": 0, "y": 0}, parentId=parent,
+                     data={"tags": [], "name": name, "prompt": prompt})
+
+
+def _in(section, top, bottom):
+    """A one-line rect inside a section's first extent rect, `top` to `bottom` points down it."""
+    extent = section.extent[0]
+    x0, y0, x1, _ = extent.rect
+    return extent.page, (x0 + 2, y0 + top, x1 - 2, y0 + bottom)
+
+
+def test_a_piece_heading_names_its_page(resnet):
+    doc, pdf = resnet
+    md = export_markdown(doc, _board(doc), NOTES, pdf, tags=[], tag_names=TAG_NAMES)
+    method = next(s for s in doc.sections if s.number == "3.1")
+    figure = next(f for f in doc.figures if f.label == "Figure 1")
+    assert f"## 3.1. Residual Learning (p. {method.extent[0].page + 1})" in md
+    assert f"## Figure 1 (p. {figure.rect.page + 1})" in md
+    assert md.index("## Figure 1") < md.index("![Figure 1](clips/n-fig.png)") < md.index(figure.caption.strip())
+
+
+def test_a_highlight_is_followed_by_its_tag_names_in_italics(resnet):
+    doc, pdf = resnet
+    board = _board(doc)
+    board.highlights[0].tags = ["t-question", "t-method", "t-deleted"]
+    md = export_markdown(doc, board, NOTES, pdf, tags=[], tag_names=TAG_NAMES)
+    assert md.index("> a passage inside 3.1") < md.index("*question, method*") < md.index("F(x) = H(x) - x")
+    assert "t-deleted" not in md
+
+
+def test_a_highlight_outside_any_chunk_names_its_page(resnet):
+    doc, pdf = resnet
+    md = export_markdown(doc, _board(doc), NOTES, pdf, tags=[], tag_names=TAG_NAMES)
+    loose = md[md.index("## Highlights outside any chunk"):]
+    assert loose.index("> a passage on page 10") < loose.index("*p. 10*")
+
+
+def test_a_multi_line_quote_stays_one_quote(resnet):
+    doc, pdf = resnet
+    anchor = _anchor(9, (60.0, 300.0, 280.0, 320.0), "first line\nsecond line")
+    board = Board(paper_id=doc.paper_id, highlights=[Highlight(id="h-x", anchor=anchor)])
+    md = export_markdown(doc, board, {}, pdf, tags=[])
+    assert "> first line\n> second line" in md
+
+
+def test_an_ai_note_is_labelled_wherever_it_is_written(resnet):
+    doc, pdf = resnet
+    method = next(s for s in doc.sections if s.number == "3.1")
+    page, rect = _in(method, 20, 40)
+    board = Board(
+        paper_id=doc.paper_id,
+        nodes=[_chunk("n-method", method.extent), _note_node("n-ai", origin="ai"),
+               _note_node("n-loose-ai", origin="ai")],
+        edges=[Edge(id="e-1", **{"from": "h-x", "to": "n-ai"})],
+        highlights=[_mark("h-x", page, rect, "a marked passage")],
+    )
+    md = export_markdown(doc, board, {"n-ai": "An answer.\n", "n-loose-ai": "Another answer.\n"}, pdf, tags=[])
+    assert md.index("a marked passage") < md.index("**AI:** An answer.")
+    assert "**AI:** Another answer." in md[md.index("## Notes"):]
+
+
+def test_a_note_connected_to_two_highlights_is_written_once_under_the_first(resnet):
+    doc, pdf = resnet
+    method = next(s for s in doc.sections if s.number == "3.1")
+    page, first = _in(method, 20, 30)
+    _, second = _in(method, 100, 110)
+    board = Board(
+        paper_id=doc.paper_id,
+        nodes=[_chunk("n-method", method.extent), _note_node("n-1")],
+        edges=[Edge(id="e-1", **{"from": "h-2", "to": "n-1"}), Edge(id="e-2", **{"from": "n-1", "to": "h-1"})],
+        highlights=[_mark("h-2", page, second, "the second mark"), _mark("h-1", page, first, "the first mark")],
+    )
+    md = export_markdown(doc, board, {"n-1": "One note for both.\n"}, pdf, tags=[])
+    assert md.count("One note for both.") == 1
+    assert md.index("the first mark") < md.index("One note for both.") < md.index("the second mark")
+
+
+def test_a_note_connected_only_to_a_note_or_a_group_goes_under_notes(resnet):
+    doc, pdf = resnet
+    board = Board(
+        paper_id=doc.paper_id,
+        nodes=[_group("n-g", "a group"), _note_node("n-1"), _note_node("n-2")],
+        edges=[Edge(id="e-1", **{"from": "n-1", "to": "n-2"}), Edge(id="e-2", **{"from": "n-g", "to": "n-1"})],
+    )
+    md = export_markdown(doc, board, {"n-1": "Note one.\n", "n-2": "Note two.\n"}, pdf, tags=[])
+    notes = md[md.index("## Notes"):]
+    assert "Note one." in notes and "Note two." in notes
+    assert md.count("Note one.") == 1
+
+
+# -- D19: template order (addendum 6.1) -----------------------------------------
+
+
+def _template_board(doc):
+    """A slot holding a note and a plain group, with a second slot nested in
+    that group around 3.1; an empty slot; a tray holding Figure 1; the
+    introduction at the top level. Chunk headings are their ids (`_chunk`)."""
+    intro = next(s for s in doc.sections if s.number == "1")
+    method = next(s for s in doc.sections if s.number == "3.1")
+    figure = next(f for f in doc.figures if f.label == "Figure 1")
+    page, rect = _in(method, 20, 30)
+    fig_region = ChunkAnchor(rects=[figure.rect], start=QuoteSelector(exact=figure.caption),
+                             end=QuoteSelector(exact=figure.caption)).model_dump()
+    method_chunk = _chunk("n-method", method.extent).model_copy(update={"parentId": "n-deep"})
+    return Board(
+        paper_id=doc.paper_id, goal="read it",
+        nodes=[
+            _group("n-tray", "Paper"),
+            FigureNode(id="n-fig", type="figure", position={"x": 0, "y": 0}, parentId="n-tray",
+                       data={"tags": [], "collapsed": True, "region": fig_region, "caption": figure.caption}),
+            _group("n-main", "Main point", prompt="What is the one thing?"),
+            _note_node("n-answer", parent="n-main"),
+            _group("n-sub", "a plain group", parent="n-main"),
+            _group("n-deep", "How it works", prompt="What are the key parts?", parent="n-sub"),
+            method_chunk,
+            _note_node("n-sub-note", parent="n-sub"),
+            _group("n-empty", "Limits", prompt="Where does it stop holding?"),
+            _chunk("n-intro", intro.extent),
+            _note_node("n-mark-note"),
+            _note_node("n-loose"),
+        ],
+        edges=[Edge(id="e-1", **{"from": "h-1", "to": "n-mark-note"})],
+        highlights=[_mark("h-1", page, rect, "a mark in 3.1"),
+                    _mark("h-out", 9, (60.0, 300.0, 280.0, 320.0), "a mark in no chunk")],
+    )
+
+
+TEMPLATE_NOTES = {"n-answer": "It adds identity shortcuts.\n", "n-sub-note": "A note in a plain group.\n",
+                  "n-mark-note": "Why does this help?\n", "n-loose": "A loose thought.\n"}
+
+
+def _sections(md):
+    """The file's `##` headings, in order."""
+    return [line for line in md.splitlines() if line.startswith("## ")]
+
+
+def test_template_order_writes_each_slot_in_nodes_order_then_the_rest(resnet):
+    doc, pdf = resnet
+    md = export_markdown(doc, _template_board(doc), TEMPLATE_NOTES, pdf, tags=[], order="template")
+    assert _sections(md) == ["## Main point", "## How it works", "## Limits", "## Not in a slot"]
+    assert md.index("read it") < md.index("## Main point")
+
+
+def test_a_slot_is_its_name_its_prompt_its_notes_then_its_pieces(resnet):
+    doc, pdf = resnet
+    md = export_markdown(doc, _template_board(doc), TEMPLATE_NOTES, pdf, tags=[], order="template")
+    main = md[md.index("## Main point"):md.index("## How it works")]
+    assert main.index("*What is the one thing?*") < main.index("It adds identity shortcuts.")
+    # a note in a plain group inside the slot is the slot's, not lost
+    assert "A note in a plain group." in main
+    # the chunk is in a nested slot, so it is written there, not here
+    assert "n-method" not in main
+
+
+def test_a_piece_in_a_slot_is_one_heading_level_down_with_its_marks_and_notes(resnet):
+    doc, pdf = resnet
+    md = export_markdown(doc, _template_board(doc), TEMPLATE_NOTES, pdf, tags=[], order="template")
+    deep = md[md.index("## How it works"):md.index("## Limits")]
+    assert "### n-method (p." in deep
+    assert deep.index("> a mark in 3.1") < deep.index("Why does this help?")
+    assert md.count("Why does this help?") == 1
+
+
+def test_an_empty_slot_is_still_written(resnet):
+    doc, pdf = resnet
+    md = export_markdown(doc, _template_board(doc), TEMPLATE_NOTES, pdf, tags=[], order="template")
+    limits = md[md.index("## Limits"):md.index("## Not in a slot")]
+    assert limits.strip() == "## Limits\n\n*Where does it stop holding?*"
+
+
+def test_everything_in_no_slot_follows_in_paper_order(resnet):
+    doc, pdf = resnet
+    md = export_markdown(doc, _template_board(doc), TEMPLATE_NOTES, pdf, tags=[], order="template")
+    rest = md[md.index("## Not in a slot"):]
+    assert rest.index("### n-intro (p.") < rest.index("### Figure 1") < rest.index("### Highlights outside any chunk")
+    assert rest.index("a mark in no chunk") < rest.index("### Notes") < rest.index("A loose thought.")
+    assert "It adds identity shortcuts." not in rest
+
+
+def test_paper_order_ignores_slots(resnet):
+    doc, pdf = resnet
+    md = export_markdown(doc, _template_board(doc), TEMPLATE_NOTES, pdf, tags=[])
+    assert "## Main point" not in md and "What is the one thing?" not in md
+    assert md.index("## n-intro") < md.index("## Figure 1") < md.index("## n-method")
+
+
+def test_the_tag_filter_applies_in_template_order(resnet):
+    doc, pdf = resnet
+    board = _template_board(doc)
+    board.highlights[1].tags = ["t-question"]
+    md = export_markdown(doc, board, TEMPLATE_NOTES, pdf, tags=["t-question"], order="template")
+    assert "## Limits" in md                          # a slot is always written ...
+    assert "It adds identity shortcuts." in md        # ... with the notes written under it
+    assert "n-method" not in md and "n-intro" not in md
+    assert "a mark in no chunk" in md
+    assert "A loose thought." not in md
