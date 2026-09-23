@@ -17,7 +17,7 @@ from paperboard.export import export_markdown
 from paperboard.extract import extract
 from paperboard.snap import Selection, select
 from paperboard.source_model import PageRect
-from paperboard.store import NoteNotFound, PaperNotFound, Store, VersionConflict, atomic_write
+from paperboard.store import NodeNotFound, NoteNotFound, PaperNotFound, Store, VersionConflict, atomic_write
 
 
 class TextRequest(BaseModel):
@@ -93,6 +93,10 @@ def create_app(root: Path) -> FastAPI:
     @app.exception_handler(NoteNotFound)
     async def _note_missing(_: Request, exc: NoteNotFound):
         return _error(404, "note_not_found", f"no note {exc}")
+
+    @app.exception_handler(NodeNotFound)
+    async def _node_missing(_: Request, exc: NodeNotFound):
+        return _error(404, "node_not_found", f"no node {exc!r}")
 
     @app.exception_handler(VersionConflict)
     async def _conflict(_: Request, exc: VersionConflict):

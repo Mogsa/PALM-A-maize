@@ -6,6 +6,12 @@ from fastapi.testclient import TestClient
 
 from paperboard.api import create_app
 
+# Node ids as the client mints them: n- and a ULID (addendum 4.5).
+NOTE = "n-01J8Z3QABCDEFGHJKMNPQRSTVW"
+FIG = "n-01J8Z3QABCDEFGHJKMNPQRSTVX"
+ASK = "n-01J8Z3QABCDEFGHJKMNPQRSTVY"
+REPLY = "n-01J8Z3QABCDEFGHJKMNPQRSTVZ"
+
 
 @pytest.fixture
 def client(store_root):
@@ -79,7 +85,7 @@ def test_text_and_clip_reject_a_page_outside_the_paper(client, resnet_id):
     assert text_response.json()["error"]["code"] == "invalid"
 
     clip_response = client.put(
-        f"/api/papers/{resnet_id}/clips/n-fig",
+        f"/api/papers/{resnet_id}/clips/{FIG}",
         json={"page": 999, "rect": [0, 0, 10, 10], "dpi": 100},
     )
     assert clip_response.status_code == 422
@@ -94,7 +100,7 @@ def test_board_put_get_and_version_conflict(client, resnet_id):
     region = _first_text_region(source, 2)
     selection = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()
     board["highlights"] = [{"id": "h-1", "tags": ["t-question"], "note": None, "anchor": selection["highlight"]}]
-    board["nodes"] = [{"id": "n-1", "type": "note", "position": {"x": 0, "y": 0}, "data": {"tags": [], "collapsed": False, "note": "notes/n-1.md"}}]
+    board["nodes"] = [{"id": NOTE, "type": "note", "position": {"x": 0, "y": 0}, "data": {"tags": [], "collapsed": False, "note": f"notes/{NOTE}.md"}}]
 
     put = client.put(f"/api/papers/{resnet_id}/board", json=board, headers={"If-Match": "0"})
     assert put.status_code == 200, put.text
@@ -121,9 +127,9 @@ def test_board_with_runtime_fields_is_422(client, resnet_id):
 
 
 def test_notes_round_trip_and_404(client, resnet_id):
-    assert client.get(f"/api/papers/{resnet_id}/notes/n-9").status_code == 404
-    assert client.put(f"/api/papers/{resnet_id}/notes/n-9", json={"markdown": "hello *there*\n"}).status_code == 204
-    assert client.get(f"/api/papers/{resnet_id}/notes/n-9").json() == {"markdown": "hello *there*\n"}
+    assert client.get(f"/api/papers/{resnet_id}/notes/{NOTE}").status_code == 404
+    assert client.put(f"/api/papers/{resnet_id}/notes/{NOTE}", json={"markdown": "hello *there*\n"}).status_code == 204
+    assert client.get(f"/api/papers/{resnet_id}/notes/{NOTE}").json() == {"markdown": "hello *there*\n"}
 
 
 def test_questions_lists_unanswered_marks_and_pieces(client, resnet_id):
@@ -136,9 +142,27 @@ def test_questions_lists_unanswered_marks_and_pieces(client, resnet_id):
     # hang an edge on, so the highlight's own `note` field carries the link; the
     # frontend keeps that field in step with edges (addendum 4.0).
     board = client.get(f"/api/papers/{resnet_id}/board").json()
-    board["highlights"][0]["note"] = "n-1"
+    board["highlights"][0]["note"] = NOTE
     assert client.put(f"/api/papers/{resnet_id}/board", json=board, headers={"If-Match": str(board["version"])}).status_code == 200
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
+
+
+@pytest.mark.parametrize("node_id", ["n-9", "n-01J8Z3QABCDEFGHJKMNPQRSTVW%0Aid:%20x", "n-01j8z3qabcdefghjkmnpqrstvw", "h-01J8Z3QABCDEFGHJKMNPQRSTVW"])
+def test_a_node_id_the_client_could_not_have_minted_is_404(client, resnet_id, store_root, node_id):
+    """A newline in the id used to reach the note's filename and front matter."""
+    base = f"/api/papers/{resnet_id}"
+    responses = [
+        client.get(f"{base}/notes/{node_id}"),
+        client.put(f"{base}/notes/{node_id}", json={"markdown": "x"}),
+        client.put(f"{base}/clips/{node_id}", json={"page": 0, "rect": [0, 0, 10, 10], "dpi": 72}),
+        client.get(f"{base}/clips/{node_id}.png"),
+    ]
+    codes = ["note_not_found", "node_not_found", "node_not_found", "node_not_found"]
+    for response, code in zip(responses, codes, strict=True):
+        assert response.status_code == 404, response.text
+        assert response.json()["error"]["code"] == code
+    folder = store_root / "papers" / resnet_id
+    assert not (folder / "notes").exists() and not (folder / "clips").exists()
 
 
 def test_a_question_tagged_note_is_a_question_until_a_note_answers_it(client, resnet_id):
@@ -147,14 +171,14 @@ def test_a_question_tagged_note_is_a_question_until_a_note_answers_it(client, re
                 "data": {"tags": tags, "collapsed": False, "note": f"notes/{node_id}.md"}}
 
     board = client.get(f"/api/papers/{resnet_id}/board").json()
-    board["nodes"] = [note("n-ask", ["t-question"]), note("n-reply", [])]
+    board["nodes"] = [note(ASK, ["t-question"]), note(REPLY, [])]
     _put(client, resnet_id, board)
-    client.put(f"/api/papers/{resnet_id}/notes/n-ask", json={"markdown": "Why does depth hurt?\n"})
+    client.put(f"/api/papers/{resnet_id}/notes/{ASK}", json={"markdown": "Why does depth hurt?\n"})
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == [
-        {"id": "n-ask", "kind": "note", "text": "Why does depth hurt?"}]
+        {"id": ASK, "kind": "note", "text": "Why does depth hurt?"}]
 
     board = client.get(f"/api/papers/{resnet_id}/board").json()
-    board["edges"] = [{"id": "e-1", "source": "n-reply", "target": "n-ask"}]
+    board["edges"] = [{"id": "e-1", "source": REPLY, "target": ASK}]
     _put(client, resnet_id, board)
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
 
@@ -162,17 +186,17 @@ def test_a_question_tagged_note_is_a_question_until_a_note_answers_it(client, re
 def test_clip_put_and_get(client, resnet_id):
     source = client.get(f"/api/papers/{resnet_id}/source").json()
     figure = source["figures"][0]
-    response = client.put(f"/api/papers/{resnet_id}/clips/n-fig", json={**figure["rect"], "dpi": 100})
+    response = client.put(f"/api/papers/{resnet_id}/clips/{FIG}", json={**figure["rect"], "dpi": 100})
     assert response.status_code == 200, response.text
-    assert response.json()["clip"] == "clips/n-fig.png"
+    assert response.json()["clip"] == f"clips/{FIG}.png"
     assert response.json()["clip_size"]["width"] > 0
-    png = client.get(f"/api/papers/{resnet_id}/clips/n-fig.png")
+    png = client.get(f"/api/papers/{resnet_id}/clips/{FIG}.png")
     assert png.status_code == 200 and png.content.startswith(b"\x89PNG")
 
 
 def test_export_writes_a_file_and_returns_it(client, resnet_id, store_root):
     test_board_put_get_and_version_conflict(client, resnet_id)
-    client.put(f"/api/papers/{resnet_id}/notes/n-1", json={"markdown": "my words\n"})
+    client.put(f"/api/papers/{resnet_id}/notes/{NOTE}", json={"markdown": "my words\n"})
     response = client.post(f"/api/papers/{resnet_id}/export", json={"tags": []})
     assert response.status_code == 200
     payload = response.json()

@@ -18,6 +18,9 @@ from paperboard.extract import extract
 from paperboard.source_model import SourceDocument
 
 _FRONT_MATTER = re.compile(r"\A---\nid: (?P<id>[^\n]+)\n---\n", re.DOTALL)
+# A node id as the client mints it: "n-" and a ULID (addendum 4.5). Checked
+# before an id becomes a filename or a front-matter line.
+_NODE_ID = re.compile(r"n-[0-9A-HJKMNP-TV-Z]{26}")
 
 
 class PaperNotFound(Exception):
@@ -26,6 +29,10 @@ class PaperNotFound(Exception):
 
 class NoteNotFound(Exception):
     pass
+
+
+class NodeNotFound(Exception):
+    """An id no client could have minted, so no node can have it."""
 
 
 class VersionConflict(Exception):
@@ -55,6 +62,11 @@ def atomic_write(path: Path, data: bytes) -> None:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _check_node_id(node_id: str) -> None:
+    if not _NODE_ID.fullmatch(node_id):
+        raise NodeNotFound(node_id)
 
 
 @dataclass
@@ -141,13 +153,14 @@ class Store:
 
     def read_note(self, paper_id: str, node_id: str) -> str:
         path = self.paper_dir(paper_id) / "notes" / f"{node_id}.md"
-        if not path.exists():
+        if not _NODE_ID.fullmatch(node_id) or not path.exists():
             raise NoteNotFound(node_id)
         raw = path.read_text(encoding="utf-8")
         match = _FRONT_MATTER.match(raw)
         return raw[match.end():] if match else raw
 
     def write_note(self, paper_id: str, node_id: str, markdown: str) -> None:
+        _check_node_id(node_id)
         body = f"---\nid: {node_id}\n---\n{markdown}"
         atomic_write(self.paper_dir(paper_id) / "notes" / f"{node_id}.md", body.encode("utf-8"))
 
@@ -164,6 +177,7 @@ class Store:
     # -- clips --------------------------------------------------------------
 
     def clip_path(self, paper_id: str, node_id: str) -> Path:
+        _check_node_id(node_id)
         return self.paper_dir(paper_id) / "clips" / f"{node_id}.png"
 
     def write_clip(self, paper_id: str, node_id: str, png: bytes) -> str:
