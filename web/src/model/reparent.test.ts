@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fitsInside, isDescendant, reparent, toAbsolute, toRelative } from "./reparent";
+import { absoluteIn, fitsInside, isDescendant, reparent, toAbsolute, toRelative } from "./reparent";
 import type { BoardNode } from "./types";
 
 const note: BoardNode = { id: "n-n", type: "note", position: { x: 700, y: 300 }, data: { tags: [], collapsed: false, note: "notes/n-n.md" } };
@@ -41,5 +41,17 @@ describe("reparent", () => {
     expect(isDescendant(nodes, "n-c", "n-a")).toBe(true);
     expect(isDescendant(nodes, "n-a", "n-c")).toBe(false);
     expect(isDescendant(nodes, "n-b", "n-b")).toBe(false);
+  });
+});
+
+describe("absoluteIn", () => {
+  it("adds every ancestor's position", () => {
+    const nodes = [
+      { id: "n-g", type: "group", position: { x: 100, y: 100 }, data: { tags: [] } },
+      { id: "n-h", type: "group", position: { x: 10, y: 20 }, parentId: "n-g", data: { tags: [] } },
+      { id: "n-c", type: "note", position: { x: 5, y: 7 }, parentId: "n-h", data: { tags: [], collapsed: false, note: "notes/n-c.md", origin: "reader" } },
+    ] as BoardNode[];
+    expect(absoluteIn(nodes)("n-c")).toEqual({ x: 115, y: 127 });
+    expect(absoluteIn(nodes)("n-missing")).toEqual({ x: 0, y: 0 });
   });
 });

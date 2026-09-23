@@ -34,3 +34,16 @@ export function isDescendant(nodes: BoardNode[], candidateId: string, ancestorId
   }
   return false;
 }
+
+/** A node's absolute position from the stored ones: its own plus every ancestor's. */
+export function absoluteIn(nodes: BoardNode[]): (id: string) => XY {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return (id) => {
+    let x = 0, y = 0;
+    for (let node = byId.get(id); node; node = node.parentId ? byId.get(node.parentId) : undefined) {
+      x += node.position.x;
+      y += node.position.y;
+    }
+    return { x, y };
+  };
+}
