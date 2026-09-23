@@ -193,10 +193,19 @@ def create_app(root: Path) -> FastAPI:
             if "t-question" in h.tags and h.note is None and h.id not in answered:
                 out.append({"id": h.id, "kind": "highlight", "text": h.anchor.quote.exact})
         for n in board.nodes:
-            if "t-question" in n.data.tags and n.id not in answered and not isinstance(n, NoteNode):
-                text = n.data.region.start.exact if isinstance(n, (ChunkNode, FigureNode)) else (n.data.name or "")
-                out.append({"id": n.id, "kind": n.type, "text": text})
+            if "t-question" in n.data.tags and n.id not in answered:
+                out.append({"id": n.id, "kind": n.type, "text": question_text(paper_id, n)})
         return out
+
+    def question_text(paper_id: str, node) -> str:
+        if isinstance(node, (ChunkNode, FigureNode)):
+            return node.data.region.start.exact
+        if isinstance(node, NoteNode):
+            try:
+                return store.read_note(paper_id, node.id).strip()
+            except NoteNotFound:
+                return ""
+        return node.data.name or ""
 
     @app.post("/api/papers/{paper_id}/export")
     def export(paper_id: str, body: ExportRequest):

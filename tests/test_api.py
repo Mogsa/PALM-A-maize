@@ -141,6 +141,24 @@ def test_questions_lists_unanswered_marks_and_pieces(client, resnet_id):
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
 
 
+def test_a_question_tagged_note_is_a_question_until_a_note_answers_it(client, resnet_id):
+    def note(node_id, tags):
+        return {"id": node_id, "type": "note", "position": {"x": 0, "y": 0},
+                "data": {"tags": tags, "collapsed": False, "note": f"notes/{node_id}.md"}}
+
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [note("n-ask", ["t-question"]), note("n-reply", [])]
+    _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/n-ask", json={"markdown": "Why does depth hurt?\n"})
+    assert client.get(f"/api/papers/{resnet_id}/questions").json() == [
+        {"id": "n-ask", "kind": "note", "text": "Why does depth hurt?"}]
+
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["edges"] = [{"id": "e-1", "source": "n-reply", "target": "n-ask"}]
+    _put(client, resnet_id, board)
+    assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
+
+
 def test_clip_put_and_get(client, resnet_id):
     source = client.get(f"/api/papers/{resnet_id}/source").json()
     figure = source["figures"][0]
