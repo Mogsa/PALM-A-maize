@@ -84,7 +84,6 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       <ReactFlow<BoardNode, FlowEdge>
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
         onNodesChange={(changes) => dispatch({ type: "nodes", changes })}
-        onEdgesChange={(changes) => dispatch({ type: "edges", changes })}
         onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick}
         onBeforeDelete={async ({ nodes: toDelete, edges: edgesToDelete }) => {
           // Dissolving a group must leave its pieces (addendum 4.2). React Flow hands us the group, all its
