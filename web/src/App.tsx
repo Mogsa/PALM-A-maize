@@ -57,10 +57,14 @@ export default function App() {
           </div>
           <Notice />
         </div>
-        {/* A fresh focusRect every time, so the paper view scrolls again even for the same chunk. */}
-        {view === "paper"
-          ? <PaperScreen focus={focusRect} onFocusHandled={() => setFocusRect(null)} onOpenOnBoard={(id) => { setFocusNode(id); setView("board"); }} />
-          : <BoardView focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={(rect) => { setFocusRect({ ...rect }); setView("paper"); }} />}
+        {/* Both views stay mounted and the inactive one is only hidden: switching never moves anything (SPEC 4).
+            A fresh focusRect every time, so the paper view scrolls again even for the same chunk. */}
+        <div className={`view ${view === "paper" ? "" : "inactive"}`}>
+          <PaperScreen focus={focusRect} onFocusHandled={() => setFocusRect(null)} onOpenOnBoard={(id) => { setFocusNode(id); setView("board"); }} />
+        </div>
+        <div className={`view ${view === "board" ? "" : "inactive"}`}>
+          <BoardView active={view === "board"} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={(rect) => { setFocusRect({ ...rect }); setView("paper"); }} />
+        </div>
       </BoardProvider>
     </div>
   );

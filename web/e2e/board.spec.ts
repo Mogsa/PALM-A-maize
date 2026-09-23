@@ -125,3 +125,28 @@ test('a jump to the paper happens once, not again on every return to the paper',
   await expect(pageOne).toBeInViewport();
   await expect(pageFour).not.toBeInViewport();
 });
+
+test('switching views moves nothing: the paper keeps its place and the board its size', async ({page}) => {
+  await seed(page);
+  const paper = page.locator('.paper');
+  await expect(page.locator('.react-pdf__Page[data-page-number="5"] .react-pdf__Page__canvas')).toBeAttached();
+  await paper.evaluate((el) => el.scrollTo(0, 4000));
+  const scrolled = await paper.evaluate((el) => el.scrollTop);
+  expect(scrolled).toBeGreaterThan(3000);
+
+  const card = page.locator('.react-flow__node[data-id="n-review"]');
+  for (let round = 0; round < 2; round++) {
+    await page.getByRole('button', {name: 'Board', exact: true}).click();
+    await expect(card).toBeInViewport();
+    const pane = (await page.locator('.react-flow').boundingBox())!;
+    expect(pane.width).toBeGreaterThan(1000);
+    expect(pane.height).toBeGreaterThan(800);
+    await card.locator('.title').click();   // selected, so the delete key would remove it if the board still listened
+    await page.getByRole('button', {name: 'Paper', exact: true}).click();
+    await expect(paper).toBeVisible();
+    await expect.poll(() => paper.evaluate((el) => el.scrollTop)).toBe(scrolled);
+  }
+  await page.keyboard.press('Delete');
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await expect(card).toBeVisible();
+});

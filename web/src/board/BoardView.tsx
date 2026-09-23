@@ -14,9 +14,13 @@ import { NoteNode } from "./nodes/NoteNode";
 
 const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group: GroupNode };
 
-type Props = { onOpenInPaper: (rect: PageRect) => void; focusNode?: string | null; onFocusHandled?: () => void };
+/** `active` is false while the paper view is shown: the board stays mounted but hidden, and must not
+ *  take the delete key from the paper. */
+type Props = { onOpenInPaper: (rect: PageRect) => void; active?: boolean; focusNode?: string | null; onFocusHandled?: () => void };
 
-function Inner({ onOpenInPaper, focusNode, onFocusHandled }: Props) {
+const DELETE_KEYS = ["Backspace", "Delete"];
+
+function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Props) {
   const { state, dispatch } = useBoard();
   const { getInternalNode, fitView, getZoom } = useReactFlow<BoardNode>();
   const initialized = useNodesInitialized();
@@ -85,7 +89,7 @@ function Inner({ onOpenInPaper, focusNode, onFocusHandled }: Props) {
         }}
         defaultViewport={state.board.viewport}
         onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
-        minZoom={0.2} fitView={false} deleteKeyCode={["Backspace", "Delete"]}
+        minZoom={0.2} fitView={false} deleteKeyCode={active ? DELETE_KEYS : null}
       >
         <Background />
         <Controls />

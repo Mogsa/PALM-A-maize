@@ -6,6 +6,10 @@ button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .app { display: grid; grid-template-rows: var(--topbar-height) 1fr; height: 100%; }
+/* the two views share one cell and both stay laid out; visibility, not display, so the paper keeps
+   its scroll offset and React Flow keeps its size while hidden */
+.view { grid-row: 2; grid-column: 1; min-height: 0; }
+.view.inactive { visibility: hidden; }
 
 /* top bar: wordmark, paper title (a select in disguise), view switch, save state */
 .topbar { display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
