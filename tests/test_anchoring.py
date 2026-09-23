@@ -244,3 +244,22 @@ def test_anchor_basis_ignores_the_timestamp_and_follows_page_text_and_regions(ex
 
     regions = list(doc.regions[1:])
     assert anchor_basis(doc.model_copy(update={"regions": regions})) != anchor_basis(doc)
+
+
+def test_a_chunk_with_an_empty_end_quote_anchors_on_its_start_and_geometry(resnet):
+    """A split section that ends on a picture has no end quote. An empty quote is
+    no evidence either way, not a miss: the start holding inside the stored rects
+    is enough to stay anchored (it used to come back relocated)."""
+    doc, index, pdf = resnet
+    section = next(s for s in doc.sections if s.number == "3.1")
+    text = doc.page_text[section.heading_rect.page].text
+    start, s_at = _selector(text, section.title)
+    anchor = ChunkAnchor(rects=section.extent, start=start, end=QuoteSelector(exact=""),
+                         position=global_position(index, section.heading_rect.page, s_at))
+    resolved = resolve_chunk(anchor, index, pdf, doc)
+    assert resolved.state == "anchored"
+    assert resolved.rects == section.extent
+
+    end, _ = _selector(doc.page_text[section.extent[-1].page].text, _end_quote(doc, section))
+    no_start = anchor.model_copy(update={"start": QuoteSelector(exact=" "), "end": end})
+    assert resolve_chunk(no_start, index, pdf, doc).state == "anchored"
