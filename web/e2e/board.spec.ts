@@ -8,16 +8,22 @@ test.afterEach(async ({request}) => {
   board.viewport = {x: 0, y: 0, zoom: 1};
   await request.put(path, {data: board, headers: {'If-Match': String(board.version)}});
 });
+const quote = { exact: 'Review chunk', prefix: '', suffix: '' };
+const region = { rects: [{ page: 0, rect: [50, 130, 280, 300] }], start: quote, end: quote, position: 0, state: 'anchored' };
+const chunk = (id: string, x: number, y: number, text: string) => ({ id, type: 'chunk', position: { x, y }, width: 320,
+  data: { tags: [], collapsed: false, user_sized: false, source_id: null, region, text } });
+
 async function seed(page: Page, x = 40) {
+  return seedBoard(page, { nodes: [chunk('n-review', x, 100, Array.from({length: 60}, (_, i) => `Line ${i}: text inside this chunk.`).join('\n'))] });
+}
+
+/** Saves a board with these nodes and highlights, and opens it in the paper view. */
+async function seedBoard(page: Page, { nodes = [], highlights = [] }: { nodes?: object[]; highlights?: object[] }) {
   const papers = await (await page.request.get(`/api/papers`)).json();
   const id = papers[0].paper_id;
   const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
-  const quote = { exact: 'Review chunk', prefix: '', suffix: '' };
-  board.nodes = [{ id: 'n-review', type: 'chunk', position: { x, y: 100 }, width: 320,
-    data: { tags: [], collapsed: false, user_sized: false, source_id: null,
-      region: { rects: [{ page: 0, rect: [50, 130, 280, 300] }], start: quote, end: quote, position: 0, state: 'anchored' },
-      text: Array.from({length: 60}, (_, i) => `Line ${i}: text inside this chunk.`).join('\n') } }];
-  board.edges = []; board.highlights = []; board.viewport = { x: 0, y: 0, zoom: 1 };
+  board.nodes = nodes;
+  board.edges = []; board.highlights = highlights; board.viewport = { x: 0, y: 0, zoom: 1 };
   const saved = await page.request.put(`/api/papers/${id}/board`, {data: board, headers: {'If-Match': String(board.version)}});
   expect(saved.ok()).toBeTruthy();
   await page.goto('/');
@@ -87,4 +93,16 @@ test('pan and zoom persist without editing a piece', async ({page}) => {
   await page.locator('select').selectOption(id);
   await page.getByRole('button', {name: 'Board', exact: true}).click();
   await expect.poll(() => viewport.evaluate(el => (el as HTMLElement).style.transform)).toBe(transform);
+});
+
+test('a chunk counts only the marks it paints, and keeps a handle for every mark inside it', async ({page}) => {
+  const mark = (id: string, exact: string) => ({ id, tags: [], note: null,
+    anchor: { page: 0, rect: [60, 140, 200, 150], quote: { exact, prefix: '', suffix: '' }, position: 0, state: 'anchored' } });
+  await seedBoard(page, { nodes: [chunk('n-marks', 40, 100, 'Line 1: first.\nLine 2: second.')],
+    highlights: [mark('h-found', 'Line 2: second'), mark('h-lost', 'words this chunk does not have')] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  const card = page.locator('.react-flow__node[data-id="n-marks"]');
+  await expect(card.locator('mark')).toHaveCount(1);
+  await expect(card.locator('.count')).toHaveText('1');
+  await expect(card.locator('.react-flow__handle.source')).toHaveCount(2);
 });
