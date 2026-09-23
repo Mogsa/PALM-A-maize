@@ -1,33 +1,47 @@
-import { applyNodeChanges, type EdgeChange, type NodeChange } from "@xyflow/react";
+import { applyNodeChanges, type NodeChange } from "@xyflow/react";
 import { planDelete } from "./dissolve";
-import type { FlowEdge } from "./edges";
-import type { XY } from "./reparent";
-import { emptyBoard, type Board, type BoardEdge, type BoardNode, type Highlight, type Viewport } from "./types";
+import { begin, emptyHistory, patchNodes, record, redo, snapshot, undo, type History } from "./history";
+import { isNewConnection } from "./links";
+import { absoluteIn } from "./reparent";
+import { emptyBoard, type Board, type BoardEdge, type BoardNode, type Highlight, type PaperScroll, type View, type Viewport } from "./types";
 
 /** `revision` counts the reader's saveable changes. It never resets, so a "saved" can tell whether the
  *  snapshot it saved is still the latest one. */
-export type BoardState = { board: Board; dirty: boolean; revision: number };
-export const initialBoardState: BoardState = { board: emptyBoard(""), dirty: false, revision: 0 };
+export type BoardState = { board: Board; dirty: boolean; revision: number; history: History };
+export const initialBoardState: BoardState = { board: emptyBoard(""), dirty: false, revision: 0, history: emptyHistory };
+
+export type TagTarget = "node" | "highlight" | "edge";
+export type Removal = { nodeIds?: string[]; edgeIds?: string[]; highlightIds?: string[] };
+export type FigureClip = { id: string; clip: string; clip_size: { width: number; height: number } };
+
+/** What the reader made or changed: one undo step each, unless `merge` joins it to the gesture in progress. */
+type EditAction =
+  | { type: "add"; nodes?: BoardNode[]; edges?: BoardEdge[]; highlights?: Highlight[] }
+  | { type: "addNode"; node: BoardNode }
+  | { type: "addHighlight"; highlight: Highlight }
+  | { type: "replaceNode"; node: BoardNode; merge?: boolean }
+  | { type: "upsertNodes"; nodes: BoardNode[]; merge?: boolean }
+  | ({ type: "remove" } & Removal)
+  | { type: "removeNode"; id: string }
+  | { type: "setTags"; target: TagTarget; id: string; tags: string[] };
 
 export type BoardAction =
+  | EditAction
   | { type: "load"; board: Board }
+  | { type: "saved"; version: number; revision?: number }
   | { type: "nodes"; changes: NodeChange<BoardNode>[] }
-  | { type: "edges"; changes: EdgeChange<FlowEdge>[] }
-  | { type: "addHighlight"; highlight: Highlight }
-  | { type: "addNode"; node: BoardNode }
-  | { type: "replaceNode"; node: BoardNode }
-  | { type: "removeNode"; id: string }
+  | ({ type: "setFigureClip" } & FigureClip)
+  | { type: "setGoal"; goal: string }
+  | { type: "setView"; view: View }
+  | { type: "setPaperScroll"; scroll: PaperScroll | null }
+  | { type: "setActiveTags"; tags: string[] }
   | { type: "viewport"; viewport: Viewport }
-  | { type: "saved"; version: number; revision?: number };
+  | { type: "undo" }
+  | { type: "redo" };
 
-/** Selection changes are runtime-only; everything else the reader did must be saved. */
 const DIRTYING_NODE_CHANGES = new Set(["position", "remove", "add", "replace"]);
 
-/** React Flow (12.11) emits "dimensions" three ways. Measuring a node: no setAttributes, no resizing;
- *  it only sets `measured`, so it must not save. NodeResizer mid-drag: resizing true, setAttributes set;
- *  the resize path, like the drag path, does not save. NodeResizer's end: resizing false and no
- *  setAttributes; width and height were already written mid-drag, so this is the moment to save.
- *  Expanding a parent: setAttributes true, no resizing; a real size change. */
+/** React Flow (12.11) emits "dimensions" three ways; only the end of a resize and an expanding parent save. */
 function isSavedDimensionsChange(c: NodeChange<BoardNode>): boolean {
   if (c.type !== "dimensions") return false;
   if (c.resizing === false) return true;
@@ -39,91 +53,126 @@ function dirtiesNodes(c: NodeChange<BoardNode>): boolean {
   return DIRTYING_NODE_CHANGES.has(c.type) && !("dragging" in c && c.dragging);
 }
 
-/** Once the reader resizes a chunk it keeps that size (addendum 4.2). Only NodeResizer's changes carry
- *  `resizing`; a measurement or an expanding parent does not. Notes and figures have no `user_sized`. */
+/** A frame of a drag or a resize: the gesture is in progress and is recorded when it ends. */
+function isGestureStep(c: NodeChange<BoardNode>): boolean {
+  return (c.type === "position" && c.dragging === true) || (c.type === "dimensions" && c.resizing === true);
+}
+
+/** Once the reader resizes a piece it keeps that size (addendum 4.2, 4.1): chunks, figures and notes. */
 function markUserSized(nodes: BoardNode[], changes: NodeChange<BoardNode>[]): BoardNode[] {
   const resized = new Set(changes.filter((c) => c.type === "dimensions" && c.resizing !== undefined).map((c) => (c as { id: string }).id));
   if (!resized.size) return nodes;
-  return nodes.map((n) => (n.type === "chunk" && resized.has(n.id) && !n.data.user_sized ? { ...n, data: { ...n.data, user_sized: true } } : n));
+  return nodes.map((n) => (n.type !== "group" && resized.has(n.id) && !n.data.user_sized ? ({ ...n, data: { ...n.data, user_sized: true } } as BoardNode) : n));
 }
 
-/** A node's absolute position from the stored ones: its own plus every ancestor's. */
-function absoluteIn(nodes: BoardNode[]): (id: string) => XY {
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  return (id) => {
-    let x = 0, y = 0;
-    for (let node = byId.get(id); node; node = node.parentId ? byId.get(node.parentId) : undefined) {
-      x += node.position.x;
-      y += node.position.y;
-    }
-    return { x, y };
-  };
+function next(state: BoardState, board: Board): BoardState {
+  return { ...state, board, dirty: true, revision: state.revision + 1 };
 }
 
-/** React Flow's edge changes carry the stored edge's id (model/edges.ts), so they apply to the stored
- *  edges by id: `select` sets the runtime flag, `remove` drops the edge. React Flow emits no `add` or
- *  `replace` here, because the board draws no new connections yet. */
-function applyEdgeChangesById(changes: EdgeChange<FlowEdge>[], edges: BoardEdge[]): BoardEdge[] {
-  let out = edges;
-  for (const change of changes) {
-    if (change.type === "select") out = out.map((e) => (e.id === change.id ? { ...e, selected: change.selected } : e));
-    else if (change.type === "remove") out = out.filter((e) => e.id !== change.id);
+function applyNodes(state: BoardState, changes: NodeChange<BoardNode>[]): BoardState {
+  const board = { ...state.board, nodes: markUserSized(applyNodeChanges(changes, state.board.nodes) as BoardNode[], changes) };
+  if (!changes.some(dirtiesNodes)) {
+    const history = changes.some(isGestureStep) ? begin(state.history, snapshot(state.board)) : state.history;
+    return { ...state, board, history };
   }
-  return out;
+  return { ...next(state, board), history: record(state.history, state.history.pending ?? snapshot(state.board)) };
 }
 
-/** Remove one node as the delete key would (planDelete): its direct children are lifted in place, and
- *  every edge with an end on it goes, so the next save is valid. Highlights stay: they are the paper's. */
-function removeNode(board: Board, id: string): Board {
-  const target = board.nodes.find((n) => n.id === id);
-  if (!target) return board;
-  const touching = board.edges.filter((e) => e.from === id || e.to === id);
-  const plan = planDelete(board.nodes, [target], touching, absoluteIn(board.nodes));
+function addThings(board: Board, { nodes = [], edges = [], highlights = [] }: { nodes?: BoardNode[]; edges?: BoardEdge[]; highlights?: Highlight[] }): Board {
+  const fresh: BoardEdge[] = [];
+  for (const edge of edges) if (isNewConnection([...board.edges, ...fresh], edge)) fresh.push(edge);
+  if (!nodes.length && !fresh.length && !highlights.length) return board;
+  return { ...board, nodes: [...board.nodes, ...nodes], edges: [...board.edges, ...fresh], highlights: [...board.highlights, ...highlights] };
+}
+
+function upsert(board: Board, nodes: BoardNode[], appendMissing: boolean): Board {
+  const present = new Set(board.nodes.map((n) => n.id));
+  const added = appendMissing ? nodes.filter((n) => !present.has(n.id)) : [];
+  if (!nodes.some((n) => present.has(n.id)) && !added.length) return board;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return { ...board, nodes: [...board.nodes.map((n) => byId.get(n.id) ?? n), ...added] };
+}
+
+/** Delete (addendum 4.7): a group dissolves in place (4.2); edges with an end on a removed node or highlight go;
+ *  a chunk's removal never removes a highlight. */
+function removeThings(board: Board, { nodeIds = [], edgeIds = [], highlightIds = [] }: Removal): Board {
+  // planDelete removes the nodes marked selected: here, exactly the ones asked for.
+  const chosen = board.nodes.filter((n) => nodeIds.includes(n.id)).map((n) => ({ ...n, selected: true }) as BoardNode);
+  const plan = planDelete(board.nodes, chosen, [], absoluteIn(board.nodes));
   const removed = new Set(plan.nodes.map((n) => n.id));
-  const droppedEdges = new Set(plan.edges.map((e) => e.id));
+  const gone = new Set([...removed, ...highlightIds]);
+  const edges = board.edges.filter((e) => !edgeIds.includes(e.id) && !gone.has(e.from) && !gone.has(e.to));
+  const highlights = board.highlights.filter((h) => !highlightIds.includes(h.id));
+  if (!removed.size && edges.length === board.edges.length && highlights.length === board.highlights.length) return board;
   const lifted = new Map(plan.lifted.map((n) => [n.id, n]));
-  return {
-    ...board,
-    nodes: board.nodes.filter((n) => !removed.has(n.id)).map((n) => lifted.get(n.id) ?? n),
-    edges: board.edges.filter((e) => !droppedEdges.has(e.id)),
-  };
+  return { ...board, nodes: board.nodes.filter((n) => !removed.has(n.id)).map((n) => lifted.get(n.id) ?? n), edges, highlights };
 }
 
-/** The next state after an action; a saveable change marks it dirty and bumps the revision. */
-function next(state: BoardState, board: Board, saveable: boolean): BoardState {
-  if (!saveable) return { ...state, board };
-  return { board, dirty: true, revision: state.revision + 1 };
+function setTags(board: Board, target: TagTarget, id: string, tags: string[]): Board {
+  if (target === "node") return { ...board, nodes: board.nodes.map((n) => (n.id === id ? ({ ...n, data: { ...n.data, tags } } as BoardNode) : n)) };
+  if (target === "highlight") return { ...board, highlights: board.highlights.map((h) => (h.id === id ? { ...h, tags } : h)) };
+  return { ...board, edges: board.edges.map((e) => (e.id === id ? { ...e, data: { ...e.data, tags } } : e)) };
 }
+
+function applyEdit(board: Board, action: EditAction): Board {
+  switch (action.type) {
+    case "add": return addThings(board, action);
+    case "addNode": return addThings(board, { nodes: [action.node] });
+    case "addHighlight": return addThings(board, { highlights: [action.highlight] });
+    case "replaceNode": return upsert(board, [action.node], false);
+    case "upsertNodes": return upsert(board, action.nodes, true);
+    case "remove": return removeThings(board, action);
+    case "removeNode": return removeThings(board, { nodeIds: [action.id] });
+    case "setTags": return setTags(board, action.target, action.id, action.tags);
+  }
+}
+
+function edit(state: BoardState, action: EditAction): BoardState {
+  const board = applyEdit(state.board, action);
+  if (board === state.board) return state;
+  const merge = "merge" in action && action.merge === true;
+  return { ...next(state, board), history: merge ? state.history : record(state.history, snapshot(state.board)) };
+}
+
+function travel(state: BoardState, direction: "undo" | "redo"): BoardState {
+  const step = (direction === "undo" ? undo : redo)(state.history, snapshot(state.board));
+  if (!step) return state;
+  return { ...next(state, { ...state.board, ...step.restore }), history: step.history };
+}
+
+/** Saved on the usual debounce, never an undo step: view state (addendum 4) and the goal's text. */
+function unrecorded(state: BoardState, patch: Partial<Board>): BoardState {
+  return next(state, { ...state.board, ...patch });
+}
+
+function figureClip(state: BoardState, { id, clip, clip_size }: FigureClip): BoardState {
+  const patch = (n: BoardNode): BoardNode => (n.id === id && n.type === "figure" ? { ...n, data: { ...n.data, clip, clip_size } } : n);
+  const history = patchNodes(state.history, patch);
+  if (!state.board.nodes.some((n) => n.id === id)) return { ...state, history };
+  return { ...next(state, { ...state.board, nodes: state.board.nodes.map(patch) }), history };
+}
+
+const sameViewport = (a: Viewport, b: Viewport) => a.x === b.x && a.y === b.y && a.zoom === b.zoom;
 
 export function boardReducer(state: BoardState, action: BoardAction): BoardState {
   const { board } = state;
   switch (action.type) {
     case "load":
-      return { board: action.board, dirty: false, revision: state.revision };
-    case "nodes": {
-      const nodes = markUserSized(applyNodeChanges(action.changes, board.nodes) as BoardNode[], action.changes);
-      return next(state, { ...board, nodes }, action.changes.some(dirtiesNodes));
-    }
-    case "edges": {
-      const edges = applyEdgeChangesById(action.changes, board.edges);
-      return next(state, { ...board, edges }, action.changes.some((c) => c.type !== "select"));
-    }
-    case "addHighlight":
-      return next(state, { ...board, highlights: [...board.highlights, action.highlight] }, true);
-    case "addNode":
-      return next(state, { ...board, nodes: [...board.nodes, action.node] }, true);
-    case "replaceNode":
-      return next(state, { ...board, nodes: board.nodes.map((n) => (n.id === action.node.id ? action.node : n)) }, true);
-    case "removeNode":
-      return next(state, removeNode(board, action.id), true);
-    case "viewport":
-      if (board.viewport.x === action.viewport.x && board.viewport.y === action.viewport.y
-          && board.viewport.zoom === action.viewport.zoom) return state;
-      return next(state, { ...board, viewport: action.viewport }, true);
+      return { board: action.board, dirty: false, revision: state.revision, history: emptyHistory };
     case "saved": {
       // A save without a revision (or of the latest revision) settles the board; an older one does not.
       const current = action.revision === undefined || action.revision === state.revision;
       return { ...state, board: { ...board, version: action.version }, dirty: state.dirty && !current };
     }
+    case "nodes": return applyNodes(state, action.changes);
+    case "setFigureClip": return figureClip(state, action);
+    case "setGoal": return unrecorded(state, { goal: action.goal });
+    case "setView": return board.view === action.view ? state : unrecorded(state, { view: action.view });
+    case "setPaperScroll": return unrecorded(state, { paper_scroll: action.scroll });
+    case "setActiveTags": return unrecorded(state, { active_tags: action.tags });
+    case "viewport": return sameViewport(board.viewport, action.viewport) ? state : unrecorded(state, { viewport: action.viewport });
+    case "undo":
+    case "redo": return travel(state, action.type);
+    default: return edit(state, action);
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { boardReducer, initialBoardState } from "./boardReducer";
-import { emptyBoard, type BoardNode, type Highlight } from "./types";
+import { boardReducer, initialBoardState, type BoardAction, type BoardState } from "./boardReducer";
+import { UNDO_LIMIT } from "./history";
+import { emptyBoard, type Board, type BoardEdge, type BoardNode, type Highlight, type NoteNode, type Rect } from "./types";
 
 const q = { exact: "x", prefix: "", suffix: "" };
 const highlight: Highlight = { id: "h-1", tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], quote: q, position: 0, state: "anchored" } };
@@ -78,16 +79,6 @@ describe("boardReducer", () => {
     expect(s.board.edges.map((e) => e.id)).toEqual(["e-other"]);
     expect(s.board.highlights).toEqual([highlight]);
   });
-  it("edge changes from React Flow apply to the stored edges by id: select is runtime, remove is saved", () => {
-    const board = { ...emptyBoard("p"), nodes: [note, { ...note, id: "n-2" }], edges: [edge("e-1", "n-1", "n-2"), edge("e-2", "n-2", "n-1")] };
-    let s = boardReducer(initialBoardState, { type: "load", board });
-    s = boardReducer(s, { type: "edges", changes: [{ type: "select", id: "e-1", selected: true }] });
-    expect(s.dirty).toBe(false);
-    expect(s.board.edges[0]).toEqual({ ...edge("e-1", "n-1", "n-2"), selected: true });
-    s = boardReducer(s, { type: "edges", changes: [{ type: "remove", id: "e-1" }] });
-    expect(s.dirty).toBe(true);
-    expect(s.board.edges.map((e) => e.id)).toEqual(["e-2"]);
-  });
 });
 
 describe("boardReducer, ruling 7", () => {
@@ -150,4 +141,181 @@ it("saves changed viewport but ignores identical restore events", () => {
   const moved = boardReducer(loaded, {type: "viewport", viewport: {x: 120, y: 50, zoom: 1.4}});
   expect(moved.dirty).toBe(true);
   expect(moved.revision).toBe(loaded.revision + 1);
+});
+
+const qq = { exact: "x", prefix: "", suffix: "" };
+const area = { rects: [{ page: 0, rect: [0, 0, 100, 100] as Rect }], start: qq, end: qq, position: 0, state: "anchored" as const };
+const aNote = (id: string, extra: Partial<NoteNode> = {}): BoardNode =>
+  ({ id, type: "note", position: { x: 0, y: 0 }, data: { tags: [], collapsed: false, note: `notes/${id}.md`, origin: "reader" }, ...extra } as BoardNode);
+const aChunk = (id: string): BoardNode => ({ id, type: "chunk", position: { x: 0, y: 0 }, width: 320, data: { tags: [], collapsed: false, region: area, blocks: [], user_sized: false } });
+const aGroup = (id: string, x: number, y: number): BoardNode => ({ id, type: "group", position: { x, y }, width: 400, height: 300, data: { tags: [] } });
+const aMark = (id: string): Highlight => ({ id, tags: [], anchor: { rects: [{ page: 0, rect: [10, 10, 50, 20] }], quote: qq, position: 0, state: "anchored" } });
+const anEdge = (id: string, from: string, to: string): BoardEdge => ({ id, from, to, data: { tags: [] } });
+const opened = (parts: Partial<Board> = {}) => boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), version: 1, ...parts } });
+const run = (state: BoardState, ...actions: BoardAction[]) => actions.reduce(boardReducer, state);
+
+describe("undo and redo (addendum 4.7)", () => {
+  it("an edit is one step: undo takes it back and saves, redo puts it again", () => {
+    const added = run(opened(), { type: "add", nodes: [aNote("n-1")] });
+    const undone = run(added, { type: "undo" });
+    expect(undone.board.nodes).toEqual([]);
+    expect(undone.dirty).toBe(true);
+    expect(undone.revision).toBe(added.revision + 1);
+    expect(run(undone, { type: "redo" }).board.nodes.map((n) => n.id)).toEqual(["n-1"]);
+  });
+
+  it("a drag is one step, recorded when it stops", () => {
+    const s = run(opened({ nodes: [aNote("n-1")] }),
+      { type: "nodes", changes: [{ type: "position", id: "n-1", position: { x: 5, y: 5 }, dragging: true }] },
+      { type: "nodes", changes: [{ type: "position", id: "n-1", position: { x: 9, y: 9 }, dragging: true }] },
+      { type: "nodes", changes: [{ type: "position", id: "n-1", position: { x: 10, y: 10 }, dragging: false }] });
+    expect(s.history.past).toHaveLength(1);
+    expect(run(s, { type: "undo" }).board.nodes[0].position).toEqual({ x: 0, y: 0 });
+  });
+
+  it("a re-parent merged into the drag undoes with it, whichever arrives first", () => {
+    const s = run(opened({ nodes: [aGroup("n-g", 100, 100), aNote("n-1")] }),
+      { type: "nodes", changes: [{ type: "position", id: "n-1", position: { x: 150, y: 150 }, dragging: true }] },
+      { type: "replaceNode", node: aNote("n-1", { parentId: "n-g", position: { x: 50, y: 50 } }), merge: true },
+      { type: "nodes", changes: [{ type: "position", id: "n-1", position: { x: 50, y: 50 }, dragging: false }] });
+    expect(s.history.past).toHaveLength(1);
+    const back = run(s, { type: "undo" }).board.nodes.find((n) => n.id === "n-1")!;
+    expect(back.parentId).toBeUndefined();
+    expect(back.position).toEqual({ x: 0, y: 0 });
+  });
+
+  it("a resize is one step, recorded when it ends", () => {
+    const s = run(opened({ nodes: [aNote("n-1")] }),
+      { type: "nodes", changes: [{ type: "dimensions", id: "n-1", resizing: true, setAttributes: true, dimensions: { width: 300, height: 90 } }] },
+      { type: "nodes", changes: [{ type: "dimensions", id: "n-1", resizing: false, dimensions: { width: 300, height: 90 } }] });
+    expect(s.history.past).toHaveLength(1);
+    expect(run(s, { type: "undo" }).board.nodes[0].width).toBeUndefined();
+  });
+
+  it("selecting and measuring are neither saved nor recorded", () => {
+    const start = opened({ nodes: [aNote("n-1")] });
+    const s = run(start,
+      { type: "nodes", changes: [{ type: "select", id: "n-1", selected: true }] },
+      { type: "nodes", changes: [{ type: "dimensions", id: "n-1", dimensions: { width: 200, height: 80 } }] });
+    expect(s.history.past).toHaveLength(0);
+    expect(s.revision).toBe(start.revision);
+  });
+
+  it("view state and the goal are saved but never undone", () => {
+    let s = run(opened(), { type: "add", nodes: [aNote("n-1")] },
+      { type: "setView", view: "board" }, { type: "setActiveTags", tags: ["t-claim"] },
+      { type: "setPaperScroll", scroll: { page: 2, y: 40 } }, { type: "setGoal", goal: "why" },
+      { type: "viewport", viewport: { x: 5, y: 6, zoom: 1.5 } });
+    expect(s.history.past).toHaveLength(1);
+    s = run(s, { type: "undo" });
+    expect(s.board.nodes).toEqual([]);
+    expect(s.board).toMatchObject({ view: "board", active_tags: ["t-claim"], paper_scroll: { page: 2, y: 40 }, goal: "why", viewport: { x: 5, y: 6, zoom: 1.5 } });
+  });
+
+  it("a new edit clears what could be redone", () => {
+    const s = run(opened(), { type: "add", nodes: [aNote("n-1")] }, { type: "undo" }, { type: "add", nodes: [aNote("n-2")] });
+    expect(s.history.future).toEqual([]);
+    expect(run(s, { type: "redo" })).toBe(s);
+  });
+
+  it("keeps the last 100 steps, and undo with nothing left changes nothing", () => {
+    let s = opened();
+    for (let i = 0; i < UNDO_LIMIT + 5; i++) s = run(s, { type: "add", nodes: [aNote(`n-${i}`)] });
+    expect(s.history.past).toHaveLength(UNDO_LIMIT);
+    for (let i = 0; i < UNDO_LIMIT; i++) s = run(s, { type: "undo" });
+    expect(s.board.nodes).toHaveLength(5);
+    expect(run(s, { type: "undo" })).toBe(s);
+  });
+
+  it("load clears the history, so undo never reaches past a conflict reload", () => {
+    const s = run(opened(), { type: "add", nodes: [aNote("n-1")] }, { type: "load", board: { ...emptyBoard("p"), version: 7 } });
+    expect(s.history).toEqual({ past: [], future: [], pending: null });
+  });
+
+  it("an edit that changes nothing records nothing and saves nothing", () => {
+    const start = opened({ nodes: [aNote("n-1")] });
+    expect(run(start, { type: "replaceNode", node: aNote("n-missing") })).toBe(start);
+    expect(run(start, { type: "add" })).toBe(start);
+    expect(run(start, { type: "remove", nodeIds: ["n-missing"] })).toBe(start);
+  });
+});
+
+describe("add, remove, tags", () => {
+  it("add puts nodes, highlights and edges in together, as one step", () => {
+    const s = run(opened(), { type: "add", nodes: [aNote("n-1")], highlights: [aMark("h-1")], edges: [anEdge("e-1", "h-1", "n-1")] });
+    expect(s.board.edges).toHaveLength(1);
+    expect(s.history.past).toHaveLength(1);
+  });
+
+  it("add skips a line to itself and a second line between the same two things", () => {
+    const s = run(opened({ nodes: [aNote("n-1"), aNote("n-2")], edges: [anEdge("e-1", "n-1", "n-2")] }),
+      { type: "add", edges: [anEdge("e-2", "n-2", "n-1"), anEdge("e-3", "n-1", "n-1")] });
+    expect(s.board.edges.map((e) => e.id)).toEqual(["e-1"]);
+  });
+
+  it("remove dissolves a group in place, drops edges on what it removed, and undoes in one step", () => {
+    const child = aNote("n-C", { parentId: "n-G", position: { x: 5, y: 7 } });
+    const start = opened({
+      nodes: [aGroup("n-G", 100, 100), child, aNote("n-O")], highlights: [aMark("h-1")],
+      edges: [anEdge("e-1", "n-C", "n-O"), anEdge("e-2", "n-G", "n-O"), anEdge("e-3", "h-1", "n-O")],
+    });
+    const s = run(start, { type: "remove", nodeIds: ["n-G"] });
+    const lifted = s.board.nodes.find((n) => n.id === "n-C")!;
+    expect(lifted.parentId).toBeUndefined();
+    expect(lifted.position).toEqual({ x: 105, y: 107 });
+    expect(s.board.edges.map((e) => e.id)).toEqual(["e-1", "e-3"]);
+    expect(s.board.highlights).toHaveLength(1);
+    expect(run(s, { type: "undo" }).board).toEqual(start.board);
+  });
+
+  it("removing a highlight drops its edges; removing a chunk keeps the highlights on the paper", () => {
+    const start = opened({ nodes: [aChunk("n-c"), aNote("n-1")], highlights: [aMark("h-1")], edges: [anEdge("e-1", "h-1", "n-1")] });
+    expect(run(start, { type: "remove", highlightIds: ["h-1"] }).board).toMatchObject({ highlights: [], edges: [] });
+    const cut = run(start, { type: "remove", nodeIds: ["n-c"] }).board;
+    expect(cut.highlights).toHaveLength(1);
+    expect(cut.edges).toHaveLength(1);   // the edge ends on the highlight, not on the chunk that held it (D12)
+  });
+
+  it("removes selected edges by id", () => {
+    const s = run(opened({ nodes: [aNote("n-1"), aNote("n-2")], edges: [anEdge("e-1", "n-1", "n-2")] }), { type: "remove", edgeIds: ["e-1"] });
+    expect(s.board.edges).toEqual([]);
+  });
+
+  it("setTags tags a node, a highlight or an edge", () => {
+    const s = run(opened({ nodes: [aNote("n-1"), aNote("n-2")], highlights: [aMark("h-1")], edges: [anEdge("e-1", "n-1", "n-2")] }),
+      { type: "setTags", target: "node", id: "n-1", tags: ["t-a"] },
+      { type: "setTags", target: "highlight", id: "h-1", tags: ["t-b"] },
+      { type: "setTags", target: "edge", id: "e-1", tags: ["t-c"] });
+    expect(s.board.nodes[0].data.tags).toEqual(["t-a"]);
+    expect(s.board.highlights[0].tags).toEqual(["t-b"]);
+    expect(s.board.edges[0].data.tags).toEqual(["t-c"]);
+    expect(s.history.past).toHaveLength(3);
+  });
+
+  it("upsertNodes replaces what exists and appends the rest, as one step", () => {
+    const s = run(opened({ nodes: [aGroup("n-t", 0, 0)] }),
+      { type: "upsertNodes", nodes: [{ ...aGroup("n-t", 0, 0), height: 900 }, aNote("n-1", { parentId: "n-t" })] });
+    expect(s.board.nodes.map((n) => n.id)).toEqual(["n-t", "n-1"]);
+    expect(s.board.nodes[0].height).toBe(900);
+    expect(s.history.past).toHaveLength(1);
+  });
+
+  it("a resize by the reader marks notes and figures user_sized too", () => {
+    const s = run(opened({ nodes: [aNote("n-1")] }),
+      { type: "nodes", changes: [{ type: "dimensions", id: "n-1", resizing: false, dimensions: { width: 300, height: 90 } }] });
+    expect((s.board.nodes[0].data as { user_sized?: boolean }).user_sized).toBe(true);
+  });
+});
+
+describe("figure clips are outside undo", () => {
+  it("setFigureClip fills the clip on the board and in every snapshot, and records nothing", () => {
+    const figure: BoardNode = { id: "n-f", type: "figure", position: { x: 0, y: 0 }, width: 320, data: { tags: [], collapsed: true, region: area, caption: "Figure 1", clip: null, clip_size: null } };
+    let s = run(opened({ nodes: [figure] }), { type: "add", nodes: [aNote("n-1")] });
+    s = run(s, { type: "setFigureClip", id: "n-f", clip: "clips/n-f.png", clip_size: { width: 600, height: 400 } });
+    expect(s.history.past).toHaveLength(1);
+    expect(s.dirty).toBe(true);
+    const inPast = s.history.past[0].nodes.find((n) => n.id === "n-f")!;
+    expect(inPast.data).toMatchObject({ clip: "clips/n-f.png" });
+    expect(run(s, { type: "undo" }).board.nodes[0].data).toMatchObject({ clip: "clips/n-f.png" });
+  });
 });
