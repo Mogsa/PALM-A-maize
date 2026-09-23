@@ -2,8 +2,9 @@ import pymupdf
 import pytest
 from conftest import FIXTURES
 
-from paperboard.snap import SNAP_THRESHOLD, select, text_under
+from paperboard.snap import SNAP_THRESHOLD, select
 from paperboard.source_model import PageRect
+from paperboard.words import text_under
 
 
 @pytest.fixture(scope="module")

@@ -15,8 +15,8 @@ from paperboard.board_model import (
 )
 from paperboard.export import export_markdown, highlights_in
 from paperboard.geometry import contains_point, midpoint
-from paperboard.snap import text_under
 from paperboard.source_model import PageRect
+from paperboard.words import text_under
 
 
 @pytest.fixture(scope="module")
