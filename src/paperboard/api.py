@@ -106,13 +106,20 @@ def create_app(root: Path) -> FastAPI:
     async def _invalid(_: Request, exc: RequestValidationError):
         return _error(422, "invalid", str(exc.errors()[0].get("msg", "invalid request")))
 
+    # A request body that fails its model is a RequestValidationError, above. A
+    # ValidationError that reaches here came from reading board.json, source.json
+    # or tags.json off disk: the server's data is corrupt, not the client's payload.
     @app.exception_handler(ValidationError)
-    async def _invalid_model(_: Request, exc: ValidationError):
-        return _error(422, "invalid", str(exc.errors()[0].get("msg", "invalid request")))
+    async def _corrupt(_: Request, exc: ValidationError):
+        return _error(500, "corrupt_data", f"{exc.title}: {exc.errors()[0].get('msg', 'invalid data')}")
 
     @app.exception_handler(ValueError)
     async def _value(_: Request, exc: ValueError):
         return _error(422, "invalid", str(exc))
+
+    @app.exception_handler(Exception)
+    async def _unhandled(_: Request, exc: Exception):
+        return _error(500, "internal", f"{type(exc).__name__}: {exc}")
 
     # -- papers -------------------------------------------------------------
 

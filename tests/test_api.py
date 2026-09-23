@@ -70,6 +70,23 @@ def test_text_returns_a_selection_with_anchors(client, resnet_id):
     assert selection["chunk"]["start"]["exact"]
 
 
+@pytest.mark.parametrize("name, route", [("board.json", "board"), ("source.json", "source")])
+def test_a_corrupt_file_on_disk_is_a_500_not_the_clients_fault(store_root, resnet_id, name, route):
+    (store_root / "papers" / resnet_id / name).write_text('{"schema": 1, "paper_id": ')
+    client = TestClient(create_app(store_root), raise_server_exceptions=False)
+    response = client.get(f"/api/papers/{resnet_id}/{route}")
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "corrupt_data"
+
+
+def test_any_other_server_failure_keeps_the_error_shape(store_root, resnet_id):
+    (store_root / "papers" / resnet_id / "paper.pdf").write_bytes(b"not a pdf at all")
+    client = TestClient(create_app(store_root), raise_server_exceptions=False)
+    response = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 0, "rect": [0, 0, 10, 10]}]})
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "internal"
+
+
 def test_text_rejects_bad_geometry(client, resnet_id):
     response = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": [10, 10, 5, 20]}], "snap": True})
     assert response.status_code == 422
