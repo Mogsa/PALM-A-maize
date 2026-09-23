@@ -97,15 +97,14 @@ class Store:
 
     def add_paper(self, pdf_bytes: bytes) -> SourceDocument:
         """Extract a PDF and lay out its folder. Idempotent for the same bytes,
-        because paper_id is a pure function of the file (extractor Task 7)."""
+        because paper_id is a pure function of the file (extractor Task 7).
+        A newer arXiv version has the same id, so the PDF is always replaced
+        along with source.json: the two in one folder must describe one file."""
         with tempfile.TemporaryDirectory() as scratch:
             staged = Path(scratch) / "paper.pdf"
             staged.write_bytes(pdf_bytes)
             doc = extract(staged)
-        folder = self.papers_dir / doc.paper_id
-        folder.mkdir(parents=True, exist_ok=True)
-        if not (folder / "paper.pdf").exists():
-            atomic_write(folder / "paper.pdf", pdf_bytes)
+        atomic_write(self.papers_dir / doc.paper_id / "paper.pdf", pdf_bytes)
         self.write_source(doc.paper_id, doc)
         return doc
 

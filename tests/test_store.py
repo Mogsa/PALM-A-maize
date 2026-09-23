@@ -130,6 +130,20 @@ def test_add_paper_extracts_and_lays_out_the_folder(tmp_path):
     assert len(list((tmp_path / "papers").iterdir())) == 1
 
 
+def test_re_adding_a_newer_version_replaces_the_pdf_with_its_source(tmp_path, monkeypatch, extracted):
+    """arXiv v1 and v2 share a paper id (the id carries no version). The folder
+    must not end up holding the old PDF beside the new version's source.json."""
+    import paperboard.store as store_module
+
+    monkeypatch.setattr(store_module, "extract", lambda _path: extracted["resnet"])
+    store = Store(tmp_path)
+    v1 = FIXTURES["resnet"].read_bytes()
+    v2 = v1 + b"\n% revised\n"
+    paper_id = store.add_paper(v1).paper_id
+    assert store.add_paper(v2).paper_id == paper_id
+    assert store.pdf_path(paper_id).read_bytes() == v2
+
+
 def test_clip_is_written_under_clips_and_referenced_relatively(store_root):
     store = Store(store_root)
     paper_id = store.list_papers()[0].paper_id
