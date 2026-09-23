@@ -1,4 +1,6 @@
 import json
+import os
+from datetime import UTC, datetime
 
 from conftest import FIXTURES
 from fastapi.testclient import TestClient
@@ -31,6 +33,38 @@ def test_extract_is_idempotent(tmp_path):
         )
         assert result.exit_code == 0
     assert len(list(tmp_path.iterdir())) == 1
+
+
+def test_extract_writes_atomically_and_keeps_pdf_and_source_together(tmp_path, monkeypatch, extracted):
+    """A crash mid-write leaves the previous source.json intact, and a re-run
+    with a newer PDF of the same paper replaces the PDF along with the source."""
+    import paperboard.cli as cli_module
+
+    doc = extracted["resnet"]
+    monkeypatch.setattr(cli_module, "extract", lambda _path: doc)
+    v1 = tmp_path / "v1.pdf"
+    v1.write_bytes(FIXTURES["resnet"].read_bytes())
+    out = tmp_path / "papers"
+    assert runner.invoke(app, ["extract", str(v1), "--out", str(out)]).exit_code == 0
+    source = out / doc.paper_id / "source.json"
+    before = source.read_bytes()
+
+    later = doc.model_copy(update={"extracted_at": datetime(2030, 1, 1, tzinfo=UTC)})
+    monkeypatch.setattr(cli_module, "extract", lambda _path: later)
+
+    def crash(src, dst):
+        raise OSError("simulated crash between tmp and replace")
+
+    with monkeypatch.context() as crashing:
+        crashing.setattr(os, "replace", crash)
+        assert runner.invoke(app, ["extract", str(v1), "--out", str(out)]).exit_code != 0
+    assert source.read_bytes() == before
+    assert not list(source.parent.glob("*.tmp"))
+
+    v2 = tmp_path / "v2.pdf"
+    v2.write_bytes(v1.read_bytes() + b"\n% revised\n")
+    assert runner.invoke(app, ["extract", str(v2), "--out", str(out)]).exit_code == 0
+    assert (out / doc.paper_id / "paper.pdf").read_bytes() == v2.read_bytes()
 
 
 def test_missing_file_exits_nonzero_with_a_readable_message(tmp_path):
