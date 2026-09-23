@@ -180,6 +180,16 @@ def test_reextract_reports_states_and_touches_only_source(client, resnet_id, sto
     assert (store_root / "papers" / resnet_id / "board.json").read_bytes() == board_before
 
 
+def test_reextract_keeps_the_folder_name_as_the_paper_id(client, resnet_id, monkeypatch, extracted):
+    import paperboard.api as api_module
+
+    renamed = extracted["resnet"].model_copy(update={"paper_id": "a-new-slug"})
+    monkeypatch.setattr(api_module, "extract", lambda _path: renamed)
+    assert client.post(f"/api/papers/{resnet_id}/extract").status_code == 200
+    assert client.get(f"/api/papers/{resnet_id}/source").json()["paper_id"] == resnet_id
+    assert resnet_id in [p["paper_id"] for p in client.get("/api/papers").json()]
+
+
 def _board_with_misplaced_highlight(client, resnet_id):
     """A board holding one highlight whose quote is on page 2 but whose stored rect
     is deliberately somewhere else. Re-finding it would move it; returning it as

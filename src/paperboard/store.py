@@ -92,7 +92,7 @@ class Store:
                 continue
             doc = self.read_source(folder.name)
             title = doc.sections[0].title if doc.sections else folder.name
-            out.append(PaperSummary(paper_id=doc.paper_id, title=title, page_count=len(doc.pages)))
+            out.append(PaperSummary(paper_id=folder.name, title=title, page_count=len(doc.pages)))
         return out
 
     def add_paper(self, pdf_bytes: bytes) -> SourceDocument:
@@ -112,6 +112,9 @@ class Store:
         return SourceDocument.model_validate_json((self.paper_dir(paper_id) / "source.json").read_text())
 
     def write_source(self, paper_id: str, doc: SourceDocument) -> None:
+        """The folder name is the paper id, always: a re-extraction that names the
+        paper differently (a changed title slug) must not move its board."""
+        doc = doc.model_copy(update={"paper_id": paper_id})
         folder = self.papers_dir / paper_id
         atomic_write(folder / "source.json", doc.model_dump_json(by_alias=True, indent=2).encode())
 

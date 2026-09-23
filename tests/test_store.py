@@ -144,6 +144,19 @@ def test_re_adding_a_newer_version_replaces_the_pdf_with_its_source(tmp_path, mo
     assert store.pdf_path(paper_id).read_bytes() == v2
 
 
+def test_the_folder_name_is_the_paper_id(store_root, extracted):
+    """A re-extraction whose extractor names the paper differently (a changed
+    title slug) must not change the id: the board lives in the folder."""
+    store = Store(store_root)
+    paper_id = extracted["resnet"].paper_id
+    store.write_source(paper_id, extracted["resnet"].model_copy(update={"paper_id": "renamed"}))
+    assert store.read_source(paper_id).paper_id == paper_id
+
+    path = store.paper_dir(paper_id) / "source.json"
+    path.write_text(path.read_text().replace(f'"{paper_id}"', '"hand-edited"'))
+    assert paper_id in [p.paper_id for p in store.list_papers()]
+
+
 def test_clip_is_written_under_clips_and_referenced_relatively(store_root):
     store = Store(store_root)
     paper_id = store.list_papers()[0].paper_id
