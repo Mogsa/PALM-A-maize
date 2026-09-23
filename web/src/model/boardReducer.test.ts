@@ -110,6 +110,18 @@ describe("boardReducer, ruling 7", () => {
     s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-1", resizing: false, dimensions: { width: 250, height: 90 } }] });
     expect(s.dirty).toBe(true);
   });
+  it("(d) a resize by the reader marks a chunk user_sized; a measurement does not", () => {
+    const region = { rects: [{ page: 0, rect: [0, 0, 1, 1] as [number, number, number, number] }], start: q, end: q, position: 0, state: "anchored" as const };
+    const chunk: BoardNode = { id: "n-c", type: "chunk", position: { x: 0, y: 0 }, data: { tags: [], collapsed: false, region, text: "t", user_sized: false } };
+    const sized = (s: ReturnType<typeof boardReducer>) => (s.board.nodes[0].data as { user_sized: boolean }).user_sized;
+    let s = boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), nodes: [chunk] } });
+    s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-c", dimensions: { width: 200, height: 80 } }] });
+    expect(sized(s)).toBe(false);
+    s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-c", resizing: true, setAttributes: true, dimensions: { width: 250, height: 90 } }] });
+    s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-c", resizing: false, dimensions: { width: 250, height: 90 } }] });
+    expect(sized(s)).toBe(true);
+    expect(s.dirty).toBe(true);
+  });
   it("(d) an expand-parent dimensions change (setAttributes, not resizing) dirties", () => {
     let s = boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), nodes: [note] } });
     s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-1", setAttributes: true, dimensions: { width: 400, height: 300 } }] });

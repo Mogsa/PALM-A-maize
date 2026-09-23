@@ -38,6 +38,14 @@ function dirtiesNodes(c: NodeChange<BoardNode>): boolean {
   return DIRTYING_NODE_CHANGES.has(c.type) && !("dragging" in c && c.dragging);
 }
 
+/** Once the reader resizes a chunk it keeps that size (addendum 4.2). Only NodeResizer's changes carry
+ *  `resizing`; a measurement or an expanding parent does not. Notes and figures have no `user_sized`. */
+function markUserSized(nodes: BoardNode[], changes: NodeChange<BoardNode>[]): BoardNode[] {
+  const resized = new Set(changes.filter((c) => c.type === "dimensions" && c.resizing !== undefined).map((c) => (c as { id: string }).id));
+  if (!resized.size) return nodes;
+  return nodes.map((n) => (n.type === "chunk" && resized.has(n.id) && !n.data.user_sized ? { ...n, data: { ...n.data, user_sized: true } } : n));
+}
+
 /** A node's absolute position from the stored ones: its own plus every ancestor's. */
 function absoluteIn(nodes: BoardNode[]): (id: string) => XY {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -81,7 +89,7 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
     case "load":
       return { board: action.board, dirty: false, revision: state.revision };
     case "nodes": {
-      const nodes = applyNodeChanges(action.changes, board.nodes) as BoardNode[];
+      const nodes = markUserSized(applyNodeChanges(action.changes, board.nodes) as BoardNode[], action.changes);
       return next(state, { ...board, nodes }, action.changes.some(dirtiesNodes));
     }
     case "edges": {
