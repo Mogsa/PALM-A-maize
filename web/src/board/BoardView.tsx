@@ -33,21 +33,24 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   /** On drop, a node belongs to the smallest group that wholly contains it, or to none. This one rule
    *  covers dropping in, dragging out, moving between groups, and nesting groups. Whole containment,
    *  not intersection, because a partial overlap is where the spike saw nodes jump (findings, section 2).
-   *  Coordinates converted explicitly (addendum 4.2). */
-  const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, dragged) => {
+   *  Coordinates converted explicitly (addendum 4.2). The rule applies to every dragged node: React Flow
+   *  calls onNodeDragStop for a multi-selection and for a dragged selection box too, with all of them in `nodes`. */
+  const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, __, draggedNodes) => {
     const box = (id: string): Box => {
       const internal = getInternalNode(id)!;
       return { ...internal.internals.positionAbsolute, width: internal.measured?.width ?? 0, height: internal.measured?.height ?? 0 };
     };
-    const me = box(dragged.id);
-    const target = state.board.nodes
-      .filter((n) => n.type === "group" && n.id !== dragged.id && !isDescendant(state.board.nodes, n.id, dragged.id))
-      .map((n) => ({ id: n.id, box: box(n.id) }))
-      .filter((g) => fitsInside(me, g.box))
-      .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)[0] ?? null;
-    if ((target?.id ?? null) === (dragged.parentId ?? null)) return;
-    const stored = state.board.nodes.find((n) => n.id === dragged.id)!;
-    dispatch({ type: "replaceNode", node: reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null) });
+    for (const dragged of draggedNodes) {
+      const me = box(dragged.id);
+      const target = state.board.nodes
+        .filter((n) => n.type === "group" && n.id !== dragged.id && !isDescendant(state.board.nodes, n.id, dragged.id))
+        .map((n) => ({ id: n.id, box: box(n.id) }))
+        .filter((g) => fitsInside(me, g.box))
+        .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)[0] ?? null;
+      if ((target?.id ?? null) === (dragged.parentId ?? null)) continue;
+      const stored = state.board.nodes.find((n) => n.id === dragged.id)!;
+      dispatch({ type: "replaceNode", node: reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null) });
+    }
   }, [dispatch, getInternalNode, state.board.nodes]);
 
   const addGroup = () => {

@@ -150,3 +150,49 @@ test('switching views moves nothing: the paper keeps its place and the board its
   await page.getByRole('button', {name: 'Board', exact: true}).click();
   await expect(card).toBeVisible();
 });
+
+/** A big group on the right and two short chunks on the left, outside it. */
+async function seedGroupAndTwo(page: Page) {
+  const group = { id: 'n-g', type: 'group', position: { x: 450, y: 40 }, width: 700, height: 560, data: { tags: [], name: null } };
+  const id = await seedBoard(page, { nodes: [group, chunk('n-a', 40, 100, 'First.'), chunk('n-b', 40, 300, 'Second.')] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  return id;
+}
+
+async function dragBy(page: Page, target: { boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null> }, dx: number) {
+  const box = (await target.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2, {steps: 15});
+  await page.mouse.up();
+}
+
+async function parentsAfterSave(page: Page, id: string) {
+  await expect(page.locator('.notice')).toHaveText(/Saved/);
+  const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
+  return Object.fromEntries(board.nodes.map((n: { id: string; parentId?: string }) => [n.id, n.parentId ?? null]));
+}
+
+test('dropping a multi-selection into a group re-parents every dragged node', async ({page}) => {
+  const id = await seedGroupAndTwo(page);
+  const title = (nodeId: string) => page.locator(`.react-flow__node[data-id="${nodeId}"] .title`);
+  await title('n-a').click();
+  await title('n-b').click({modifiers: ['ControlOrMeta']});
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(2);
+  await dragBy(page, title('n-a'), 480);
+  await expect.poll(() => parentsAfterSave(page, id)).toEqual({ 'n-g': null, 'n-a': 'n-g', 'n-b': 'n-g' });
+});
+
+test('dropping a box selection into a group re-parents every node in it', async ({page}) => {
+  const id = await seedGroupAndTwo(page);
+  const pane = (await page.locator('.react-flow__pane').boundingBox())!;
+  await page.keyboard.down('Shift');
+  await page.mouse.move(pane.x + 20, pane.y + 70);
+  await page.mouse.down();
+  await page.mouse.move(pane.x + 400, pane.y + 440, {steps: 10});
+  await page.mouse.up();
+  await page.keyboard.up('Shift');
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(2);
+  await dragBy(page, page.locator('.react-flow__nodesselection-rect'), 480);
+  await expect.poll(() => parentsAfterSave(page, id)).toEqual({ 'n-g': null, 'n-a': 'n-g', 'n-b': 'n-g' });
+});
