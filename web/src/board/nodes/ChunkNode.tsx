@@ -4,9 +4,10 @@ import type { ChunkNode as ChunkNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
 import { paintMarks, reflow } from "../marks";
 import { useOverflow } from "../overflow";
+import { CollapseToggle } from "./CollapseToggle";
 
 export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
-  const { state, dispatch, words } = useBoard();
+  const { state, words } = useBoard();
   // NodeProps.height also includes automatic measurements; only a stored height fixes the box size.
   const height = state.board.nodes.find((node) => node.id === id)?.height;
   const marks = highlightsIn(state.board.highlights, data.region);
@@ -19,16 +20,12 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const title = reflow(data.region.start.exact, words).slice(0, 80);
   const page = data.region.rects[0].page + 1;
   const [bodyRef, overflowing] = useOverflow<HTMLDivElement>();
-  const toggle = () => {
-    const node = state.board.nodes.find((n) => n.id === id)!;
-    dispatch({ type: "replaceNode", node: { ...node, data: { ...data, collapsed: !data.collapsed } } as ChunkNodeType });
-  };
   const classes = ["node", "chunk", data.region.state, height !== undefined && !data.collapsed ? "sized" : "", overflowing ? "overflowing" : ""].filter(Boolean).join(" ");
   return (
     <div className={classes}>
       <NodeResizer isVisible={selected && !data.collapsed} minWidth={200} minHeight={60} />
       <div className="node-head">
-        <button className="quiet toggle" onClick={toggle} title={data.collapsed ? "Expand" : "Collapse"} aria-label={data.collapsed ? "Expand" : "Collapse"}>{data.collapsed ? "▸" : "▾"}</button>
+        <CollapseToggle id={id} collapsed={data.collapsed} />
         <span className="badge" title={`Page ${page}`}>p{page}</span>
         <span className="title">{title}</span>
         {painted > 0 && <span className="count" title={`${painted} highlight${painted === 1 ? "" : "s"} inside${unplaced ? `; ${unplaced} more not found in this text` : ""}`}>{painted}</span>}

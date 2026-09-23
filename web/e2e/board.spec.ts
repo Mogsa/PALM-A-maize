@@ -196,3 +196,22 @@ test('dropping a box selection into a group re-parents every node in it', async 
   await dragBy(page, page.locator('.react-flow__nodesselection-rect'), 480);
   await expect.poll(() => parentsAfterSave(page, id)).toEqual({ 'n-g': null, 'n-a': 'n-g', 'n-b': 'n-g' });
 });
+
+test('a figure and a note collapse and expand like a chunk', async ({page}) => {
+  const figure = { id: 'n-fig', type: 'figure', position: { x: 40, y: 100 }, width: 320, height: 220,
+    data: { tags: [], collapsed: false, region, caption: 'Figure 2. Residual learning: a building block.' } };
+  const note = { id: 'n-note', type: 'note', position: { x: 440, y: 100 }, width: 280, height: 220,
+    data: { tags: [], collapsed: false, note: 'notes/n-note.md' } };
+  await seedBoard(page, { nodes: [figure, note] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  for (const id of ['n-fig', 'n-note']) {
+    const outer = page.locator(`.react-flow__node[data-id="${id}"]`);
+    await expect.poll(async () => (await outer.boundingBox())!.height).toBeGreaterThan(200);
+    await outer.getByTitle('Collapse', {exact: true}).click();
+    await expect(outer.locator('.node-body')).toHaveCount(0);
+    await expect.poll(async () => (await outer.boundingBox())!.height).toBeLessThan(60);
+    await outer.getByTitle('Expand', {exact: true}).click();
+    await expect(outer.locator('.node-body')).toHaveCount(1);
+    await expect.poll(async () => (await outer.boundingBox())!.height).toBeGreaterThan(200);
+  }
+});

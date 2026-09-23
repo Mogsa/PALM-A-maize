@@ -66,9 +66,9 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
 
   // Every path into <ReactFlow> goes through parentsFirst, not only saving: a node re-parented into a
   // group created after it would otherwise be listed before its parent (findings, section 3).
-  // Collapse only the rendered height, retaining the expanded size in the saved board.
+  // Collapse only the rendered height of any piece, retaining the expanded size in the saved board.
   const nodes = useMemo(() => parentsFirst(state.board.nodes).map((node) =>
-    node.type === "chunk" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node), [state.board.nodes]);
+    node.type !== "group" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node), [state.board.nodes]);
   return (
     <div className="board">
       <div className="board-tools">
