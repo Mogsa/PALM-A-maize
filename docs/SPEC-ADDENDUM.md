@@ -1,7 +1,9 @@
 # Addendum: shapes, contracts, and rules
 
-15 September 2026. Companion to SPEC.md. Grounded in three verification passes over the
-libraries SPEC.md section 8 names.
+15 September 2026, revised 23 September 2026 for board schema 2. Companion to SPEC.md.
+Grounded in three verification passes over the libraries SPEC.md section 8 names. The
+schema 2 revision writes in the fourteen decisions of SPEC.md's fifth revision; section 12
+lists them and every **[CHOICE]** they added.
 
 SPEC.md decides *what* the tool is and *why*. It does not say what shape anything is.
 That is fine for a human building it alone and fatal for agents building it in parallel,
@@ -23,7 +25,7 @@ than documentation. Two did not survive.
 |---|---|---|
 | paper view via `react-pdf-highlighter` | Dead since Nov 2024. Pins `pdfjs-dist` at exactly `4.4.168` against a current `6.3.289`. No rotation support anywhere in the source. Stores rectangles but **no quote text**, so it cannot re-anchor — which is what SPEC.md section 7 promises. Area selections persist as base64 PNG rasters at capture zoom. | `react-pdf` for rendering (current, maintained, tracks current PDF.js) plus our own selection layer, roughly 150 lines of geometry. |
 | extractor: GROBID or Docling, decided in build step 1 | Both were measured. The two things they are bought for do not work: Docling returned `level: 1` for every heading including `3.1`, GROBID emits a flat `<div>` list, and GROBID's own tracker calls its figure extraction "really bad". Install cost is ~2 GB of wheels plus model downloads, or a JVM service. | `pymupdf-layout`: same project, same licence, same version line as the PyMuPDF we already depend on. 43 MB wheel, weights bundled, no downloads, 0.11 s/page, coordinates already in PyMuPDF space. |
-| canvas via React Flow | Confirmed. `@xyflow/react` 12.11.6, MIT. Groups, nesting, and "move the parent, children follow" are one field, `parentId`. | Unchanged. `board.json` is React Flow's native shape. |
+| canvas via React Flow | Confirmed. `@xyflow/react` 12.11.6, MIT. Groups, nesting, and "move the parent, children follow" are one field, `parentId`. | Unchanged. `board.json` nodes are React Flow's native shape. Since schema 2, edges are stored by what they connect and become React Flow edges at render (section 4.0). |
 
 ### 1.1 Principle 8, restated
 
@@ -145,9 +147,11 @@ Field notes:
   caption), or `"drawings"` (`cluster_drawings()`). Surfaced so a reader can see that a
   figure boundary was guessed. Every figure rect is padded by 4 points before rendering;
   a tight clip cuts the bottom off.
-- `regions` is every labelled layout box, page and rectangle and label, for the snap rule
-  in section 5.3 and nothing else. Without it the API would re-run the layout model on
-  every text request. No text is stored per region; `page_text` has it.
+- `regions` is every labelled layout box, page and rectangle and label. Three things read
+  it: the text snap and the rectangle snap in section 5.3, and a chunk's blocks in section
+  4.0. Without it the API would re-run the layout model on every text request. No text is
+  stored per region; `page_text` has it. Its `formula` labels are why schema 2 needs no
+  formula list (section 12, D3).
 - `page_text` is the full extracted text per page, whitespace preserved. The anchoring
   module needs it and storing it makes re-anchoring testable without reopening the PDF.
 
@@ -195,15 +199,20 @@ rejected on licence grounds that are not visible from a package listing.
 
 ## 4. `board.json`
 
-**This is React Flow's native shape with runtime fields stripped.** There is no adapter
-layer and no translation. Verified against `@xyflow/react` 12.11.6's shipped type
-definitions.
+**Nodes are React Flow's native shape with runtime fields stripped.** There is no adapter
+layer and no translation for them. Verified against `@xyflow/react` 12.11.6's shipped type
+definitions. **Edges are not, since schema 2:** an edge is stored by the two things it
+connects, and its React Flow form is computed at render (section 4.0).
 
 ```json
 {
-  "schema": 1,
+  "schema": 2,
   "paper_id": "attention-is-all-you-need-1706.03762",
+  "version": 12,
+  "anchor_basis": "9b2e41d07c...",
   "goal": "Why am I reading this: to understand multi-head attention.",
+  "view": "paper",
+  "paper_scroll": { "page": 3, "y": 212.5 },
   "active_tags": [],
   "viewport": { "x": 0, "y": 0, "zoom": 1 },
   "nodes": [
@@ -225,8 +234,15 @@ definitions.
         "tags": ["t-claim", "t-pass1"],
         "collapsed": false,
         "region": { "...": "see section 5.1, a chunk anchor" },
-        "text": "Attention mechanisms have become an integral part ...",
-        "user_sized": true
+        "blocks": [
+          { "kind": "text", "page": 3, "rect": [108.0, 72.0, 504.0, 190.4],
+            "text": "An attention function can be described as mapping a query ..." },
+          { "kind": "clip", "page": 3, "rect": [215.0, 196.0, 396.0, 220.5], "label": "formula" },
+          { "kind": "text", "page": 3, "rect": [108.0, 226.0, 504.0, 330.8],
+            "text": "The two most commonly used attention functions are ..." }
+        ],
+        "user_sized": true,
+        "source_id": "sec-3.2.1"
       }
     },
     {
@@ -238,10 +254,11 @@ definitions.
       "data": {
         "tags": [],
         "collapsed": false,
-        "anchor": { "...": "see section 5" },
+        "region": { "...": "see section 5.1, a chunk anchor with one rectangle" },
         "clip": "clips/n-01J8Z3P.png",
         "clip_size": { "width": 436, "height": 644 },
-        "caption": "Figure 1: The Transformer - model architecture."
+        "caption": "Figure 1: The Transformer - model architecture.",
+        "source_id": "fig-1"
       }
     },
     {
@@ -249,62 +266,151 @@ definitions.
       "type": "note",
       "position": { "x": 1600, "y": 200 },
       "initialWidth": 280,
-      "data": { "tags": ["t-question"], "collapsed": false, "note": "notes/n-01J8Z3Q.md" }
+      "data": { "tags": ["t-question"], "collapsed": false, "note": "notes/n-01J8Z3Q.md", "origin": "reader" }
     }
   ],
   "edges": [
-    {
-      "id": "e-01J8Z3R",
-      "source": "n-01J8Z3M",
-      "sourceHandle": "h-01J8Z3S",
-      "target": "n-01J8Z3Q",
-      "data": { "tags": ["t-supports"] }
-    }
+    { "id": "e-01J8Z3R", "from": "h-01J8Z3S", "to": "n-01J8Z3Q", "data": { "tags": ["t-supports"] } },
+    { "id": "e-01J8Z3T", "from": "h-01J8Z3S", "to": "h-01J8Z3V", "data": { "tags": [] } }
   ],
   "highlights": [
-    {
-      "id": "h-01J8Z3S",
-      "tags": ["t-question"],
-      "note": null,
-      "anchor": { "...": "see section 5.1, a highlight anchor" }
-    }
+    { "id": "h-01J8Z3S", "tags": ["t-question"], "anchor": { "...": "see section 5.1, a highlight anchor" } },
+    { "id": "h-01J8Z3V", "tags": [], "anchor": { "...": "see section 5.1, a highlight anchor" } }
   ]
 }
 ```
 
 `version` is an integer, default 0, incremented by the server on every accepted write
-(section 7).
+(section 7). `anchor_basis` is the fingerprint of section 5.2.
 
-### 4.0 Chunks and highlights
+What schema 2 changed, field by field:
+
+- `view` is `"paper"` or `"board"`: the view showing when the board was last saved.
+- `paper_scroll` is `{page, y}` or `null`. `page` is the page at the top of the paper view,
+  and `y` is how far down that page the view starts, in PDF points from the page's top
+  edge (section 2), so it survives a change of zoom. `null` opens at the top of page 0.
+- `view`, `paper_scroll`, `viewport` and `active_tags` are **view state**. They are saved
+  on the same debounce as everything else (section 7) and are never part of an undo
+  snapshot (section 4.7), so undo never moves you.
+- A chunk's `data.blocks` replaces schema 1's `data.text` (section 4.0).
+- A note's `data.origin` is `"reader"` or `"ai"`, default `"reader"`, and is always
+  written. It is set when the note is created and never changes (section 6.2).
+- An edge is `{id, from, to, data: {tags}}` (section 4.0).
+- A highlight is `{id, tags, anchor}`. Its `note` is gone (section 4.0).
+
+`tags.json` stays at schema 1: nothing in it changed. The board and tags schema numbers
+are independent from here on.
+
+**[CHOICE]** View state lives in `board.json`, beside `viewport`, rather than in the
+browser's localStorage, so a board is still the whole of what you left. You would prefer
+localStorage if two machines sharing one board folder should not fight over where you
+were reading, or if the extra board writes while scrolling ever show up as `409`s between
+two open tabs.
+
+### 4.0 Chunks, highlights, and connections
 
 SPEC.md section 4 puts highlights on the paper and chunks on the board. In the file:
 
-- A **chunk** is a node of type `chunk` (or `figure`) whose `data.region` is a chunk anchor,
-  section 5.1. It has no list of highlights.
+- A **chunk** is a node of type `chunk` whose `data.region` is a chunk anchor (section
+  5.1) and whose `data.blocks` is what it shows. A **figure** is a node of type `figure`
+  whose `data.region` is a chunk anchor with one rectangle, plus a stored clip. Neither has
+  a list of highlights.
 - A **highlight** is an entry in the top-level `highlights` array, not a node. It has an
-  id prefixed `h-`, tags, an optional `note` (a note node id, or `null`), and a highlight
-  anchor. It has no position: it is drawn where its anchor says, in both views.
-- **Containment is geometry.** A chunk shows every highlight whose anchor rectangle lies
-  inside the chunk's region on the same page. Nothing stores the relation, so a highlight
-  made before its chunk was cut appears on the chunk the moment it exists, and overlapping
-  chunks share highlights. The check is `Rect.contains`, computed on load and on every
-  change to either list; it is cheap at the scale of one paper.
-- **An edge can end on a highlight.** React Flow edges connect nodes, so an edge to a
-  highlight has the containing chunk as `source` or `target` and the highlight id as
-  `sourceHandle` or `targetHandle`. The chunk node renders one handle per highlight it
-  contains, at the mark's position. If a highlight lies in no chunk, edges to it are
-  stored but not drawn, and the paper view draws them in the margin instead.
-- **A note on a highlight** is a note node connected to it by an edge; `highlights[].note`
-  is a cache of that edge's note id so the paper view and the question list need not
-  walk the edge list.
+  id prefixed `h-`, tags, and a highlight anchor holding one rectangle per line (section
+  5.1). It has no position and no note: it is drawn where its anchor says, in both views,
+  and its notes are found through its connections.
+- **Containment is geometry.** A chunk contains a highlight when it contains at least one
+  of the highlight's line rects, and it paints only those lines. A line rect is inside a
+  chunk when its midpoint lies inside one of the chunk's rects on the same page, the test
+  `highlights_in` already uses. Nothing stores the relation, so a highlight made before its
+  chunk was cut appears on the chunk the moment it exists, overlapping chunks share
+  highlights, and a highlight that runs across two chunks shows its own lines on each. It
+  is computed on load and on every change to either list, which is cheap at the scale of
+  one paper. This replaces schema 1's single-rectangle `Rect.contains` rule.
+- **Blocks.** `data.blocks` is the chunk's content in reading order: for each of the
+  chunk's rects in turn, the layout regions under it in `source.json` `regions` order,
+  which is reading order.
+  - `{kind: "text", page, rect, text}` for a region labelled `text`, `list-item`,
+    `section-header`, `title`, `caption` or `footnote` that overlaps the chunk rect.
+    `rect` is the overlap. `text` is the text under the overlap by the whole-word rule of
+    section 5.1, keeping the paper's line breaks, which the card reflows. A line-end
+    hyphen is joined server-side only when the joined word appears elsewhere in the page
+    text, so "state-of-the-art" survives. An overlap with no whole line inside contributes
+    nothing.
+  - `{kind: "clip", page, rect, label}` for a region labelled `formula`, `picture` or
+    `table` whose midpoint lies inside the chunk rect. `rect` is the whole region,
+    unpadded; `GET /render` (section 6) pads and renders it when the card shows it.
+    `label` is the layout label.
+  - `page-header` and `page-footer` regions never contribute: they are furniture, not
+    content.
+
+  The server computes blocks, in `POST /text` and in migration (section 4.6), and the
+  chunk stores them so the board renders without the source. Re-anchoring that moves a
+  chunk recomputes them.
+- **Connections.** An edge is stored as `{id, from, to, data: {tags}}`. `from` and `to`
+  are each a node id or a highlight id. The order is the order it was drawn in and carries
+  no meaning. At render, each end resolves to a card:
+  - a node id resolves to that node, with no handle;
+  - a highlight id resolves to the first chunk in `nodes` order that contains it, with
+    the highlight id as the handle, placed at the first of its lines inside that chunk. A
+    collapsed chunk puts the handle on its edge.
+
+  If either end resolves to nothing, the board does not draw the edge. That is the normal
+  state of a connection between marks that no chunk holds yet. The line appears the
+  moment a chunk is cut around both ends.
+- **On the paper**, every edge with an end on a highlight shows in that highlight's margin,
+  whether or not the board draws it. An edge to a note shows the note itself, as a margin
+  note. Any other edge shows a jump chip naming the other end: the section it starts in
+  and its first words, as in "→ §3 scaled dot-product". Clicking a chip scrolls the paper
+  view to the other end when it is on the paper (a highlight, or a chunk's or figure's
+  outline), and opens the board on it otherwise (a note or a group).
+- **Connecting to a heading** makes a highlight of the heading, from its `heading_rect`
+  in `source.json` through `POST /text` with `snap: false`, and connects to that. There is
+  no edge to a section as such.
+- **A note on a highlight** is a note node connected to it, and nothing caches it. The
+  margin and the question list walk `edges`. Schema 1's `highlights[].note` cache is gone
+  (D7): it caused a `422` after its note was deleted, kept a question answered after its
+  note was gone, and was never updated when edges changed. This supersedes the last bullet
+  of this section as written on 16 September, and the rule above it that an edge to a
+  highlight names the containing chunk as `source` and the highlight as `sourceHandle`.
+
+**[CHOICE]** Edges are stored as `from`/`to` between the things themselves, which departs
+from "`board.json` is React Flow's native shape" for edges only. React Flow's `source`,
+`sourceHandle`, `target` and `targetHandle` are computed at render by resolving a highlight
+to the chunk that contains it, the same geometry that places marks, and are never stored.
+So re-cutting or deleting a chunk never breaks a connection, and a highlight in no chunk
+can be connected at all. The cost is a resolution pass on every render and a rule for
+overlapping chunks: the first containing chunk in `nodes` order draws the line, which is
+deterministic but still one pick among several. You would prefer storing React Flow's
+native shape, a chunk plus a handle, if connections only ever ran between pieces already on
+the board. You would prefer drawing one line from every containing chunk if overlapping
+chunks become common and a line from only one of them misleads.
+
+**[CHOICE]** Block membership differs by kind. A text region contributes the words under
+its overlap with the chunk, so a cut that starts mid-paragraph shows exactly its words. A
+formula, figure or table contributes only when its midpoint is inside, and then whole,
+because half an equation is worse than none. The cost: text the layout model put in no
+region is not shown, and a formula cut in half by the chunk's edge is dropped. You would
+prefer splitting each chunk rect at its clip regions and showing all text between them if
+the layout model misses text often enough to lose words in real reading.
 
 ### 4.1 Persisted fields, exhaustively
 
-Highlights: `id`, `tags`, `note`, `anchor`.
+Top level: `schema`, `paper_id`, `version`, `anchor_basis`, `goal`, `view`,
+`paper_scroll`, `active_tags`, `viewport`, `nodes`, `edges`, `highlights`.
+Highlights: `id`, `tags`, `anchor`.
 Nodes: `id`, `type`, `position`, `data`, `parentId`, `extent`, `width`, `height`,
 `initialWidth`, `initialHeight`, `hidden`, `zIndex`.
-Edges: `id`, `type`, `source`, `sourceHandle`, `target`, `targetHandle`, `data`.
-Plus top-level `viewport`.
+Node `data`, by type:
+- chunk: `tags`, `collapsed`, `region`, `blocks`, `user_sized`, `source_id`;
+- figure: `tags`, `collapsed`, `region`, `clip`, `clip_size`, `caption`, `source_id`;
+- note: `tags`, `collapsed`, `note`, `origin`, `user_sized`;
+- group: `tags`, `name`.
+
+Edges: `id`, `from`, `to`, `data`, and `data` holds `tags` only.
+
+A note's `user_sized` is listed because section 4.2 already sets it on a resized note;
+schema 1's model never allowed it, so a resized note could not be saved.
 
 The tool itself never writes `extent`: the spike measured that `extent: "parent"` clamps a
 node the moment it is re-parented and traps it inside the group. It stays in the list above
@@ -343,6 +449,13 @@ byte-identical file.
   dissolving a group lifts only its direct children into the nearest surviving ancestor
   (or the root) without moving them on screen, leaves nested groups intact, and keeps the
   edges of surviving pieces.
+
+**The filter rule** (D8). With `active_tags` empty, nothing is hidden. Otherwise a node
+is shown when its `data.tags` shares a tag with `active_tags`, and a group is also shown
+while any of its children is. A highlight inside a chunk is painted at full strength when
+it carries an active tag and dimmed otherwise. A connection is drawn while both its ends
+are shown, whatever its own tags. The paper view is not filtered: the filter is a view of
+the board.
 
 **[CHOICE]** The tag filter is view state — one top-level `active_tags` — and `hidden` is
 computed at render. Persisting `hidden` per node would rewrite hundreds of nodes every
@@ -404,7 +517,78 @@ files if you wanted the notes directory to be independently browsable and meanin
 All ids are minted client-side as ULIDs, prefixed by kind: `n-` node, `e-` edge, `h-` highlight, `t-` tag.
 Client-side because the reader must be able to place a piece without waiting on a round
 trip. ULID rather than UUIDv4 because ULIDs sort by creation time, which makes a
-`board.json` diff readable.
+`board.json` diff readable. The one id the server makes is the edge that migration adds
+for a schema 1 note cache, and it is derived, not minted (section 4.6).
+
+### 4.6 Migration from schema 1
+
+The server migrates a schema 1 board on load, in `GET /board`, before re-anchoring. The
+client never sees schema 1 and never migrates anything. The steps, in order:
+
+1. **Highlights.** `anchor.page` and `anchor.rect` become `anchor.rects: [{page, rect}]`,
+   one entry. The rect is kept as it is, not split into lines, so a schema 1 mark that
+   spans lines paints as one box until the source changes and re-anchoring recomputes its
+   lines (section 5.2).
+2. **Edges.** `from = sourceHandle ?? source`, `to = targetHandle ?? target`. `source`,
+   `sourceHandle`, `target`, `targetHandle` and `type` are dropped; `data` is kept.
+3. **The note cache.** A highlight whose `note` names an existing note node, with no edge
+   between that highlight and that note in either direction after step 2, gains the edge
+   `{id, from: highlight id, to: note id, data: {tags: []}}`. A `note` naming a node that
+   no longer exists is dropped with no edge. Then `note` is removed from every highlight.
+4. **Chunks.** `data.text` becomes `data.blocks`, derived from the chunk's `region`
+   against `source.json` and the PDF by the rule in section 4.0. `text` is dropped.
+5. **Notes.** Every note node gains `data.origin: "reader"`. Every note written before
+   schema 2 was the reader's own.
+6. **Top level.** `view: "paper"`, `paper_scroll: null`, `schema: 2`.
+
+The migrated board is returned, not written. The file on disk becomes schema 2 on the next
+accepted `PUT`, which accepts only schema 2; a `PUT` of schema 1 is a `422`. The migration
+is a pure function of the board, the source and the PDF, and running it on a schema 2
+board changes nothing. It is tested without a browser: each step against a hand-written
+schema 1 board, and a schema 1 board round-tripped through `GET` and `PUT`.
+
+**[CHOICE]** The edge that step 3 adds takes the id `e-` followed by the highlight's id
+without its `h-`, rather than a freshly minted ULID. Section 4.5 has the client mint every
+id, and a migration that mints a fresh one would give the same edge a different id on
+every load until the first save. The derived id keeps the migration a pure function and
+cannot collide, because the ULID inside it was minted once, for the highlight. You would
+prefer minting on the server if ids had to encode their creation time truthfully, which
+nothing reads.
+
+**[CHOICE]** Before the first write over a schema 1 file, the server copies it once to
+`board.v1.json` beside it. The migration is one-way, and step 4 reads geometry that can be
+wrong; a copy costs one file. You would drop the copy if boards were under version control
+anyway.
+
+### 4.7 Undo, delete, and Tidy
+
+None of this is persisted. It is client behaviour with consequences for the files.
+
+- **Undo** is a stack of snapshots of the board without its view state. One snapshot per
+  gesture: a drag records on drag stop, never per frame, and a Tidy is one snapshot. The
+  stack holds 100; the oldest drops. Cmd-Z undoes, Shift-Cmd-Z redoes, and any new action
+  clears what could be redone. It lasts for the session: a reload starts it empty. Typing
+  inside a note uses the text area's own undo; a note's Markdown is not in a snapshot.
+- **Delete** or Backspace removes the selected nodes, edges and highlights. Deleting a
+  node or a highlight deletes every edge with an end on it. Deleting a group dissolves it
+  (section 4.2). Deleting a chunk never deletes a highlight, because highlights are on the
+  paper.
+- **Tidy** lays out the top-level nodes, those with no `parentId`, that have a connection
+  to another top-level node. An edge whose end is inside a group counts as the group's.
+  Only those nodes move. Every other top-level node is held fixed and still takes part in
+  collision, so tidied pieces do not land on it, and nothing inside a group moves. The
+  layout starts from the current positions and runs a fixed number of ticks with no
+  randomness, so the same board tidies the same way twice.
+
+**[CHOICE]** Deleting a note node never deletes its `.md` file, so undo can restore the
+note with its text. An orphaned note file is harmless, and section 4.4 already allows for
+them. The same holds for a figure's clip PNG, for the same reason. You would delete the
+files if the notes directory were meant to be browsed on its own and stray files
+confused you.
+
+**[CHOICE]** Tidy uses `d3-force` (ISC licence, small), because a paper's graph has
+several centres and no root. You would prefer `dagre` (MIT) for tiered left-to-right
+layouts, such as claim, then evidence, then assumptions.
 
 ---
 
@@ -418,8 +602,10 @@ whose PDF anchoring is the mature reference implementation.
 
 ```json
 {
-  "page": 2,
-  "rect": [108.0, 280.1, 504.0, 322.4],
+  "rects": [
+    { "page": 2, "rect": [108.0, 280.1, 504.0, 291.2] },
+    { "page": 2, "rect": [108.0, 292.0, 390.5, 303.1] }
+  ],
   "quote": {
     "exact": "Attention mechanisms have become an integral part of compelling sequence modeling",
     "prefix": "In all but a few cases, however, such attention mechanisms are used in conjunction with a recurrent network. ",
@@ -437,17 +623,27 @@ whose PDF anchoring is the mature reference implementation.
   important line in this section: coordinate-only and offset-only anchoring both break
   silently the moment extraction changes, which is exactly what SPEC.md section 7 says
   must not happen.
-- `rect` is the geometry for painting the highlight, and the fallback when the quote
-  cannot be found. A moved rect is recovered from the matched words themselves (their
-  character boxes, with `page.search_for` as the fallback), so a relocated highlight's
-  rect is the text's real bounding box, never a shifted copy of the stored one.
+- `rects` is one rectangle per line of the selection, each with its page, in reading
+  order. A line's rect is the bounding box of the words selected on it, taken from
+  PyMuPDF's word boxes by the existing text-under-rect rule: whole words, on lines mostly
+  inside the selection. So a highlight paints exactly the words selected and never the
+  unselected ends of its first and last lines. A highlight may cross columns and pages;
+  its lines are then on more than one column or page. This replaces schema 1's single
+  `page` and `rect`.
+- `rects` is the geometry for painting the highlight, and the fallback when the quote
+  cannot be found. Re-anchoring recomputes the line rects from the matched words
+  themselves, by the same rule (their character boxes, with `page.search_for` as the
+  fallback), so a relocated highlight's lines are the text's real lines, never shifted
+  copies of the stored ones.
 - `state` is one of `anchored`, `relocated`, `orphaned`. A relocated or orphaned piece is
   flagged in the UI, per SPEC.md section 5.1.
 
-A figure or equation excerpt has the same shape, with `quote.exact` holding up to 256
-characters of the text found inside the rectangle. That gives a figure a text fallback
-rather than pure geometry. Equations are not extracted separately: a highlighted equation
-is a rectangle like any other chunk, and `source.json` has no formula list.
+A highlight made from a rectangle selection (`mode: "area"`, section 5.3) has the same
+shape with one rect, the snapped rectangle, not lines, and `quote.exact` holding up to 256
+characters of the text found inside it. That gives a highlighted figure a text fallback
+rather than pure geometry. Equations are not extracted as a list: `source.json` has no
+formula list, and its `regions` carry the `formula` label that the rectangle snap and a
+chunk's blocks read.
 
 The shape above is the **highlight anchor**. A **chunk anchor** (`data.region` on a chunk
 node) covers a region that may cross pages and headings:
@@ -494,6 +690,19 @@ Runs in Python, server side, on load and after re-extraction, but only when the 
    matched text's bounding box has its midpoint inside a stored rectangle on the page it
    was found on (for a chunk, each end), and then the stored geometry is kept as drawn.
 
+For a highlight in schema 2, "geometry unchanged" is the chunk's rule applied to its ends:
+the midpoints of the first and last matched lines each lie inside one of the stored line
+rects. Then the stored rects are kept as drawn. Otherwise they are recomputed from the
+matched words, one per line.
+
+A highlight whose quote crosses a page break is matched against the text of the pages it
+spans, joined in order, which is the same concatenation `position` indexes into. The match
+is then split back into its pages to recompute the lines.
+
+**[CHOICE]** One quote across a page break, matched against joined page text, rather than
+one quote per page. It keeps a highlight's anchor the same shape wherever it is. You would
+prefer a quote per page if cross-page highlights often come back `orphaned` in real use.
+
 **[CHOICE]** Anchoring runs in Python, not the browser. The backend owns re-extraction and
 already has the page text, the logic lives in one place, and — decisive for build step 6 —
 it is testable with pytest and no browser. The cost is a round trip to resolve rects on
@@ -536,6 +745,31 @@ one number here I would expect to change after a day of real reading, so it shou
 to change and covered by a test that asserts behaviour at 0.5 and 0.7 rather than at 0.6.
 The modifier makes this choice low-stakes, which is the point of having it.
 
+**The forgiving rectangle** (D3). A rectangle drag, `mode: "area"`, is for figures, tables
+and equations. The rule:
+
+> Take the reader's rectangle. Among the `picture`, `table` and `formula` regions on its
+> page, find those it covers by at least `SNAP_THRESHOLD` of the region's own area, and
+> take the smallest. The result is that region, extended to include its caption when
+> `source.json` pairs it with one (`figures[].caption_rect`, section 3). If no region
+> qualifies, the result is exactly the rectangle.
+>
+> `snap: false`, Alt as for text, keeps the exact rectangle whatever it covers.
+
+Coverage is by area here, not characters, because a figure has few characters or none.
+The 4 pt of padding is added once, by the renderer (`CLIP_PAD`, as for every figure in
+section 3), and is not stored in the rect. So a snapped rect is the region's own geometry,
+and a re-render never pads twice. Clips render at 216 dpi, three times the page's native
+72, so an equation stays sharp at the zoom a reader uses.
+
+Two consequences, both deliberate. The rule can shrink a loose rectangle to the figure
+inside it; that is its point, and it differs from the text rule, which never returns less
+than was selected. And a rectangle around two figures snaps to the smaller one; hold Alt
+to keep both.
+
+**[CHOICE]** One threshold for both rules, character coverage for text and area coverage
+for rectangles. You would split it into a second constant if tuning one fights the other.
+
 ---
 
 ## 6. The HTTP API
@@ -545,18 +779,19 @@ FastAPI, bound to localhost only. All geometry per section 2.
 | Method | Route | Body / params | Returns |
 |---|---|---|---|
 | `GET` | `/api/papers` | — | `[{paper_id, title, page_count}]` |
-| `POST` | `/api/papers` | multipart PDF | `{paper_id}`; runs extraction |
+| `POST` | `/api/papers` | multipart PDF | `201 {paper_id}`; runs extraction. An existing id replaces the paper: `200 {paper_id, changed, states}` |
 | `GET` | `/api/papers/{id}/source` | — | `source.json` |
-| `POST` | `/api/papers/{id}/extract` | — | `{changed: [node_id], states: {...}}`; re-extracts and re-anchors |
+| `POST` | `/api/papers/{id}/extract` | — | `{changed: [id], states: {id: state}}`; re-extracts and re-anchors |
 | `GET` | `/api/papers/{id}/pdf` | — | the PDF bytes |
 | `GET` | `/api/papers/{id}/board` | — | `board.json` with anchors resolved |
 | `PUT` | `/api/papers/{id}/board` | `board.json` + `If-Match: <version>` | `{version}` |
 | `GET` | `/api/papers/{id}/notes/{node_id}` | — | `{markdown}` |
 | `PUT` | `/api/papers/{id}/notes/{node_id}` | `{markdown}` | `204` |
-| `POST` | `/api/papers/{id}/text` | `{rects: [{page, rect}], snap}` | `Selection`: `{text, rects, region_label, highlight, chunk}` |
-| `PUT` | `/api/papers/{id}/clips/{node_id}` | `{page, rect, dpi}` | `{clip, clip_size}`; renders and stores the PNG |
+| `POST` | `/api/papers/{id}/text` | `{rects: [{page, rect}], snap, mode}` | `Selection`: `{text, rects, region_label, highlight, chunk, blocks}` |
+| `PUT` | `/api/papers/{id}/clips/{node_id}` | `{page, rect, dpi}`, `dpi` default 216 | `{clip, clip_size}`; renders and stores the PNG |
 | `GET` | `/api/papers/{id}/clips/{node_id}.png` | — | `image/png` |
-| `GET` | `/api/papers/{id}/questions` | — | `[{node_id, text}]` |
+| `GET` | `/api/papers/{id}/render` | `?page&x0&y0&x1&y1&dpi`, `dpi` default 216 | `image/png`; stateless, writes nothing |
+| `GET` | `/api/papers/{id}/questions` | — | `[{id, kind, text}]` |
 | `POST` | `/api/papers/{id}/export` | `{tags: [tag_id]}` | `{path}` |
 | `GET` | `/api/tags` / `PUT` `/api/tags` | `tags.json` | `tags.json` |
 
@@ -570,17 +805,114 @@ sends the raw selection, one rectangle per column run — a run continues while 
 rect is on the same page, does not start above the run, and either overlaps it sideways
 or starts below it — because the spike measured that a per-page union of a two-column
 selection covers both columns. It receives the snapped rectangles back with `highlight`, a
-ready-to-store highlight anchor (null unless the selection is a single run, since a
-highlight anchor holds one rect), and `chunk`, a ready-to-store chunk anchor, so the rule
-has exactly one implementation and it is the testable one. A highlight and a cut send the
-same request; the browser decides afterwards, per the gesture, which anchor to keep.
+ready-to-store highlight anchor, `chunk`, a ready-to-store chunk anchor, and `blocks`, what
+a chunk cut from this selection will show, so the rules have exactly one implementation
+and it is the testable one. A highlight and a cut send the same request; the browser
+decides afterwards, per the gesture, which anchor to keep.
 
-Clips are rendered and stored by `PUT /clips/{node_id}` and served by
+`mode` is `"text"` (the default) or `"area"`:
+
+- **`"text"`**: the rects are the raw selection, one per column run, as above. `highlight`
+  is never null: it holds one rect per line (section 5.1), across any number of runs and
+  pages. This replaces schema 1's null for a selection of more than one run. `blocks` are
+  the blocks of the snapped rects, by section 4.0's rule.
+- **`"area"`**: exactly one rect, the dragged rectangle; more than one is a `422`. Section
+  5.3's rectangle rule applies. `highlight` holds the one snapped rect. `blocks` is a
+  single `{kind: "clip", page, rect, label}` with the snapped rect and the region's label,
+  or `label: null` when nothing snapped. A cut from an area selection becomes a `figure`
+  node: its region is `chunk`, its clip is stored by `PUT /clips` at 216 dpi, and its
+  caption is the paired figure's `caption` when the rule took one.
+
+`GET /render` renders `[x0, y0, x1, y1]` on `page`, padded 4 pt, at `dpi` (clamped to the
+same 36 to 300 as `PUT /clips`), and returns the PNG. It writes nothing. The response
+carries an `ETag` built from the PDF's sha256 and the query, so the browser caches each
+image and a replaced PDF (D9, below) invalidates it.
+
+**[CHOICE]** Clips inside a chunk come from a stateless render route rather than stored
+PNGs. Nothing in the board references them: they are derived from `blocks`, and the
+browser caches them. Stored PNGs would add a file per formula and a clean-up rule for
+every re-cut. You would prefer storing them if rendering on scroll ever became visibly
+slow on a long chunk.
+
+Figure clips are rendered and stored by `PUT /clips/{node_id}` and served by
 `GET /clips/{node_id}.png`, rather than rendered on request, because the client cannot
-write files and the board references clips by path.
+write files and the board references them by path. The default is 216 dpi; clips stored
+before schema 2 keep the resolution they were made at.
+
+`POST /extract` returns `changed`, every chunk, figure and highlight id whose `state`
+differs from its state before the re-extraction, and `states`, the state now of every
+chunk, figure and highlight.
+
+`POST /papers` derives the paper id from the PDF (section 3), and the id is the folder
+name, always. When the id names a paper that already exists, the upload replaces it (D9).
+Extraction runs on the new file first. Only when it succeeds are the PDF and `source.json`
+replaced, each atomically, and the board re-anchored as for `POST /extract`; the response
+is `200 {paper_id, changed, states}`. A failed extraction leaves the paper as it was and
+returns `500`. The board, notes and stored clips are kept. A stored figure clip still
+shows the old PDF until that figure is cut again.
 
 The question list is a server-side filter, defined precisely as: every highlight or node
-carrying the `question` tag that has no edge connecting it to a node of type `note`.
+carrying the `question` tag that has no edge connecting it to a note node whose
+`data.origin` is `"reader"`. A note carrying the tag is on the list like anything else.
+Edges are walked by `from` and `to`; nothing is cached (section 4.0). It reads the board
+after re-anchoring, as `GET /board` does. Each entry is `{id, kind, text}`: `kind` is
+`"highlight"` or the node's type, and `text` is a highlight's quote, a chunk's or figure's
+start quote, a note's first line, or a group's name.
+
+### 6.1 Export
+
+`POST /export {tags}` writes `export.md` in the paper folder and returns its path. It
+reads the board after re-anchoring. The client saves any pending board change first, so
+the file is what was on screen. The file, in order:
+
+1. `# <paper title>`, then the goal, if there is one, in italics.
+2. Each chunk and figure in paper order. A chunk is `## <its first line> (p. N)`, with `N`
+   the 1-based page of its first rect. A figure is `## <its label> (p. N)`, then its clip
+   as an image, `![<label>](clips/<id>.png)`, then its caption. Then each highlight it
+   contains, in paper order, as a `>` quote of `quote.exact`, followed by its tag names
+   in italics, comma-separated, when it has any, and then the notes connected to that
+   highlight. Then the notes connected to the chunk or figure itself. A chunk's text and
+   blocks are not written.
+3. `## Highlights outside any chunk`: every highlight no chunk or figure contains, in
+   paper order, each with its page, tags and notes.
+4. `## Notes`: every note not already written above. That is the notes connected to
+   nothing, plus any connected only to other notes or to groups.
+
+A note is written as the body of its Markdown file. A note whose `origin` is `"ai"` starts
+with `**AI:**`, so the literature note never passes an AI's words off as the reader's.
+
+Paper order is reading order, the same key for pieces and highlights: page, then the
+index in `regions` of the layout region the first rect starts in, then `(y0, x0)`. Never
+`(page, y0)` alone, which puts the right column before the left on a two-column page. A
+highlight's first rect is its first line. A highlight contained by several chunks is
+written once, under the first of them in paper order.
+
+With `tags`, a highlight is written when it carries one of them, a chunk or figure when it
+or a highlight inside it does, and a note when it carries one or is written under
+something that is. Without `tags`, everything is written.
+
+### 6.2 What needs no route
+
+Three schema 2 features are client-only and store nothing new.
+
+- **Paper links** (D10). react-pdf's annotation layer is on. An internal link scrolls the
+  paper view to its destination; an external link opens in a new tab. The links belong
+  to the paper, so this adds no connection.
+- **Find in paper** (D13) searches `source.json` `page_text` in the browser, ignoring
+  case and whitespace as section 5.2's matcher does, so a word broken across lines still
+  matches. Each hit shows its page, its section, and a few words either side; the section
+  is the one whose `text` contains the hit with those words. Clicking a hit scrolls the
+  paper view to its page and marks it in the page's text layer.
+- **Ask elsewhere** (D14) copies a prompt built from `ASK_PROMPT`, one named constant in
+  the client, with four slots: the marked words, their sentence from `page_text`, the
+  `text` of the section that holds the mark's first line, and the board's goal. It then
+  creates an empty note with `origin: "ai"`, connected to the mark, for the answer to be
+  pasted into.
+
+**[CHOICE]** A note's `origin` is fixed when it is created. Rewriting an AI answer in your
+own words is a new note, and connecting that note is what clears the question. You would
+prefer a toggle if rewriting in place turns out to be how people work, at the cost of
+making "I explained it myself" one click instead of one act.
 
 ---
 
@@ -622,7 +954,9 @@ command in the message; the fetch script is the only network use in the project.
   suite that protects SPEC.md section 7.
 - Snapping: assert whole-region at 0.7 coverage, exact at 0.5, and exact at 0.9 with
   `snap: false`. Asserting either side of the threshold rather than at it means tuning
-  `SNAP_THRESHOLD` does not break the suite.
+  `SNAP_THRESHOLD` does not break the suite. The rectangle rule is asserted the same way,
+  by area, on a `picture` region and a `formula` region.
+- Migration: each step of section 4.6 against a hand-written schema 1 board.
 - Atomic write: kill between `tmp` and `replace`, assert the old file survives intact.
 - API: FastAPI `TestClient` over a temp board folder.
 
@@ -675,6 +1009,25 @@ And two inconsistencies in the companion documents, unrelated to this addendum:
     coordinates" as settled fact. It does, badly. Soften it, since SPEC.md section 12
     correctly treated the extractor as open.
 
+Schema 2 adds these, applied in SPEC.md's fifth revision of 23 September 2026:
+
+11. **Section 2, principle 1**: text written elsewhere by an AI may be pasted in as a note
+    marked as AI; it never answers a question for you (D14).
+12. **Section 4**: highlights across columns and pages (D1), the paper's own links (D10),
+    find in paper (D13), connecting from the paper with margin chips (D12), and reopening
+    restores the view, the paper's scroll, the viewport and the filter (D5).
+13. **Section 5.1**: mixed blocks in a chunk (D2), the forgiving rectangle and sharp clips
+    (D3), delete and undo (D4), and highlights anchored and painted per line (D1).
+14. **Section 5.2**: the filter rule (D8), and only a note the reader wrote clears a
+    question (D14).
+15. **Section 5.3**: a connection is stored between the two things themselves, drawn as a
+    line on the board and as chips on the paper (D12).
+16. **Section 6**: Tidy (D11), Ask elsewhere (D14), and what export contains (D6).
+17. **Section 8**: the API gains a stateless render route.
+18. **Section 9**: Back and Forward, a section outline, citation peek, automatic term
+    linking, and calling an AI directly are not in v1.
+19. **Section 12**: one row per decision, D1 to D14.
+
 ---
 
 ## 10. Open, and deliberately so
@@ -688,7 +1041,9 @@ And two inconsistencies in the companion documents, unrelated to this addendum:
   survey. It costs a JVM at runtime and a bottom-left coordinate flip, which is why it is
   not the pick — but it is the first thing to try if proximity matching disappoints, ahead
   of Docling.
-- **`SNAP_THRESHOLD = 0.6`** is a guess that survives contact with nothing yet.
+- **`SNAP_THRESHOLD = 0.6`** is a guess that survives contact with nothing yet, and since
+  schema 2 it serves two rules, character coverage for text and area coverage for
+  rectangles (section 5.3).
 - **The tool still has no name.** SPEC.md section 12 is right that it decides nothing.
 
 ---
@@ -714,3 +1069,52 @@ Every `[CHOICE]` above was reviewed and accepted as written, with these outcomes
   `opendataloader-pdf` stays unbenchmarked as the escape hatch.
 - The ten amendments in section 9 are applied, plus: section pieces anchor on their heading
   (section 5.1), and `POST /text` takes `snap` (section 6).
+
+---
+
+## 12. Decisions taken, 23 September 2026
+
+**Schema 2, decided after the first code review.** Fourteen decisions, D1 to D14, the
+same numbering as SPEC.md section 12. Together they move `board.json` to schema 2
+(section 4), migrated by the server on load (section 4.6).
+
+- **D1, per-line highlights.** `anchor.rects`, one per line, from word boxes (sections 5.1
+  and 5.2). Supersedes schema 1's single `page` and `rect`, and section 4.0's
+  `Rect.contains` rule.
+- **D2, mixed blocks.** `data.blocks` replaces `data.text` (section 4.0). Clips inside a
+  chunk come from `GET /render` (section 6).
+- **D3, the forgiving rectangle.** Section 5.3; clips at 216 dpi. Reverses the spirit of
+  section 11's "the `formulas` list was removed because no command consumes it": no list
+  returns, but `formula` regions now have two consumers.
+- **D4, undo and delete.** Section 4.7. Client only; nothing is persisted.
+- **D5, the view restored.** `view` and `paper_scroll` beside `viewport` and
+  `active_tags` (section 4).
+- **D6, export.** Section 6.1.
+- **D7, no note cache.** `highlights[].note` is removed (sections 4.0, 4.1, 4.6).
+  Supersedes section 4.0's last bullet as written on 16 September.
+- **D8, the filter rule.** Section 4.2.
+- **D9, re-upload replaces.** Section 6.
+- **D10, paper links.** Section 6.2. No data change.
+- **D11, Tidy.** Section 4.7.
+- **D12, connections between the things themselves.** `from` and `to` (sections 4 and
+  4.0). Supersedes section 4.0's rule that an edge to a highlight names its chunk as
+  `source` and the highlight as `sourceHandle`, and section 1's "`board.json` is React
+  Flow's native shape" for edges.
+- **D13, find in paper.** Section 6.2. No route.
+- **D14, AI notes.** `data.origin` (section 4); the question list counts only the
+  reader's notes (section 6). Supersedes SPEC.md principle 1's absolute wording.
+
+The **[CHOICE]**s these added, for red-penning:
+
+- View state in `board.json`, not localStorage (section 4).
+- Edges stored as `from`/`to` and resolved at render; the first containing chunk in
+  `nodes` order draws the line (section 4.0).
+- Block membership: text by overlap, clips by midpoint and whole (section 4.0).
+- The migrated note-cache edge's id derived from the highlight's (section 4.6).
+- A `board.v1.json` copy before the first schema 2 write (section 4.6).
+- Deleting a note or figure never deletes its file (section 4.7).
+- `d3-force` for Tidy, not `dagre` (section 4.7).
+- One quote across a page break, matched against joined page text (section 5.2).
+- One `SNAP_THRESHOLD` for text and rectangles (section 5.3).
+- Chunk clips rendered on request, not stored (section 6).
+- A note's `origin` fixed at creation (section 6.2).
