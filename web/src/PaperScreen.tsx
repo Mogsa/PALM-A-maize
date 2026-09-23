@@ -12,7 +12,9 @@ type Pending = { rects: PageRect[]; at: DOMRect; exact: boolean; preview: string
 
 export const SELECTION_FAILED_MESSAGE = "Could not read that selection from the paper. Nothing was added.";
 
-export function PaperScreen({ focus, onOpenOnBoard }: { focus: PageRect | null; onOpenOnBoard: (nodeId: string) => void }) {
+type Props = { focus: PageRect | null; onFocusHandled: () => void; onOpenOnBoard: (nodeId: string) => void };
+
+export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   const { state, dispatch, source, paperId } = useBoard();
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,7 +49,7 @@ export function PaperScreen({ focus, onOpenOnBoard }: { focus: PageRect | null; 
 
   return (
     <>
-      <PaperView paperId={paperId} source={source} board={state.board} focus={focus}
+      <PaperView paperId={paperId} source={source} board={state.board} focus={focus} onFocusHandled={onFocusHandled}
                  onSelect={(rects, at, exact) => {
                    setError(null);
                    setPending({ rects, at, exact, preview: previewText(window.getSelection()?.toString() ?? "") });

@@ -59,7 +59,7 @@ export default function App() {
         </div>
         {/* A fresh focusRect every time, so the paper view scrolls again even for the same chunk. */}
         {view === "paper"
-          ? <PaperScreen focus={focusRect} onOpenOnBoard={(id) => { setFocusNode(id); setView("board"); }} />
+          ? <PaperScreen focus={focusRect} onFocusHandled={() => setFocusRect(null)} onOpenOnBoard={(id) => { setFocusNode(id); setView("board"); }} />
           : <BoardView focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={(rect) => { setFocusRect({ ...rect }); setView("paper"); }} />}
       </BoardProvider>
     </div>

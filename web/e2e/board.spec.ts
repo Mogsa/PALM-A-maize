@@ -10,8 +10,8 @@ test.afterEach(async ({request}) => {
 });
 const quote = { exact: 'Review chunk', prefix: '', suffix: '' };
 const region = { rects: [{ page: 0, rect: [50, 130, 280, 300] }], start: quote, end: quote, position: 0, state: 'anchored' };
-const chunk = (id: string, x: number, y: number, text: string) => ({ id, type: 'chunk', position: { x, y }, width: 320,
-  data: { tags: [], collapsed: false, user_sized: false, source_id: null, region, text } });
+const chunk = (id: string, x: number, y: number, text: string, where = region) => ({ id, type: 'chunk', position: { x, y }, width: 320,
+  data: { tags: [], collapsed: false, user_sized: false, source_id: null, region: where, text } });
 
 async function seed(page: Page, x = 40) {
   return seedBoard(page, { nodes: [chunk('n-review', x, 100, Array.from({length: 60}, (_, i) => `Line ${i}: text inside this chunk.`).join('\n'))] });
@@ -105,4 +105,23 @@ test('a chunk counts only the marks it paints, and keeps a handle for every mark
   await expect(card.locator('mark')).toHaveCount(1);
   await expect(card.locator('.count')).toHaveText('1');
   await expect(card.locator('.react-flow__handle.source')).toHaveCount(2);
+});
+
+test('a jump to the paper happens once, not again on every return to the paper', async ({page}) => {
+  const onPageFour = { ...region, rects: [{ page: 3, rect: [50, 100, 280, 300] }] };
+  await seedBoard(page, { nodes: [chunk('n-far', 40, 100, 'Far text.', onPageFour)] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await page.locator('.react-flow__node[data-id="n-far"] [data-testid=open-source]').click();
+  const pageOne = page.locator('.react-pdf__Page[data-page-number="1"]');
+  const pageFour = page.locator('.react-pdf__Page[data-page-number="4"]');
+  await expect(pageFour.locator('.react-pdf__Page__canvas')).toBeInViewport();
+  await page.locator('.paper').evaluate((el) => el.scrollTo(0, 0));
+  await expect(pageOne).toBeInViewport();
+
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await page.getByRole('button', {name: 'Paper', exact: true}).click();
+  await expect(pageFour.locator('.react-pdf__Page__canvas')).toBeVisible();
+  await page.waitForTimeout(500);   // a stale jump would land here
+  await expect(pageOne).toBeInViewport();
+  await expect(pageFour).not.toBeInViewport();
 });
