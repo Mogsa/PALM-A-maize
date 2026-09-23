@@ -41,6 +41,16 @@ def _error(status: int, code: str, message: str, **extra) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message, **extra}})
 
 
+def _anchors(board: Board) -> dict[str, tuple]:
+    """(state, geometry) for every highlight and piece, keyed by id: what a
+    re-extraction reports as changed when it differs before and after."""
+    out: dict[str, tuple] = {h.id: (h.anchor.state, h.anchor.page, h.anchor.rect) for h in board.highlights}
+    for n in board.nodes:
+        if isinstance(n, (ChunkNode, FigureNode)):
+            out[n.id] = (n.data.region.state, n.data.region.rects)
+    return out
+
+
 def create_app(root: Path) -> FastAPI:
     store = Store(root)
     app = FastAPI(title="paperboard", docs_url=None, redoc_url=None)
@@ -124,11 +134,11 @@ def create_app(root: Path) -> FastAPI:
             doc = extract(store.pdf_path(paper_id))
         except Exception as exc:  # noqa: BLE001 -- turned into a 500, not swallowed
             return _error(500, "extraction_failed", f"{type(exc).__name__}: {exc}")
+        before = _anchors(resolved_board(paper_id))
         store.write_source(paper_id, doc)
-        board = resolved_board(paper_id)
-        states = {h.id: h.anchor.state for h in board.highlights}
-        states.update({n.id: n.data.region.state for n in board.nodes if isinstance(n, (ChunkNode, FigureNode))})
-        return {"states": states}
+        after = _anchors(resolved_board(paper_id))
+        changed = [anchor_id for anchor_id, anchor in after.items() if before.get(anchor_id) != anchor]
+        return {"changed": changed, "states": {anchor_id: anchor[0] for anchor_id, anchor in after.items()}}
 
     @app.get("/api/papers/{paper_id}/pdf")
     def get_pdf(paper_id: str):

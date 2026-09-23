@@ -194,8 +194,19 @@ def test_reextract_reports_states_and_touches_only_source(client, resnet_id, sto
     board_before = (store_root / "papers" / resnet_id / "board.json").read_bytes()
     response = client.post(f"/api/papers/{resnet_id}/extract")
     assert response.status_code == 200
-    assert response.json()["states"] == {"h-1": "anchored"}
+    assert response.json() == {"changed": [], "states": {"h-1": "anchored"}}
     assert (store_root / "papers" / resnet_id / "board.json").read_bytes() == board_before
+
+
+def test_reextract_reports_what_changed(client, resnet_id, monkeypatch, extracted):
+    import paperboard.api as api_module
+
+    test_board_put_get_and_version_conflict(client, resnet_id)
+    doc = extracted["resnet"]
+    pages = [p.model_copy(update={"text": ""}) if p.page == 2 else p for p in doc.page_text]
+    monkeypatch.setattr(api_module, "extract", lambda _path: doc.model_copy(update={"page_text": pages}))
+    response = client.post(f"/api/papers/{resnet_id}/extract")
+    assert response.json() == {"changed": ["h-1"], "states": {"h-1": "orphaned"}}
 
 
 def test_reextract_keeps_the_folder_name_as_the_paper_id(client, resnet_id, monkeypatch, extracted):
