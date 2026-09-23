@@ -4,6 +4,8 @@ import type { Board, BoardEdge, ChunkNode, Highlight } from "./types";
 
 /** A React Flow edge drawn for a stored connection; `id` and `data` are the stored edge's. */
 export type FlowEdge = Edge<{ tags: string[] }>;
+/** The plan's name for what `resolveEdges` returns. A node end's handle is undefined (no handle). */
+export type ResolvedEdge = FlowEdge;
 
 type End = { node: string; handle?: string };
 

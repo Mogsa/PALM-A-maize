@@ -41,6 +41,8 @@ export type BoardEdge = { id: string; from: string; to: string; data: { tags: st
 
 export type Viewport = { x: number; y: number; zoom: number };
 export type BoardView = "paper" | "board";
+/** The plan's name for `BoardView`: the view the paper is open in. */
+export type View = BoardView;
 /** The page at the top of the paper view, and how far down it the view starts, in PDF points. */
 export type PaperScroll = { page: number; y: number };
 
@@ -73,9 +75,13 @@ export type Tag = { id: string; name: string; colour: string };
 export type TagFile = { schema: 1; tags: Tag[] };
 export type TemplateSlot = { name: string; prompt: string };
 export type TemplateFile = { schema: 1; slots: TemplateSlot[] };
+/** The plan's name for `TemplateSlot`. */
+export type Slot = TemplateSlot;
 
 export type Question = { id: string; kind: "highlight" | BoardNode["type"]; text: string };
 export type ExportOrder = "paper" | "template";
+/** `POST /export` returns `{path}` (addendum 6); `markdown` is read when the server also sends it. */
+export type ExportResult = { path: string; markdown?: string };
 /** A piece `POST /split` proposes: no id and no parentId; the client mints the id (addendum 6). */
 export type SplitDraft =
   | { type: "chunk"; position: { x: number; y: number }; data: ChunkData }
