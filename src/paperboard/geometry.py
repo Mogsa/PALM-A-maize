@@ -68,6 +68,14 @@ def union(a: Rect, b: Rect) -> Rect:
     return (min(ax0, bx0), min(ay0, by0), max(ax1, bx1), max(ay1, by1))
 
 
+def intersection(a: Rect, b: Rect) -> Rect | None:
+    """The overlap of two rects, or None when they do not overlap."""
+    ax0, ay0, ax1, ay1 = normalise(a)
+    bx0, by0, bx1, by1 = normalise(b)
+    x0, y0, x1, y1 = max(ax0, bx0), max(ay0, by0), min(ax1, bx1), min(ay1, by1)
+    return (x0, y0, x1, y1) if x0 < x1 and y0 < y1 else None
+
+
 def midpoint(rect: Rect) -> tuple[float, float]:
     x0, y0, x1, y1 = normalise(rect)
     return ((x0 + x1) / 2, (y0 + y1) / 2)

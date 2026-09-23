@@ -118,3 +118,18 @@ def test_text_under_keeps_line_breaks_and_reading_order(resnet):
     lines = text_under(pdf[2], region.rect).strip().split("\n")
     assert len(lines) > 3
     assert all(line == line.strip() and "  " not in line for line in lines)
+
+
+def test_snap_never_shrinks_a_drag_that_runs_into_the_next_paragraph(resnet):
+    """A drag over all of one paragraph and the top half of the next, midpoint in the
+    first: coverage is the first paragraph's characters inside the drag over its own,
+    and the snapped rect is the union of paragraph and drag, so nothing dragged over
+    is dropped (it used to come back as the first paragraph alone)."""
+    doc, pdf = resnet
+    first, second = _text_regions(doc, 2)[1:3]
+    x0, y0, x1, _ = first.rect
+    drag = PageRect(page=2, rect=(x0, y0, x1, (second.rect[1] + second.rect[3]) / 2))
+    result = select(doc, pdf, [drag], snap=True)
+    assert result.region_label == "text"
+    assert result.rects == [PageRect(page=2, rect=drag.rect)]
+    assert text_under(pdf[2], second.rect).split("\n")[0] in result.text
