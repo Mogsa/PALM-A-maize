@@ -6,7 +6,13 @@ from itertools import groupby
 import pymupdf
 from pydantic import BaseModel
 
-from paperboard.anchoring import PageIndex, build_index, global_position, rect_for_stripped, strip_whitespace
+from paperboard.anchoring import (
+    PageIndex,
+    build_index,
+    global_position,
+    rect_for_stripped,
+    strip_whitespace,
+)
 from paperboard.board_model import CONTEXT_CHARS, ChunkAnchor, HighlightAnchor, QuoteSelector
 from paperboard.geometry import Rect, area, contains_point, intersection, midpoint, normalise, union
 from paperboard.source_model import PageRect, SourceDocument

@@ -133,9 +133,8 @@ def _is_heading(region: Region) -> bool:
         return False
     if text.isdigit():
         return False  # a bare page number the model promoted
-    if text[0].islower() or text.endswith("."):
-        return False  # a body sentence the model promoted; no real heading looks like this
-    return True
+    # not a body sentence the model promoted; no real heading looks like one
+    return not (text[0].islower() or text.endswith("."))
 
 
 def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section]:

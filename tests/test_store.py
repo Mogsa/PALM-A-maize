@@ -3,10 +3,17 @@ import os
 import threading
 
 import pytest
-
-from paperboard.board_model import Board, NoteNode, PRESET_TAGS
-from paperboard.store import NodeNotFound, NoteNotFound, PaperNotFound, Store, VersionConflict, atomic_write
 from conftest import FIXTURES
+
+from paperboard.board_model import PRESET_TAGS, Board, NoteNode
+from paperboard.store import (
+    NodeNotFound,
+    NoteNotFound,
+    PaperNotFound,
+    Store,
+    VersionConflict,
+    atomic_write,
+)
 
 NOTE = "n-01J8Z3QABCDEFGHJKMNPQRSTVW"   # a node id as the client mints it (addendum 4.5)
 FIG = "n-01J8Z3QABCDEFGHJKMNPQRSTVX"

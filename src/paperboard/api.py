@@ -18,7 +18,14 @@ from paperboard.export import export_markdown
 from paperboard.extract import extract
 from paperboard.snap import Selection, select
 from paperboard.source_model import PageRect
-from paperboard.store import NodeNotFound, NoteNotFound, PaperNotFound, Store, VersionConflict, atomic_write
+from paperboard.store import (
+    NodeNotFound,
+    NoteNotFound,
+    PaperNotFound,
+    Store,
+    VersionConflict,
+    atomic_write,
+)
 
 LOCAL_HOSTS = ["127.0.0.1", "localhost"]
 
