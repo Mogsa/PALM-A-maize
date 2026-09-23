@@ -338,7 +338,11 @@ def _recover_rect(pdf: pymupdf.Document, index: list[PageIndex], match: Match) -
 
 
 def resolve_highlight(anchor: HighlightAnchor, index: list[PageIndex], pdf: pymupdf.Document) -> HighlightAnchor:
-    match = find_quote(index, anchor.quote, anchor.position, anchor.page)
+    # per-line: task 2A -- the first line rect stands in for schema 1's single
+    # rect: it gives the page hint, and a relocated highlight gets one bounding
+    # rect of the matched text instead of its lines recomputed from word boxes.
+    first = anchor.rects[0]
+    match = find_quote(index, anchor.quote, anchor.position, first.page)
     if match is None:
         return anchor.model_copy(update={"state": "orphaned"})
     rect = _recover_rect(pdf, index, match)
@@ -349,12 +353,13 @@ def resolve_highlight(anchor: HighlightAnchor, index: list[PageIndex], pdf: pymu
         # stored page the stored rect still means something, so keep it and
         # stay anchored. Only orphan when the match also moved to a different
         # page, where the stored rect no longer corresponds to anything.
-        if match.page == anchor.page:
+        if match.page == first.page:
             return anchor.model_copy(update={"state": "anchored", "position": position})
         return anchor.model_copy(update={"state": "orphaned"})
-    if _holds((match.page, rect), [PageRect(page=anchor.page, rect=anchor.rect)]):
+    if _holds((match.page, rect), anchor.rects):
         return anchor.model_copy(update={"state": "anchored", "position": position})
-    return anchor.model_copy(update={"page": match.page, "rect": rect, "position": position, "state": "relocated"})
+    relocated = [PageRect(page=match.page, rect=rect)]
+    return anchor.model_copy(update={"rects": relocated, "position": position, "state": "relocated"})
 
 
 def _regions_between(doc: SourceDocument, start: tuple[int, Rect], end: tuple[int, Rect]) -> list[tuple[int, Rect]]:

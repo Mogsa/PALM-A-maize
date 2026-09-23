@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo } from "react";
-import { Background, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized, type Node, type OnNodeDrag } from "@xyflow/react";
+import { Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized, type Node, type OnNodeDrag } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { planDelete } from "../model/dissolve";
+import { resolveEdges, type FlowEdge } from "../model/edges";
 import { newId } from "../model/ids";
 import { fitsInside, isDescendant, reparent, type Box } from "../model/reparent";
 import { parentsFirst } from "../model/serialize";
-import type { BoardEdge, BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/types";
+import type { BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
 import { ChunkNode } from "./nodes/ChunkNode";
 import { FigureNode } from "./nodes/FigureNode";
@@ -69,6 +70,8 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   // Collapse only the rendered height of any piece, retaining the expanded size in the saved board.
   const nodes = useMemo(() => parentsFirst(state.board.nodes).map((node) =>
     node.type !== "group" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node), [state.board.nodes]);
+  // Stored connections are between the things themselves; React Flow's form is computed here (addendum 4.0).
+  const edges = useMemo(() => resolveEdges(state.board), [state.board]);
   return (
     <div className="board">
       <div className="board-tools">
@@ -77,18 +80,23 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       {state.board.nodes.length === 0 && (
         <div className="empty-hint"><p>Nothing here yet. In the paper, select some text and choose <b>Cut</b> to place it on the board.</p></div>
       )}
-      <ReactFlow<BoardNode, BoardEdge>
-        nodes={nodes} edges={state.board.edges} nodeTypes={nodeTypes}
+      {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
+      <ReactFlow<BoardNode, FlowEdge>
+        nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
         onNodesChange={(changes) => dispatch({ type: "nodes", changes })}
         onEdgesChange={(changes) => dispatch({ type: "edges", changes })}
         onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick}
         onBeforeDelete={async ({ nodes: toDelete, edges: edgesToDelete }) => {
           // Dissolving a group must leave its pieces (addendum 4.2). React Flow hands us the group, all its
-          // descendants and every edge touching them; planDelete keeps what the reader did not choose.
+          // descendants and every edge touching them; planDelete keeps what the reader did not choose. It
+          // decides on the stored edges, whose ends are what they connect, not the chunk drawing them.
           const absolute = (id: string) => getInternalNode(id)!.internals.positionAbsolute;
-          const plan = planDelete(state.board.nodes, toDelete, edgesToDelete, absolute);
+          const offered = new Set(edgesToDelete.map((e) => e.id));
+          const stored = state.board.edges.filter((e) => offered.has(e.id));
+          const plan = planDelete(state.board.nodes, toDelete, stored, absolute);
           for (const node of plan.lifted) dispatch({ type: "replaceNode", node });
-          return { nodes: plan.nodes, edges: plan.edges };
+          const dropped = new Set(plan.edges.map((e) => e.id));
+          return { nodes: plan.nodes, edges: edgesToDelete.filter((e) => dropped.has(e.id)) };
         }}
         defaultViewport={state.board.viewport}
         onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}

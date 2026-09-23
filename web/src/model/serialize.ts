@@ -1,7 +1,8 @@
 import type { Board, BoardEdge, BoardNode } from "./types";
 
 export const PERSISTED_NODE_FIELDS = ["id", "type", "position", "data", "parentId", "extent", "width", "height", "initialWidth", "initialHeight", "hidden", "zIndex"] as const;
-export const PERSISTED_EDGE_FIELDS = ["id", "type", "source", "sourceHandle", "target", "targetHandle", "data"] as const;
+// Schema 2 stores an edge by what it connects (addendum 4.0); React Flow's source/target are computed at render.
+export const PERSISTED_EDGE_FIELDS = ["id", "from", "to", "data"] as const;
 
 function pick<T extends object>(obj: T, fields: readonly string[]): T {
   const out: Record<string, unknown> = {};

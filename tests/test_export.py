@@ -15,8 +15,8 @@ from paperboard.board_model import (
 )
 from paperboard.export import export_markdown, highlights_in
 from paperboard.geometry import contains_point, midpoint
-from paperboard.snap import text_under
 from paperboard.source_model import PageRect
+from paperboard.words import text_under
 
 
 @pytest.fixture(scope="module")
@@ -24,6 +24,14 @@ def resnet(extracted):
     pdf = pymupdf.open(FIXTURES["resnet"])
     yield extracted["resnet"], pdf
     pdf.close()
+
+
+def _anchor(page, rect, exact):
+    return HighlightAnchor(rects=[PageRect(page=page, rect=rect)], quote=QuoteSelector(exact=exact))
+
+
+def _blocks(text):
+    return [{"kind": "text", "page": 0, "rect": (0.0, 0.0, 1.0, 1.0), "text": text}]
 
 
 def _board(doc):
@@ -35,18 +43,18 @@ def _board(doc):
         return ChunkAnchor(rects=section.extent, start=QuoteSelector(exact=section.title),
                            end=QuoteSelector(exact=section.text[-40:]))
 
-    inside = HighlightAnchor(page=method.extent[0].page,
-                             rect=(method.extent[0].rect[0] + 2, method.extent[0].rect[1] + 20,
-                                   method.extent[0].rect[2] - 2, method.extent[0].rect[1] + 40),
-                             quote=QuoteSelector(exact="a passage inside 3.1"))
-    outside = HighlightAnchor(page=9, rect=(60.0, 300.0, 280.0, 320.0), quote=QuoteSelector(exact="a passage on page 10"))
+    inside = _anchor(method.extent[0].page,
+                     (method.extent[0].rect[0] + 2, method.extent[0].rect[1] + 20,
+                      method.extent[0].rect[2] - 2, method.extent[0].rect[1] + 40),
+                     "a passage inside 3.1")
+    outside = _anchor(9, (60.0, 300.0, 280.0, 320.0), "a passage on page 10")
     return Board(
         paper_id=doc.paper_id, goal="understand residual blocks",
         nodes=[
             ChunkNode(id="n-method", type="chunk", position={"x": 0, "y": 0},
-                      data={"tags": ["t-method"], "collapsed": False, "region": region(method).model_dump(), "text": method.text}),
+                      data={"tags": ["t-method"], "collapsed": False, "region": region(method).model_dump(), "blocks": _blocks(method.text)}),
             ChunkNode(id="n-intro", type="chunk", position={"x": 0, "y": 0},
-                      data={"tags": ["t-claim"], "collapsed": False, "region": region(intro).model_dump(), "text": intro.text}),
+                      data={"tags": ["t-claim"], "collapsed": False, "region": region(intro).model_dump(), "blocks": _blocks(intro.text)}),
             FigureNode(id="n-fig", type="figure", position={"x": 0, "y": 0},
                        data={"tags": ["t-evidence"], "collapsed": False,
                              "region": ChunkAnchor(rects=[figure.rect], start=QuoteSelector(exact=figure.caption), end=QuoteSelector(exact=figure.caption)).model_dump(),
@@ -54,9 +62,9 @@ def _board(doc):
             NoteNode(id="n-note", type="note", position={"x": 0, "y": 0}, data={"tags": [], "collapsed": False, "note": "notes/n-note.md"}),
             NoteNode(id="n-loose", type="note", position={"x": 0, "y": 0}, data={"tags": ["t-question"], "collapsed": False, "note": "notes/n-loose.md"}),
         ],
-        edges=[Edge(id="e-1", source="n-method", sourceHandle="h-in", target="n-note", data={"tags": ["t-supports"]})],
-        highlights=[Highlight(id="h-in", tags=["t-question"], note="n-note", anchor=inside),
-                    Highlight(id="h-out", tags=[], note=None, anchor=outside)],
+        edges=[Edge(id="e-1", **{"from": "h-in", "to": "n-note"}, data={"tags": ["t-supports"]})],
+        highlights=[Highlight(id="h-in", tags=["t-question"], anchor=inside),
+                    Highlight(id="h-out", tags=[], anchor=outside)],
     )
 
 
@@ -104,15 +112,15 @@ def test_tag_filter_keeps_only_tagged_things(resnet):
     assert "Figure 1" not in md
 
 
-def test_highlight_note_field_links_a_note_without_an_edge(resnet):
+def test_a_note_connected_to_a_highlight_in_no_chunk_is_written_under_it(resnet):
     doc, pdf = resnet
-    anchor = HighlightAnchor(page=9, rect=(60.0, 300.0, 280.0, 320.0),
-                              quote=QuoteSelector(exact="a lone highlight"))
+    anchor = _anchor(9, (60.0, 300.0, 280.0, 320.0), "a lone highlight")
     board = Board(
         paper_id=doc.paper_id,
         nodes=[NoteNode(id="n-1", type="note", position={"x": 0, "y": 0},
                          data={"tags": [], "collapsed": False, "note": "notes/n-1.md"})],
-        highlights=[Highlight(id="h-x", tags=[], note="n-1", anchor=anchor)],
+        edges=[Edge(id="e-1", **{"from": "n-1", "to": "h-x"})],
+        highlights=[Highlight(id="h-x", tags=[], anchor=anchor)],
     )
     notes = {"n-1": "This is the note body.\n"}
     md = export_markdown(doc, board, notes, pdf, tags=[])
@@ -121,25 +129,25 @@ def test_highlight_note_field_links_a_note_without_an_edge(resnet):
     assert "## Notes" not in md
 
 
-def test_highlight_note_field_and_edge_agreeing_prints_once(resnet):
+def test_a_note_connected_twice_to_a_highlight_prints_once(resnet):
     doc, pdf = resnet
     method = next(s for s in doc.sections if s.number == "3.1")
     region = ChunkAnchor(rects=method.extent, start=QuoteSelector(exact=method.title),
                           end=QuoteSelector(exact=method.text[-40:]))
-    inside = HighlightAnchor(page=method.extent[0].page,
-                              rect=(method.extent[0].rect[0] + 2, method.extent[0].rect[1] + 20,
-                                    method.extent[0].rect[2] - 2, method.extent[0].rect[1] + 40),
-                              quote=QuoteSelector(exact="a passage inside 3.1 again"))
+    inside = _anchor(method.extent[0].page,
+                     (method.extent[0].rect[0] + 2, method.extent[0].rect[1] + 20,
+                      method.extent[0].rect[2] - 2, method.extent[0].rect[1] + 40),
+                     "a passage inside 3.1 again")
     board = Board(
         paper_id=doc.paper_id,
         nodes=[
             ChunkNode(id="n-method", type="chunk", position={"x": 0, "y": 0},
-                      data={"tags": [], "collapsed": False, "region": region.model_dump(), "text": method.text}),
+                      data={"tags": [], "collapsed": False, "region": region.model_dump(), "blocks": _blocks(method.text)}),
             NoteNode(id="n-1", type="note", position={"x": 0, "y": 0},
                      data={"tags": [], "collapsed": False, "note": "notes/n-1.md"}),
         ],
-        edges=[Edge(id="e-1", source="n-method", sourceHandle="h-x", target="n-1")],
-        highlights=[Highlight(id="h-x", tags=[], note="n-1", anchor=inside)],
+        edges=[Edge(id="e-1", **{"from": "h-x", "to": "n-1"}), Edge(id="e-2", **{"from": "n-1", "to": "h-x"})],
+        highlights=[Highlight(id="h-x", tags=[], anchor=inside)],
     )
     notes = {"n-1": "Agreeing note body.\n"}
     md = export_markdown(doc, board, notes, pdf, tags=[])
@@ -149,13 +157,13 @@ def test_highlight_note_field_and_edge_agreeing_prints_once(resnet):
 
 
 def _mark(id, page, rect, quote):
-    return Highlight(id=id, tags=[], note=None, anchor=HighlightAnchor(page=page, rect=rect, quote=QuoteSelector(exact=quote)))
+    return Highlight(id=id, tags=[], anchor=_anchor(page, rect, quote))
 
 
 def _chunk(id, rects):
     region = ChunkAnchor(rects=rects, start=QuoteSelector(exact=id), end=QuoteSelector(exact=id))
     return ChunkNode(id=id, type="chunk", position={"x": 0, "y": 0},
-                     data={"tags": [], "collapsed": False, "region": region.model_dump(), "text": id})
+                     data={"tags": [], "collapsed": False, "region": region.model_dump(), "blocks": _blocks(id)})
 
 
 def test_highlights_in_a_chunk_follow_the_paper_not_the_board(resnet):
@@ -223,9 +231,21 @@ def test_a_one_line_cut_sorts_by_the_region_it_sits_in(resnet):
                              "region": ChunkAnchor(rects=[figure.rect], start=QuoteSelector(exact=figure.caption), end=QuoteSelector(exact=figure.caption)).model_dump(),
                              "clip": "clips/n-fig.png", "clip_size": {"width": 436, "height": 300}, "caption": figure.caption}),
             ChunkNode(id="n-cut", type="chunk", position={"x": 0, "y": 0},
-                      data={"tags": [], "collapsed": False, "text": first_line,
+                      data={"tags": [], "collapsed": False, "blocks": _blocks(first_line),
                             "region": ChunkAnchor(rects=[cut], start=QuoteSelector(exact=first_line), end=QuoteSelector(exact=first_line)).model_dump()}),
         ],
     )
     md = export_markdown(doc, board, {}, pdf, tags=[])
     assert md.index(f"## {first_line}") < md.index("## Figure 1")
+
+
+def test_a_highlight_is_in_a_chunk_when_any_of_its_lines_is(resnet):
+    """Containment is per line (addendum 4.0): a highlight whose first line is
+    outside the chunk and whose second is inside belongs to it."""
+    doc, _pdf = resnet
+    method = next(s for s in doc.sections if s.number == "3.1")
+    page, (x0, y0, x1, _y1) = method.extent[0].page, method.extent[0].rect
+    lines = [PageRect(page=9, rect=(60.0, 300.0, 280.0, 310.0)), PageRect(page=page, rect=(x0 + 2, y0 + 20, x1 - 2, y0 + 30))]
+    mark = Highlight(id="h-two", tags=[], anchor=HighlightAnchor(rects=lines, quote=QuoteSelector(exact="two lines")))
+    board = Board(paper_id=doc.paper_id, nodes=[_chunk("n-method", method.extent)], highlights=[mark])
+    assert [h.id for h in highlights_in(board, board.nodes[0])] == ["h-two"]

@@ -1,8 +1,6 @@
 """A selection in the paper becomes text plus an anchor, snapped to a layout
 region when the drag was rough. SPEC-ADDENDUM.md section 5.3, one implementation."""
 
-from itertools import groupby
-
 import pymupdf
 from pydantic import BaseModel
 
@@ -13,63 +11,23 @@ from paperboard.anchoring import (
     rect_for_stripped,
     strip_whitespace,
 )
-from paperboard.board_model import CONTEXT_CHARS, ChunkAnchor, HighlightAnchor, QuoteSelector
-from paperboard.geometry import Rect, area, contains_point, intersection, midpoint, normalise, union
+from paperboard.blocks import chunk_blocks
+from paperboard.board_model import CONTEXT_CHARS, Block, ChunkAnchor, HighlightAnchor, QuoteSelector
+from paperboard.geometry import Rect, area, contains_point, intersection, midpoint, union
 from paperboard.source_model import PageRect, SourceDocument
+from paperboard.words import text_under
 
 SNAP_THRESHOLD = 0.6   # a rough drag covering this share of a region's characters takes the region
 END_CHARS = 64         # a chunk's start and end selectors quote this many characters
-LINE_INSIDE = 0.5      # a line is under the rect when at least this much of its ink box is inside vertically
-WORD_INSIDE = 0.5      # a word on such a line is under it when at least this much of it is inside horizontally
-WORD_FLAGS = pymupdf.TEXTFLAGS_WORDS | pymupdf.TEXT_ACCURATE_BBOXES   # ink boxes, not font-metric boxes
 
 
 class Selection(BaseModel):
     text: str
     rects: list[PageRect]
     region_label: str | None
-    highlight: HighlightAnchor | None
+    highlight: HighlightAnchor
     chunk: ChunkAnchor
-
-
-def _share(inner: tuple[float, float], outer: tuple[float, float]) -> float:
-    """How much of the interval `inner` lies inside `outer`, 0.0 to 1.0."""
-    a0, a1 = inner
-    if a1 <= a0:
-        return 0.0
-    return max(0.0, min(a1, outer[1]) - max(a0, outer[0])) / (a1 - a0)
-
-
-def text_under(page: pymupdf.Page, rect: Rect) -> str:
-    """The words under a rectangle, one line per text line, in reading order.
-
-    Whole words, and only those mostly inside the rect: character-level extraction
-    with a clip keeps any glyph whose ink touches the clip (measured: a rect edge 1 pt
-    into the next line took its 'T', 'h', 'i', 'f', 'l' and left the rest), which puts
-    fragments of neighbouring lines at the start of a cut. A line is under the rect
-    when at least LINE_INSIDE of its ink box is inside vertically, and each of its words
-    when at least WORD_INSIDE of the word is inside horizontally. The decision is per
-    line, not per word, so a cut through a line keeps or drops the line whole rather
-    than the words with the taller ink; and it uses ink boxes rather than font-metric
-    boxes because a math accent (the hat of v-hat in Adam) has a 36 pt metric box for
-    2 pt of ink, which put the equation above a paragraph under a padded drag around
-    it. The words are taken without a clip because a clipped "words" call splits words
-    on the edge and reports the fragment's own box ('complicate' of 'complicated').
-    Lines keep PyMuPDF's block order, the order the page index is built in, so a
-    selection is still found there as a substring. Ends with a newline when non-empty,
-    as PyMuPDF's text mode did, so Selection.text keeps its shape (ruling R8)."""
-    x0, y0, x1, y1 = normalise(rect)
-    words = page.get_text("words", flags=WORD_FLAGS)   # x0, y0, x1, y1, word, block, line, word_no
-    lines: list[str] = []
-    for _, group in groupby(words, key=lambda w: (w[5], w[6])):
-        line = list(group)
-        top, bottom = min(w[1] for w in line), max(w[3] for w in line)
-        if _share((top, bottom), (y0, y1)) < LINE_INSIDE:
-            continue
-        kept = [w[4] for w in line if _share((w[0], w[2]), (x0, x1)) >= WORD_INSIDE]
-        if kept:
-            lines.append(" ".join(kept))
-    return "\n".join(lines) + ("\n" if lines else "")
+    blocks: list[Block]
 
 
 def _smallest_region_at(doc: SourceDocument, page: int, point: tuple[float, float]):
@@ -154,9 +112,10 @@ def select(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRect], sn
     position = global_position(index, first.page, start_at)
     chunk = ChunkAnchor(rects=rects, start=start, end=end, position=position)
 
-    highlight = None
-    if len(rects) == 1:
-        quote, at = _selector(pdf[first.page], index[first.page], text.strip(), first.rect)
-        highlight = HighlightAnchor(page=rects[0].page, rect=rects[0].rect, quote=quote,
-                                    position=global_position(index, rects[0].page, at))
-    return Selection(text=text, rects=rects, region_label=label, highlight=highlight, chunk=chunk)
+    # per-line: task 2A -- one rect per run, not per line, and the quote is
+    # looked up on the first run's page only, so a quote that crosses a page has
+    # no prefix, suffix or position.
+    quote, at = _selector(pdf[first.page], index[first.page], text.strip(), first.rect)
+    highlight = HighlightAnchor(rects=rects, quote=quote, position=global_position(index, first.page, at))
+    return Selection(text=text, rects=rects, region_label=label, highlight=highlight, chunk=chunk,
+                     blocks=chunk_blocks(doc, pdf, rects))

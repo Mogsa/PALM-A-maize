@@ -2,8 +2,9 @@ import pymupdf
 import pytest
 from conftest import FIXTURES
 
-from paperboard.snap import SNAP_THRESHOLD, select, text_under
+from paperboard.snap import SNAP_THRESHOLD, select
 from paperboard.source_model import PageRect
+from paperboard.words import text_under
 
 
 @pytest.fixture(scope="module")
@@ -64,8 +65,7 @@ def test_selection_carries_both_anchor_shapes(resnet):
     doc, pdf = resnet
     region = _first_text_region(doc, 2)
     result = select(doc, pdf, [_slice(region, 0.85)], snap=True)
-    assert result.highlight is not None
-    assert result.highlight.page == 2 and result.highlight.rect == region.rect
+    assert result.highlight.rects == [PageRect(page=2, rect=region.rect)]
     assert result.highlight.quote.exact == result.text.strip()
     assert len(result.highlight.quote.prefix) <= 32 and len(result.highlight.quote.suffix) <= 32
     assert result.chunk.rects == result.rects
@@ -73,12 +73,12 @@ def test_selection_carries_both_anchor_shapes(resnet):
     assert result.text.strip().endswith(result.chunk.end.exact[-20:])
 
 
-def test_multi_page_selection_has_no_highlight_anchor_and_does_not_snap(resnet):
+def test_multi_page_selection_has_a_highlight_across_its_pages_and_does_not_snap(resnet):
     doc, pdf = resnet
     a = _first_text_region(doc, 2)
     b = _first_text_region(doc, 3)
     result = select(doc, pdf, [_slice(a, 0.9), _slice(b, 0.9)], snap=True)
-    assert result.highlight is None
+    assert result.highlight.rects == result.rects
     assert [r.page for r in result.rects] == [2, 3]
     assert result.rects[0] == _slice(a, 0.9)
 
@@ -133,3 +133,22 @@ def test_snap_never_shrinks_a_drag_that_runs_into_the_next_paragraph(resnet):
     assert result.region_label == "text"
     assert result.rects == [PageRect(page=2, rect=drag.rect)]
     assert text_under(pdf[2], second.rect).split("\n")[0] in result.text
+
+
+def test_a_selection_of_several_runs_still_gives_a_highlight_one_rect_per_run(resnet):
+    """Schema 2: `highlight` is never null. One rect per run until highlights are
+    anchored per line (task 2A)."""
+    doc, pdf = resnet
+    left, right = _text_regions(doc, 2)[0], next(r for r in _text_regions(doc, 2) if r.rect[0] > 300)
+    runs = [PageRect(page=2, rect=left.rect), PageRect(page=2, rect=right.rect)]
+    result = select(doc, pdf, runs, snap=True)
+    assert result.highlight.rects == runs
+    assert result.highlight.quote.exact
+
+
+def test_a_selection_carries_the_blocks_a_cut_of_it_would_show(resnet):
+    doc, pdf = resnet
+    region = _first_text_region(doc, 2)
+    result = select(doc, pdf, [PageRect(page=2, rect=region.rect)], snap=False)
+    assert [(b.kind, b.page, b.rect) for b in result.blocks] == [("text", 2, region.rect)]
+    assert result.blocks[0].text == text_under(pdf[2], region.rect)

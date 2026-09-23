@@ -1,4 +1,5 @@
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
+import { blocksText } from "../../model/blocks";
 import { highlightsIn } from "../../model/geometry";
 import type { ChunkNode as ChunkNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
@@ -11,7 +12,7 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   // NodeProps.height also includes automatic measurements; only a stored height fixes the box size.
   const height = state.board.nodes.find((node) => node.id === id)?.height;
   const marks = highlightsIn(state.board.highlights, data.region);
-  const text = reflow(data.text, words);
+  const text = reflow(blocksText(data.blocks), words);
   // The count is what is painted: a mark inside the region whose quote is not found in the text (or ties)
   // is not painted and not counted, but it keeps its handle, since an edge may end on it.
   const runs = paintMarks(text, marks, words);

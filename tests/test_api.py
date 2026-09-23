@@ -1,3 +1,4 @@
+import hashlib
 import json
 
 import pytest
@@ -78,8 +79,10 @@ def test_text_returns_a_selection_with_anchors(client, resnet_id):
     assert response.status_code == 200, response.text
     selection = response.json()
     assert selection["rects"] == [{"page": 2, "rect": region["rect"]}]
+    assert selection["highlight"]["rects"] == selection["rects"]
     assert selection["highlight"]["quote"]["exact"]
     assert selection["chunk"]["start"]["exact"]
+    assert [(b["kind"], b["page"]) for b in selection["blocks"]] == [("text", 2)]
 
 
 @pytest.mark.parametrize("name, route", [("board.json", "board"), ("source.json", "source")])
@@ -128,7 +131,7 @@ def test_board_put_get_and_version_conflict(client, resnet_id):
     source = client.get(f"/api/papers/{resnet_id}/source").json()
     region = _first_text_region(source, 2)
     selection = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()
-    board["highlights"] = [{"id": "h-1", "tags": ["t-question"], "note": None, "anchor": selection["highlight"]}]
+    board["highlights"] = [{"id": "h-1", "tags": ["t-question"], "anchor": selection["highlight"]}]
     board["nodes"] = [{"id": NOTE, "type": "note", "position": {"x": 0, "y": 0}, "data": {"tags": [], "collapsed": False, "note": f"notes/{NOTE}.md"}}]
 
     put = client.put(f"/api/papers/{resnet_id}/board", json=board, headers={"If-Match": "0"})
@@ -167,12 +170,11 @@ def test_questions_lists_unanswered_marks_and_pieces(client, resnet_id):
     assert [q["id"] for q in questions] == ["h-1"]
     assert questions[0]["kind"] == "highlight" and questions[0]["text"]
 
-    # Connecting a note clears it. With no chunk on the board there is no node to
-    # hang an edge on, so the highlight's own `note` field carries the link; the
-    # frontend keeps that field in step with edges (addendum 4.0).
+    # A connection to a note the reader wrote clears it, whether or not any chunk
+    # holds the highlight: edges connect the things themselves (addendum 4.0).
     board = client.get(f"/api/papers/{resnet_id}/board").json()
-    board["highlights"][0]["note"] = NOTE
-    assert client.put(f"/api/papers/{resnet_id}/board", json=board, headers={"If-Match": str(board["version"])}).status_code == 200
+    board["edges"] = [{"id": "e-1", "from": NOTE, "to": "h-1", "data": {"tags": []}}]
+    _put(client, resnet_id, board)
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
 
 
@@ -207,7 +209,7 @@ def test_a_question_tagged_note_is_a_question_until_a_note_answers_it(client, re
         {"id": ASK, "kind": "note", "text": "Why does depth hurt?"}]
 
     board = client.get(f"/api/papers/{resnet_id}/board").json()
-    board["edges"] = [{"id": "e-1", "source": REPLY, "target": ASK}]
+    board["edges"] = [{"id": "e-1", "from": REPLY, "to": ASK}]
     _put(client, resnet_id, board)
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
 
@@ -279,9 +281,9 @@ def _board_with_misplaced_highlight(client, resnet_id):
     source = client.get(f"/api/papers/{resnet_id}/source").json()
     region = _first_text_region(source, 2)
     selection = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()
-    anchor = {**selection["highlight"], "rect": [60.0, 700.0, 200.0, 710.0]}
+    anchor = {**selection["highlight"], "rects": [{"page": 2, "rect": [60.0, 700.0, 200.0, 710.0]}]}
     board = client.get(f"/api/papers/{resnet_id}/board").json()
-    board["highlights"] = [{"id": "h-1", "tags": [], "note": None, "anchor": anchor}]
+    board["highlights"] = [{"id": "h-1", "tags": [], "anchor": anchor}]
     return board, anchor
 
 
@@ -298,7 +300,7 @@ def test_export_reads_the_board_with_anchors_resolved(client, resnet_id):
     region = _first_text_region(source, 2)
     chunk = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()["chunk"]
     board["nodes"] = [{"id": "n-chunk", "type": "chunk", "position": {"x": 0, "y": 0},
-                       "data": {"tags": [], "collapsed": False, "region": chunk, "text": "chunk"}}]
+                       "data": {"tags": [], "collapsed": False, "region": chunk, "blocks": []}}]
     board.pop("anchor_basis", None)
     _put(client, resnet_id, board)
     markdown = client.post(f"/api/papers/{resnet_id}/export", json={"tags": []}).json()["markdown"]
@@ -313,7 +315,7 @@ def test_loading_a_board_re_finds_nothing_when_the_source_is_unchanged(client, r
     board["anchor_basis"] = basis
     _put(client, resnet_id, board)
     got = client.get(f"/api/papers/{resnet_id}/board").json()
-    assert got["highlights"][0]["anchor"]["rect"] == anchor["rect"]
+    assert got["highlights"][0]["anchor"]["rects"] == anchor["rects"]
     assert got["highlights"][0]["anchor"]["state"] == "anchored"
     assert got["anchor_basis"] == basis
 
@@ -324,7 +326,7 @@ def test_loading_a_board_with_no_basis_re_finds_once_and_stamps_it(client, resne
     _put(client, resnet_id, board)
     got = client.get(f"/api/papers/{resnet_id}/board").json()
     assert got["highlights"][0]["anchor"]["state"] == "relocated"
-    assert got["highlights"][0]["anchor"]["rect"] != anchor["rect"]
+    assert got["highlights"][0]["anchor"]["rects"] != anchor["rects"]
     assert got["anchor_basis"]
 
 
@@ -346,4 +348,138 @@ def test_reextracting_an_unchanged_paper_re_finds_nothing(client, resnet_id):
     board["anchor_basis"] = client.get(f"/api/papers/{resnet_id}/board").json()["anchor_basis"]
     _put(client, resnet_id, board)
     assert client.post(f"/api/papers/{resnet_id}/extract").json()["states"] == {"h-1": "anchored"}
-    assert client.get(f"/api/papers/{resnet_id}/board").json()["highlights"][0]["anchor"]["rect"] == anchor["rect"]
+    assert client.get(f"/api/papers/{resnet_id}/board").json()["highlights"][0]["anchor"]["rects"] == anchor["rects"]
+
+
+# -- schema 2 ------------------------------------------------------------------
+
+
+def test_a_schema_1_board_is_refused_on_put(client, resnet_id):
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["schema"] = 1
+    response = client.put(f"/api/papers/{resnet_id}/board", json=board, headers={"If-Match": "0"})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid"
+
+
+def test_a_schema_1_board_on_disk_is_served_as_schema_2(client, resnet_id, store_root):
+    v1 = {"schema": 1, "paper_id": resnet_id, "version": 2, "nodes": [], "edges": [], "highlights": [
+        {"id": "h-1", "tags": [], "note": None, "anchor": {"page": 2, "rect": [60.0, 100.0, 280.0, 130.0],
+                                                            "quote": {"exact": "x"}, "position": 0, "state": "anchored"}}]}
+    (store_root / "papers" / resnet_id / "board.json").write_text(json.dumps(v1))
+    got = client.get(f"/api/papers/{resnet_id}/board").json()
+    assert (got["schema"], got["view"], got["version"]) == (2, "paper", 2)
+    assert len(got["highlights"][0]["anchor"]["rects"]) == 1   # re-found on load: no anchor_basis yet
+    assert "note" not in got["highlights"][0]
+    _put(client, resnet_id, got)
+    assert (store_root / "papers" / resnet_id / "board.v1.json").exists()
+
+
+def test_only_a_note_the_reader_wrote_answers_a_question(client, resnet_id):
+    def note(node_id, tags, origin):
+        return {"id": node_id, "type": "note", "position": {"x": 0, "y": 0},
+                "data": {"tags": tags, "collapsed": False, "note": f"notes/{node_id}.md", "origin": origin}}
+
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [note(ASK, ["t-question"], "reader"), note(REPLY, [], "ai")]
+    board["edges"] = [{"id": "e-1", "from": ASK, "to": REPLY}]
+    _put(client, resnet_id, board)
+    assert [q["id"] for q in client.get(f"/api/papers/{resnet_id}/questions").json()] == [ASK]
+
+
+@pytest.mark.parametrize("mode", ["text", "area"])
+def test_text_takes_a_mode(client, resnet_id, mode):
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    region = _first_text_region(source, 2)
+    response = client.post(f"/api/papers/{resnet_id}/text",
+                           json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False, "mode": mode})
+    assert response.status_code == 200, response.text
+    assert response.json()["highlight"]["rects"]
+
+
+@pytest.mark.parametrize("body", [
+    {"rects": [{"page": 2, "rect": [60, 100, 280, 130]}, {"page": 2, "rect": [320, 100, 540, 130]}], "mode": "area"},
+    {"rects": [{"page": 2, "rect": [60, 100, 280, 130]}], "mode": "lasso"},
+], ids=["area with two rects", "unknown mode"])
+def test_text_refuses_a_malformed_mode(client, resnet_id, body):
+    response = client.post(f"/api/papers/{resnet_id}/text", json=body)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid"
+
+
+def _render(client, resnet_id, **params):
+    query = {"page": 2, "x0": 60, "y0": 100, "x1": 280, "y1": 130, **params}
+    return client.get(f"/api/papers/{resnet_id}/render", params=query)
+
+
+def test_render_returns_a_png_at_216_dpi_by_default_and_writes_nothing(client, resnet_id, store_root):
+    folder = store_root / "papers" / resnet_id
+    before = sorted(p.name for p in folder.rglob("*"))
+    response = _render(client, resnet_id)
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"] == "image/png"
+    assert response.content.startswith(b"\x89PNG")
+    width = int.from_bytes(response.content[16:20], "big")
+    assert width == pytest.approx((280 - 60 + 8) * 216 / 72, abs=3)
+    assert sorted(p.name for p in folder.rglob("*")) == before
+
+
+def test_render_etag_follows_the_pdf_and_the_query(client, resnet_id, store_root):
+    first = _render(client, resnet_id).headers["etag"]
+    assert first == _render(client, resnet_id).headers["etag"]
+    assert first != _render(client, resnet_id, dpi=100).headers["etag"]
+    sha = hashlib.sha256((store_root / "papers" / resnet_id / "paper.pdf").read_bytes()).hexdigest()
+    assert sha[:16] in first
+
+
+def test_render_answers_a_matching_if_none_match_with_304(client, resnet_id):
+    etag = _render(client, resnet_id).headers["etag"]
+    query = {"page": 2, "x0": 60, "y0": 100, "x1": 280, "y1": 130}
+    response = client.get(f"/api/papers/{resnet_id}/render", params=query, headers={"If-None-Match": etag})
+    assert response.status_code == 304 and response.content == b""
+
+
+@pytest.mark.parametrize("params", [{"x1": 10}, {"page": 999}, {"page": -1}], ids=["inverted", "past the end", "negative page"])
+def test_render_refuses_bad_geometry(client, resnet_id, params):
+    response = _render(client, resnet_id, **params)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid"
+
+
+def test_render_of_an_unknown_paper_is_404(client):
+    response = client.get("/api/papers/nope/render", params={"page": 0, "x0": 0, "y0": 0, "x1": 10, "y1": 10})
+    assert response.status_code == 404
+
+
+def test_split_returns_draft_nodes_and_writes_nothing(client, resnet_id, store_root):
+    response = client.post(f"/api/papers/{resnet_id}/split")
+    assert response.status_code == 200
+    assert response.json() == {"nodes": []}
+    assert not (store_root / "papers" / resnet_id / "board.json").exists()
+
+
+def test_template_defaults_to_nine_slots_and_can_be_replaced(client, store_root):
+    template = client.get("/api/template").json()
+    assert template["schema"] == 1 and len(template["slots"]) == 9
+    assert template["slots"][0] == {"name": "Background", "prompt": "What do you need to know first: terms, notation, setup?"}
+    template["slots"] = template["slots"][:3]
+    response = client.put("/api/template", json=template)
+    assert response.status_code == 200 and len(response.json()["slots"]) == 3
+    assert len(client.get("/api/template").json()["slots"]) == 3
+    assert (store_root / "template.json").exists()
+
+
+def test_a_malformed_template_is_refused(client):
+    assert client.put("/api/template", json={"schema": 1, "slots": [{"name": "x"}]}).status_code == 422
+
+
+@pytest.mark.parametrize("order, status", [("paper", 200), ("template", 200), ("random", 422)])
+def test_export_takes_an_order(client, resnet_id, order, status):
+    response = client.post(f"/api/papers/{resnet_id}/export", json={"tags": [], "order": order})
+    assert response.status_code == status
+
+
+def test_a_clip_renders_at_216_dpi_by_default(client, resnet_id):
+    response = client.put(f"/api/papers/{resnet_id}/clips/{FIG}", json={"page": 2, "rect": [60, 100, 280, 130]})
+    assert response.status_code == 200, response.text
+    assert response.json()["clip_size"]["width"] == pytest.approx((280 - 60 + 8) * 216 / 72, abs=3)

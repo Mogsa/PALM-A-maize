@@ -11,7 +11,8 @@ test.afterEach(async ({request}) => {
 const quote = { exact: 'Review chunk', prefix: '', suffix: '' };
 const region = { rects: [{ page: 0, rect: [50, 130, 280, 300] }], start: quote, end: quote, position: 0, state: 'anchored' };
 const chunk = (id: string, x: number, y: number, text: string, where = region) => ({ id, type: 'chunk', position: { x, y }, width: 320,
-  data: { tags: [], collapsed: false, user_sized: false, source_id: null, region: where, text } });
+  data: { tags: [], collapsed: false, user_sized: false, source_id: null, region: where,
+          blocks: [{ kind: 'text', page: where.rects[0].page, rect: where.rects[0].rect, text }] } });
 
 async function seed(page: Page, x = 40) {
   return seedBoard(page, { nodes: [chunk('n-review', x, 100, Array.from({length: 60}, (_, i) => `Line ${i}: text inside this chunk.`).join('\n'))] });
@@ -96,8 +97,8 @@ test('pan and zoom persist without editing a piece', async ({page}) => {
 });
 
 test('a chunk counts only the marks it paints, and keeps a handle for every mark inside it', async ({page}) => {
-  const mark = (id: string, exact: string) => ({ id, tags: [], note: null,
-    anchor: { page: 0, rect: [60, 140, 200, 150], quote: { exact, prefix: '', suffix: '' }, position: 0, state: 'anchored' } });
+  const mark = (id: string, exact: string) => ({ id, tags: [],
+    anchor: { rects: [{ page: 0, rect: [60, 140, 200, 150] }], quote: { exact, prefix: '', suffix: '' }, position: 0, state: 'anchored' } });
   await seedBoard(page, { nodes: [chunk('n-marks', 40, 100, 'Line 1: first.\nLine 2: second.')],
     highlights: [mark('h-found', 'Line 2: second'), mark('h-lost', 'words this chunk does not have')] });
   await page.getByRole('button', {name: 'Board', exact: true}).click();

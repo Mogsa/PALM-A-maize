@@ -7,7 +7,7 @@ const group = (id: string, x: number, y: number, parentId?: string, selected = f
   ({ id, type: "group", position: { x, y }, width: 400, height: 300, data: { tags: [] }, ...(parentId ? { parentId } : {}), selected });
 const note = (id: string, x: number, y: number, parentId?: string, selected = false): BoardNode =>
   ({ id, type: "note", position: { x, y }, data: { tags: [], collapsed: false, note: `notes/${id}.md` }, ...(parentId ? { parentId } : {}), selected });
-const edge = (id: string, source: string, target: string, selected = false): BoardEdge => ({ id, source, target, selected });
+const edge = (id: string, from: string, to: string, selected = false): BoardEdge => ({ id, from, to, data: { tags: [] }, selected });
 
 /** Absolute positions as React Flow would report them, walking parents. */
 const absoluteOf = (nodes: BoardNode[]) => (id: string): XY => {
@@ -56,5 +56,14 @@ describe("planDelete", () => {
     expect(plan.nodes.map((n) => n.id)).toEqual(["n-g", "n-c"]);
     expect(plan.lifted).toEqual([]);
     expect(plan.edges.map((e) => e.id)).toEqual(["e-1", "e-2"]);
+  });
+
+  it("deleting a chunk keeps a connection between the highlight it held and a note", () => {
+    const chunk: BoardNode = { id: "n-k", type: "chunk", position: { x: 0, y: 0 }, selected: true,
+      data: { tags: [], collapsed: false, blocks: [], user_sized: false,
+        region: { rects: [{ page: 0, rect: [0, 0, 10, 10] }], start: { exact: "", prefix: "", suffix: "" }, end: { exact: "", prefix: "", suffix: "" }, position: 0, state: "anchored" } } };
+    const nodes = [chunk, note("n-o", 900, 900)];
+    const plan = planDelete(nodes, [chunk], [edge("e-1", "h-1", "n-o"), edge("e-2", "n-k", "n-o")], absoluteOf(nodes));
+    expect(plan.edges.map((e) => e.id)).toEqual(["e-2"]);
   });
 });

@@ -64,11 +64,11 @@ def _highlight_round_trip(paper, rect: PageRect) -> str | None:
     doc, index, pdf = paper
     selection = select(doc, pdf, [rect], snap=False)
     problems = []
-    if selection.highlight.rect != rect.rect:
+    if selection.highlight.rects != [rect]:
         problems.append("selection did not keep the drawn rect")
     highlight = resolve_highlight(selection.highlight, index, pdf)
-    if highlight.state != "anchored" or highlight.rect != selection.highlight.rect:
-        problems.append(f"highlight {highlight.state} {highlight.rect}")
+    if highlight.state != "anchored" or highlight.rects != selection.highlight.rects:
+        problems.append(f"highlight {highlight.state} {[r.rect for r in highlight.rects]}")
     chunk = resolve_chunk(selection.chunk, index, pdf, doc)
     if chunk.state != "anchored" or chunk.rects != selection.chunk.rects:
         problems.append(f"chunk {chunk.state} {[r.rect for r in chunk.rects]}")

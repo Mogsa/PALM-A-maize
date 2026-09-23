@@ -3,7 +3,8 @@ import { boardReducer, initialBoardState } from "./boardReducer";
 import { emptyBoard, type BoardNode, type Highlight } from "./types";
 
 const q = { exact: "x", prefix: "", suffix: "" };
-const highlight: Highlight = { id: "h-1", tags: [], note: null, anchor: { page: 0, rect: [0, 0, 1, 1], quote: q, position: 0, state: "anchored" } };
+const highlight: Highlight = { id: "h-1", tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], quote: q, position: 0, state: "anchored" } };
+const edge = (id: string, from: string, to: string) => ({ id, from, to, data: { tags: [] } });
 const note: BoardNode = { id: "n-1", type: "note", position: { x: 0, y: 0 }, data: { tags: [], collapsed: false, note: "notes/n-1.md" } };
 
 describe("boardReducer", () => {
@@ -36,7 +37,7 @@ describe("boardReducer", () => {
     expect(s.dirty).toBe(false);
   });
   it("removeNode drops the node and its edges", () => {
-    const board = { ...emptyBoard("p"), nodes: [note, { ...note, id: "n-2" }], edges: [{ id: "e-1", source: "n-1", target: "n-2", data: { tags: [] } }] };
+    const board = { ...emptyBoard("p"), nodes: [note, { ...note, id: "n-2" }], edges: [edge("e-1", "n-1", "n-2")] };
     let s = boardReducer(initialBoardState, { type: "load", board });
     s = boardReducer(s, { type: "removeNode", id: "n-2" });
     expect(s.board.nodes.map((n) => n.id)).toEqual(["n-1"]);
@@ -47,7 +48,7 @@ describe("boardReducer", () => {
       ({ id, type: "group", position: { x, y }, width: 400, height: 300, data: { tags: [], name: null }, ...(parentId ? { parentId } : {}) });
     const child = (id: string, x: number, y: number, parentId: string): BoardNode => ({ ...note, id, position: { x, y }, parentId });
     const nodes = [group("n-G", 100, 100), group("n-H", 10, 20, "n-G"), child("n-C", 5, 7, "n-H"), child("n-D", 30, 40, "n-G"), { ...note, id: "n-O" }];
-    const edges = [{ id: "e-1", source: "n-D", target: "n-O" }, { id: "e-2", source: "n-G", target: "n-O" }];
+    const edges = [edge("e-1", "n-D", "n-O"), edge("e-2", "n-G", "n-O")];
     let s = boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), nodes, edges } });
     s = boardReducer(s, { type: "removeNode", id: "n-G" });
     const byId = new Map(s.board.nodes.map((n) => [n.id, n]));
@@ -69,11 +70,23 @@ describe("boardReducer", () => {
     s = boardReducer(s, { type: "removeNode", id: "n-H" });
     expect(s.board.nodes.find((n) => n.id === "n-C")).toMatchObject({ parentId: "n-G", position: { x: 15, y: 27 } });
   });
-  it("removeNode clears a highlight's note when that note is removed", () => {
-    const board = { ...emptyBoard("p"), nodes: [note], highlights: [{ ...highlight, note: "n-1" }, { ...highlight, id: "h-2", note: "n-9" }] };
+  it("removeNode drops every edge with an end on the node, either end, and leaves highlights alone", () => {
+    const board = { ...emptyBoard("p"), nodes: [note, { ...note, id: "n-2" }], highlights: [highlight],
+      edges: [edge("e-from", "n-1", "h-1"), edge("e-to", "h-1", "n-1"), edge("e-other", "h-1", "n-2")] };
     let s = boardReducer(initialBoardState, { type: "load", board });
     s = boardReducer(s, { type: "removeNode", id: "n-1" });
-    expect(s.board.highlights.map((h) => h.note)).toEqual([null, "n-9"]);
+    expect(s.board.edges.map((e) => e.id)).toEqual(["e-other"]);
+    expect(s.board.highlights).toEqual([highlight]);
+  });
+  it("edge changes from React Flow apply to the stored edges by id: select is runtime, remove is saved", () => {
+    const board = { ...emptyBoard("p"), nodes: [note, { ...note, id: "n-2" }], edges: [edge("e-1", "n-1", "n-2"), edge("e-2", "n-2", "n-1")] };
+    let s = boardReducer(initialBoardState, { type: "load", board });
+    s = boardReducer(s, { type: "edges", changes: [{ type: "select", id: "e-1", selected: true }] });
+    expect(s.dirty).toBe(false);
+    expect(s.board.edges[0]).toEqual({ ...edge("e-1", "n-1", "n-2"), selected: true });
+    s = boardReducer(s, { type: "edges", changes: [{ type: "remove", id: "e-1" }] });
+    expect(s.dirty).toBe(true);
+    expect(s.board.edges.map((e) => e.id)).toEqual(["e-2"]);
   });
 });
 
@@ -112,7 +125,7 @@ describe("boardReducer, ruling 7", () => {
   });
   it("(d) a resize by the reader marks a chunk user_sized; a measurement does not", () => {
     const region = { rects: [{ page: 0, rect: [0, 0, 1, 1] as [number, number, number, number] }], start: q, end: q, position: 0, state: "anchored" as const };
-    const chunk: BoardNode = { id: "n-c", type: "chunk", position: { x: 0, y: 0 }, data: { tags: [], collapsed: false, region, text: "t", user_sized: false } };
+    const chunk: BoardNode = { id: "n-c", type: "chunk", position: { x: 0, y: 0 }, data: { tags: [], collapsed: false, region, blocks: [], user_sized: false } };
     const sized = (s: ReturnType<typeof boardReducer>) => (s.board.nodes[0].data as { user_sized: boolean }).user_sized;
     let s = boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), nodes: [chunk] } });
     s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-c", dimensions: { width: 200, height: 80 } }] });

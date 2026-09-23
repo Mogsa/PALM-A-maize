@@ -8,7 +8,8 @@ const POPOVER_WIDTH = 300;
 const POPOVER_HEIGHT = 92;   // preview line plus the action row, measured at the default zoom
 
 /** One selection, then a choice. No modes (SPEC.md section 4). A selection that crosses a column
- *  or a page is several rects, and a highlight anchor holds one, so Highlight is not offered. */
+ *  or a page is several rects. Schema 2's highlight anchor can hold them, but until highlights are
+ *  anchored and painted per line (task 2A, D1) Highlight is offered for one rect only. */
 export function SelectionPopover({ at, preview, busy, canHighlight, onHighlight, onCut, onDismiss }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onDismiss(); };

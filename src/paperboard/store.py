@@ -4,23 +4,39 @@ Atomic writes, a monotonic board version, and nothing clever. A board is a
 folder you can copy; this module is what keeps that true.
 """
 
+import hashlib
 import os
 import re
 import tempfile
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel
+import pymupdf
+from pydantic import BaseModel, TypeAdapter
 
-from paperboard.board_model import PRESET_TAGS, Board, TagFile, dump_board, dump_tags
+from paperboard.board_model import (
+    DEFAULT_SLOTS,
+    PRESET_TAGS,
+    Board,
+    TagFile,
+    TemplateFile,
+    dump_board,
+    dump_tags,
+    dump_template,
+)
 from paperboard.extract import extract
+from paperboard.migrate import is_v1, migrate_board
 from paperboard.source_model import SourceDocument
 
 _FRONT_MATTER = re.compile(r"\A---\nid: (?P<id>[^\n]+)\n---\n", re.DOTALL)
 # A node id as the client mints it: "n-" and a ULID (addendum 4.5). Checked
 # before an id becomes a filename or a front-matter line.
 _NODE_ID = re.compile(r"n-[0-9A-HJKMNP-TV-Z]{26}")
+# Parses board.json into a dict before its schema is known. Invalid JSON is a
+# ValidationError, like any other corrupt file on disk.
+_RAW_BOARD = TypeAdapter(dict[str, Any])
 
 
 class PaperNotFound(Exception):
@@ -84,6 +100,10 @@ class Store:
     def tags_path(self) -> Path:
         return self.root / "tags.json"
 
+    @property
+    def template_path(self) -> Path:
+        return self.root / "template.json"
+
     # -- papers -------------------------------------------------------------
 
     def paper_dir(self, paper_id: str) -> Path:
@@ -94,6 +114,9 @@ class Store:
 
     def pdf_path(self, paper_id: str) -> Path:
         return self.paper_dir(paper_id) / "paper.pdf"
+
+    def pdf_sha256(self, paper_id: str) -> str:
+        return hashlib.sha256(self.pdf_path(paper_id).read_bytes()).hexdigest()
 
     def list_papers(self) -> list[PaperSummary]:
         out = []
@@ -132,11 +155,20 @@ class Store:
 
     # -- board --------------------------------------------------------------
 
-    def read_board(self, paper_id: str) -> Board:
+    def _read_raw_board(self, paper_id: str) -> dict | None:
         path = self.paper_dir(paper_id) / "board.json"
-        if not path.exists():
+        return _RAW_BOARD.validate_json(path.read_bytes()) if path.exists() else None
+
+    def read_board(self, paper_id: str) -> Board:
+        """The board as schema 2. A schema 1 file is migrated on the way in and
+        returned, not written (addendum 4.6)."""
+        raw = self._read_raw_board(paper_id)
+        if raw is None:
             return Board(paper_id=paper_id)
-        return Board.model_validate_json(path.read_text())
+        if is_v1(raw):
+            with pymupdf.open(self.pdf_path(paper_id)) as pdf:
+                raw = migrate_board(raw, self.read_source(paper_id), pdf)
+        return Board.model_validate(raw)
 
     def write_board(self, paper_id: str, board: Board, expected_version: int | None) -> int:
         """Refuse unless the caller proves it saw the current version. Two open
@@ -146,8 +178,18 @@ class Store:
             if expected_version is None or expected_version != current:
                 raise VersionConflict(current)
             board = board.model_copy(update={"version": current + 1, "paper_id": paper_id})
+            self._keep_v1_copy(paper_id)
             atomic_write(self.paper_dir(paper_id) / "board.json", dump_board(board).encode())
             return board.version
+
+    def _keep_v1_copy(self, paper_id: str) -> None:
+        """Before the first write over a schema 1 file, copy it once to
+        `board.v1.json`: the migration is one-way (addendum 4.6)."""
+        folder = self.paper_dir(paper_id)
+        raw = self._read_raw_board(paper_id)
+        copy = folder / "board.v1.json"
+        if raw is not None and is_v1(raw) and not copy.exists():
+            atomic_write(copy, (folder / "board.json").read_bytes())
 
     # -- notes --------------------------------------------------------------
 
@@ -173,6 +215,17 @@ class Store:
 
     def write_tags(self, tags: TagFile) -> None:
         atomic_write(self.tags_path, dump_tags(tags).encode())
+
+    # -- template -----------------------------------------------------------
+
+    def read_template(self) -> TemplateFile:
+        """`template.json`, or the nine default slots when there is none (addendum 4.8)."""
+        if not self.template_path.exists():
+            return TemplateFile(slots=[s.model_copy() for s in DEFAULT_SLOTS])
+        return TemplateFile.model_validate_json(self.template_path.read_text())
+
+    def write_template(self, template: TemplateFile) -> None:
+        atomic_write(self.template_path, dump_template(template).encode())
 
     # -- clips --------------------------------------------------------------
 

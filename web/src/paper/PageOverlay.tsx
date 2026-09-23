@@ -24,9 +24,11 @@ export function PageOverlay({ page, scale, board, onOutlineClick }: Props) {
           </button>
         </div>
       )))}
-      {board.highlights.filter((h) => h.anchor.page === page).map((h) => (
-        <div key={h.id} className={`mark ${h.anchor.state}`} style={px(h.anchor.rect, scale)} title={h.anchor.quote.exact.slice(0, 80)} />
-      ))}
+      {/* A highlight is painted line by line, each of its rects on this page (addendum 5.1). */}
+      {board.highlights.flatMap((h) => h.anchor.rects.filter((r) => r.page === page).map((r, i) => (
+        <div key={`${h.id}-${i}`} className={`mark ${h.anchor.state}`} style={px(r.rect, scale)} data-highlight-id={h.id}
+             title={h.anchor.quote.exact.slice(0, 80)} />
+      )))}
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import contextlib
+import json
 import os
 import threading
 
 import pytest
 from conftest import FIXTURES
 
-from paperboard.board_model import PRESET_TAGS, Board, NoteNode
+from paperboard.board_model import DEFAULT_SLOTS, PRESET_TAGS, Board, NoteNode
 from paperboard.store import (
     NodeNotFound,
     NoteNotFound,
@@ -184,3 +185,66 @@ def test_clip_is_written_under_clips_and_referenced_relatively(store_root):
     rel = store.write_clip(paper_id, FIG, b"\x89PNG\r\n\x1a\nfake")
     assert rel == f"clips/{FIG}.png"
     assert (store.paper_dir(paper_id) / rel).read_bytes().startswith(b"\x89PNG")
+
+
+V1_BOARD = {
+    "schema": 1, "paper_id": "p", "version": 3, "goal": "", "active_tags": [], "viewport": {"x": 0, "y": 0, "zoom": 1},
+    "nodes": [{"id": "n-n", "type": "note", "position": {"x": 0, "y": 0},
+               "data": {"tags": [], "collapsed": False, "note": "notes/n-n.md"}}],
+    "edges": [],
+    "highlights": [{"id": "h-1", "tags": [], "note": "n-n", "anchor": {
+        "page": 2, "rect": [60.0, 100.0, 280.0, 130.0], "quote": {"exact": "x", "prefix": "", "suffix": ""},
+        "position": 0, "state": "anchored"}}],
+}
+
+
+def _write_v1(store, paper_id):
+    path = store.paper_dir(paper_id) / "board.json"
+    path.write_text(json.dumps({**V1_BOARD, "paper_id": paper_id}))
+    return path
+
+
+def test_a_schema_1_board_on_disk_is_read_as_schema_2_and_not_written(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    path = _write_v1(store, paper_id)
+    before = path.read_bytes()
+    board = store.read_board(paper_id)
+    assert board.schema_version == 2 and board.version == 3
+    assert board.highlights[0].anchor.rects[0].page == 2
+    assert [(e.from_, e.to) for e in board.edges] == [("h-1", "n-n")]
+    assert path.read_bytes() == before
+
+
+def test_the_first_write_over_a_schema_1_board_keeps_one_copy_of_it(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    path = _write_v1(store, paper_id)
+    original = path.read_bytes()
+    copy = store.paper_dir(paper_id) / "board.v1.json"
+    board = store.read_board(paper_id)
+    assert not copy.exists()
+    assert store.write_board(paper_id, board, expected_version=3) == 4
+    assert copy.read_bytes() == original
+    assert json.loads(path.read_text())["schema"] == 2
+    assert store.write_board(paper_id, store.read_board(paper_id), expected_version=4) == 5
+    assert copy.read_bytes() == original
+
+
+def test_a_schema_2_board_never_gets_a_v1_copy(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    store.write_board(paper_id, Board(paper_id=paper_id), expected_version=0)
+    store.write_board(paper_id, store.read_board(paper_id), expected_version=1)
+    assert not (store.paper_dir(paper_id) / "board.v1.json").exists()
+
+
+def test_template_defaults_to_the_nine_slots_and_persists(store_root):
+    store = Store(store_root)
+    assert store.read_template().slots == DEFAULT_SLOTS
+    assert not (store_root / "template.json").exists()
+    template = store.read_template()
+    template.slots = template.slots[:2]
+    store.write_template(template)
+    assert [s.name for s in store.read_template().slots] == ["Background", "Problem"]
+    assert json.loads((store_root / "template.json").read_text())["schema"] == 1

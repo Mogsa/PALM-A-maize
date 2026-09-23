@@ -1,10 +1,14 @@
-"""The `board.json` and `tags.json` contract. See SPEC-ADDENDUM.md section 4.
+"""The `board.json`, `tags.json` and `template.json` contract. See
+SPEC-ADDENDUM.md section 4.
 
-React Flow's native node and edge shape with its runtime fields forbidden, plus
-the `highlights` array (marks on the paper, never nodes) and a `version` integer
+Board schema 2. Nodes are React Flow's native shape with its runtime fields
+forbidden; edges are stored by the two things they connect (`from`, `to`) and
+become React Flow edges only at render (addendum 4.0). Plus the `highlights`
+array (marks on the paper, never nodes), view state, and a `version` integer
 for optimistic concurrency. Everything that reads or writes a board goes through
 these models and `dump_board`, so a board that did not change produces a
-byte-identical file.
+byte-identical file. A schema 1 board is migrated before it gets here
+(`migrate.py`).
 """
 
 from typing import Annotated, Literal
@@ -14,7 +18,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from paperboard.geometry import Rect
 from paperboard.source_model import PageRect
 
-SCHEMA_VERSION = 1
+# The board and tags schemas are numbered independently since board schema 2
+# (addendum 4): tags.json and template.json did not change.
+BOARD_SCHEMA_VERSION = 2
+TAGS_SCHEMA_VERSION = 1
+TEMPLATE_SCHEMA_VERSION = 1
 CONTEXT_CHARS = 32  # prefix and suffix length in a QuoteSelector
 
 AnchorState = Literal["anchored", "relocated", "orphaned"]
@@ -35,8 +43,8 @@ class QuoteSelector(BaseModel):
 
 
 class HighlightAnchor(BaseModel):
-    page: int = Field(ge=0)
-    rect: Rect
+    """One rect per line of the selection, in reading order (addendum 5.1)."""
+    rects: list[PageRect] = Field(min_length=1)
     quote: QuoteSelector
     position: int = 0
     state: AnchorState = "anchored"
@@ -54,7 +62,6 @@ class Highlight(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
     tags: list[str] = []
-    note: str | None = None
     anchor: HighlightAnchor
     _id = field_validator("id")(_prefixed("h-"))
 
@@ -75,12 +82,38 @@ class ClipSize(BaseModel):
     height: int
 
 
+class PaperScroll(BaseModel):
+    """Where the paper view starts: a page, and PDF points down from its top edge."""
+    page: int = Field(ge=0)
+    y: float
+
+
+class TextBlock(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["text"]
+    page: int = Field(ge=0)
+    rect: Rect
+    text: str
+
+
+class ClipBlock(BaseModel):
+    """A formula, picture or table shown as a rendered clip (`GET /render`)."""
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["clip"]
+    page: int = Field(ge=0)
+    rect: Rect
+    label: str | None = None
+
+
+Block = Annotated[TextBlock | ClipBlock, Field(discriminator="kind")]
+
+
 class ChunkData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tags: list[str] = []
     collapsed: bool = False
     region: ChunkAnchor
-    text: str = ""
+    blocks: list[Block] = []
     user_sized: bool = False
     source_id: str | None = None   # section id from source.json when made by split
 
@@ -93,6 +126,7 @@ class FigureData(BaseModel):
     clip: str | None = None
     clip_size: ClipSize | None = None
     caption: str = ""
+    user_sized: bool = False
     source_id: str | None = None   # figure id from source.json when made by split
 
 
@@ -101,12 +135,16 @@ class NoteData(BaseModel):
     tags: list[str] = []
     collapsed: bool = False
     note: str
+    origin: Literal["reader", "ai"] = "reader"   # set at creation, never changed (addendum 6.2)
+    user_sized: bool = False
 
 
 class GroupData(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tags: list[str] = []
     name: str | None = None
+    tray: bool | None = None     # true on the tray only; absent elsewhere (addendum 4.9)
+    prompt: str | None = None    # a slot's question; absent on a group without one
 
 
 class _NodeBase(BaseModel):
@@ -157,23 +195,26 @@ class EdgeData(BaseModel):
 
 
 class Edge(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    """A connection between two things themselves, each a node id or a highlight
+    id. The order is the order it was drawn in and means nothing. React Flow's
+    source/target and handles are computed at render, never stored (addendum 4.0)."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
     id: str
-    type: str | None = None
-    source: str
-    sourceHandle: str | None = None
-    target: str
-    targetHandle: str | None = None
+    from_: str = Field(alias="from")
+    to: str
     data: EdgeData = EdgeData()
     _id = field_validator("id")(_prefixed("e-"))
 
 
 class Board(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    schema_version: int = Field(default=SCHEMA_VERSION, alias="schema")
+    schema_version: Literal[2] = Field(default=BOARD_SCHEMA_VERSION, alias="schema")
     paper_id: str
     version: int = Field(default=0, ge=0)
     goal: str = ""
+    view: Literal["paper", "board"] = "paper"
+    paper_scroll: PaperScroll | None = None
     active_tags: list[str] = []
     viewport: Viewport = Viewport()
     nodes: list[Node] = []
@@ -201,17 +242,11 @@ class Board(BaseModel):
                 if node.parentId not in placed:
                     raise ValueError(f"{node.id} appears before its parent {node.parentId}")
             placed.add(node.id)
-        highlight_ids = {h.id for h in self.highlights}
+        ends = nodes_by_id.keys() | {h.id for h in self.highlights}
         for edge in self.edges:
-            for end in (edge.source, edge.target):
-                if end not in nodes_by_id:
-                    raise ValueError(f"edge {edge.id} references unknown node {end!r}")
-            for handle in (edge.sourceHandle, edge.targetHandle):
-                if handle is not None and handle not in highlight_ids:
-                    raise ValueError(f"edge {edge.id} references unknown highlight {handle!r}")
-        for highlight in self.highlights:
-            if highlight.note is not None and highlight.note not in nodes_by_id:
-                raise ValueError(f"highlight {highlight.id} references unknown note {highlight.note!r}")
+            for end in (edge.from_, edge.to):
+                if end not in ends:
+                    raise ValueError(f"edge {edge.id} references unknown node or highlight {end!r}")
         return self
 
 
@@ -225,7 +260,7 @@ class Tag(BaseModel):
 
 class TagFile(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    schema_version: int = Field(default=SCHEMA_VERSION, alias="schema")
+    schema_version: int = Field(default=TAGS_SCHEMA_VERSION, alias="schema")
     tags: list[Tag] = []
 
 
@@ -243,6 +278,34 @@ PRESET_TAGS = [
 ]
 
 
+class TemplateSlot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    prompt: str
+
+
+class TemplateFile(BaseModel):
+    """`template.json`: the slots a new board is laid out with, in grid order,
+    three columns (addendum 4.8)."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    schema_version: int = Field(default=TEMPLATE_SCHEMA_VERSION, alias="schema")
+    slots: list[TemplateSlot] = []
+
+
+DEFAULT_SLOTS = [
+    TemplateSlot(name="Background", prompt="What do you need to know first: terms, notation, setup?"),
+    TemplateSlot(name="Problem", prompt="What problem is this solving, and why should anyone care?"),
+    TemplateSlot(name="Prior work & gap", prompt="What did earlier work do, and what did it miss?"),
+    TemplateSlot(name="Main point", prompt="In your own words: what is the one thing this paper shows?"),
+    TemplateSlot(name="How it works", prompt="What are the key parts of the approach?"),
+    TemplateSlot(name="Evidence", prompt="Does the evidence actually support the claim?"),
+    TemplateSlot(name="Limits", prompt="What does it assume, and where does it stop holding?"),
+    TemplateSlot(name="My take", prompt="What do the authors conclude, and do you agree?"),
+    TemplateSlot(name="Open questions", prompt="What is still open? What would you ask the authors?"),
+]
+
+
 def dump_board(board: Board) -> str:
     """The one serializer. Aliases on, `None` fields dropped, stable indentation."""
     return board.model_dump_json(by_alias=True, exclude_none=True, indent=2) + "\n"
@@ -250,3 +313,7 @@ def dump_board(board: Board) -> str:
 
 def dump_tags(tags: TagFile) -> str:
     return tags.model_dump_json(by_alias=True, indent=2) + "\n"
+
+
+def dump_template(template: TemplateFile) -> str:
+    return template.model_dump_json(by_alias=True, indent=2) + "\n"
