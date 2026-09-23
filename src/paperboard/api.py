@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, Header, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
 from paperboard.board_model import Board, ChunkNode, FigureNode, NoteNode, TagFile
@@ -18,6 +19,8 @@ from paperboard.extract import extract
 from paperboard.snap import Selection, select
 from paperboard.source_model import PageRect
 from paperboard.store import NodeNotFound, NoteNotFound, PaperNotFound, Store, VersionConflict, atomic_write
+
+LOCAL_HOSTS = ["127.0.0.1", "localhost"]
 
 
 class TextRequest(BaseModel):
@@ -54,6 +57,9 @@ def _anchors(board: Board) -> dict[str, tuple]:
 def create_app(root: Path) -> FastAPI:
     store = Store(root)
     app = FastAPI(title="paperboard", docs_url=None, redoc_url=None)
+    # Bound to 127.0.0.1, but a page elsewhere can rebind its own name to that
+    # address; it still sends its own name as Host, so refuse any other.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=LOCAL_HOSTS)
 
     @contextmanager
     def opened(paper_id: str):

@@ -2,7 +2,7 @@ import json
 import os
 from datetime import UTC, datetime
 
-from conftest import FIXTURES
+from conftest import FIXTURES, LOCAL
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
@@ -78,7 +78,7 @@ def test_missing_file_exits_nonzero_with_a_readable_message(tmp_path):
 
 
 def test_build_app_serves_the_api_and_a_placeholder_root(tmp_path):
-    client = TestClient(build_app(tmp_path / "data", tmp_path / "missing-web"))
+    client = TestClient(build_app(tmp_path / "data", tmp_path / "missing-web"), base_url=LOCAL)
     assert client.get("/api/papers").json() == []
     assert client.get("/").json()["message"].startswith("paperboard API")
 
@@ -87,7 +87,7 @@ def test_build_app_serves_the_frontend_when_built(tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir(parents=True)
     (dist / "index.html").write_text("<!doctype html><title>board</title>")
-    client = TestClient(build_app(tmp_path / "data", dist))
+    client = TestClient(build_app(tmp_path / "data", dist), base_url=LOCAL)
     assert client.get("/").status_code == 200
     assert "board" in client.get("/").text
 

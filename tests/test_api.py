@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from conftest import FIXTURES
+from conftest import FIXTURES, LOCAL
 from fastapi.testclient import TestClient
 
 from paperboard.api import create_app
@@ -15,7 +15,7 @@ REPLY = "n-01J8Z3QABCDEFGHJKMNPQRSTVZ"
 
 @pytest.fixture
 def client(store_root):
-    return TestClient(create_app(store_root))
+    return TestClient(create_app(store_root), base_url=LOCAL)
 
 
 @pytest.fixture
@@ -34,6 +34,18 @@ def test_list_and_source(client, resnet_id):
     assert source["schema"] == 1 and source["sections"]
 
 
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1:8765", "localhost:5173"])
+def test_localhost_is_served(client, host):
+    assert client.get("/api/papers", headers={"host": host}).status_code == 200
+
+
+@pytest.mark.parametrize("host", ["evil.example", "testserver", "192.168.1.9:8765"])
+def test_a_request_for_another_host_is_refused(client, host):
+    """DNS rebinding: a page on another origin that resolves to 127.0.0.1 still
+    sends its own name as Host."""
+    assert client.get("/api/papers", headers={"host": host}).status_code == 400
+
+
 def test_unknown_paper_is_404_with_the_error_shape(client):
     response = client.get("/api/papers/nope/source")
     assert response.status_code == 404
@@ -48,7 +60,7 @@ def test_pdf_bytes(client, resnet_id):
 
 
 def test_upload_runs_extraction(tmp_path):
-    client = TestClient(create_app(tmp_path))
+    client = TestClient(create_app(tmp_path), base_url=LOCAL)
     with FIXTURES["adam"].open("rb") as handle:
         response = client.post("/api/papers", files={"file": ("adam.pdf", handle, "application/pdf")})
     assert response.status_code == 201
@@ -73,7 +85,7 @@ def test_text_returns_a_selection_with_anchors(client, resnet_id):
 @pytest.mark.parametrize("name, route", [("board.json", "board"), ("source.json", "source")])
 def test_a_corrupt_file_on_disk_is_a_500_not_the_clients_fault(store_root, resnet_id, name, route):
     (store_root / "papers" / resnet_id / name).write_text('{"schema": 1, "paper_id": ')
-    client = TestClient(create_app(store_root), raise_server_exceptions=False)
+    client = TestClient(create_app(store_root), base_url=LOCAL, raise_server_exceptions=False)
     response = client.get(f"/api/papers/{resnet_id}/{route}")
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "corrupt_data"
@@ -81,7 +93,7 @@ def test_a_corrupt_file_on_disk_is_a_500_not_the_clients_fault(store_root, resne
 
 def test_any_other_server_failure_keeps_the_error_shape(store_root, resnet_id):
     (store_root / "papers" / resnet_id / "paper.pdf").write_bytes(b"not a pdf at all")
-    client = TestClient(create_app(store_root), raise_server_exceptions=False)
+    client = TestClient(create_app(store_root), base_url=LOCAL, raise_server_exceptions=False)
     response = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 0, "rect": [0, 0, 10, 10]}]})
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "internal"
