@@ -10,6 +10,7 @@ from pymupdf4llm.helpers.document_layout import OCRMode, parse_document
 
 from paperboard.geometry import Rect, area, column_runs, normalise, pad
 from paperboard.source_model import (
+    FURNITURE,
     Figure,
     LayoutRegion,
     PageInfo,
@@ -81,9 +82,6 @@ def read_regions(pdf_path: Path) -> tuple[list[PageInfo], list[Region]]:
 # heading.
 _NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)*[.)]?|[A-Z][.)])\s+\S")
 
-# Layout labels that can never be a section heading, whatever the model says.
-_FURNITURE = {"page-header", "page-footer", "footnote", "caption"}
-
 MIN_HEADING_CHARS = 2
 MAX_HEADING_CHARS = 120
 
@@ -135,9 +133,8 @@ def _is_heading(region: Region) -> bool:
         return False
     if text.isdigit():
         return False  # a bare page number the model promoted
-    if text[0].islower() or text.endswith("."):
-        return False  # a body sentence the model promoted; no real heading looks like this
-    return True
+    # not a body sentence the model promoted; no real heading looks like one
+    return not (text[0].islower() or text.endswith("."))
 
 
 def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section]:
@@ -147,7 +144,7 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
     the body text and stop before the following heading. Furniture regions are
     excluded from extents so a running head never lands inside a section.
     """
-    body = [r for r in regions if r.label not in _FURNITURE]
+    body = [r for r in regions if r.label not in FURNITURE]
     headings = [(i, r) for i, r in enumerate(body) if _is_heading(r)]
     page_widths = {p.index: p.width for p in pages}
 

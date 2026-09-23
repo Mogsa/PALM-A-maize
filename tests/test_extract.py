@@ -1,8 +1,6 @@
 import re
 from pathlib import Path
 
-import pymupdf
-
 from paperboard.extract import extract
 from paperboard.extract.pymupdf_layout import paper_id_for
 

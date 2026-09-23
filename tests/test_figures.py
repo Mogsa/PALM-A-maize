@@ -91,7 +91,7 @@ def test_find_artwork_falls_back_to_image_branch():
     with the `picture` region removed the `image` branch is the only one that can
     still find anything. Measured directly: `_find_artwork` returns
     confidence == "image" here once the region candidate is filtered out."""
-    pages, regions = read_regions(ATTENTION_PATH)
+    _pages, regions = read_regions(ATTENTION_PATH)
     caption = _attention_caption(regions, page=2)
     filtered = _without_region_and_table_boxes(regions, page=2)
     with pymupdf.open(ATTENTION_PATH) as doc:
@@ -110,7 +110,7 @@ def test_find_artwork_falls_back_to_drawings_branch():
     the `table` region removed the `image` branch finds nothing and only `drawings`
     can. Measured directly: no monkeypatching was needed, the real page's image list
     is already empty."""
-    pages, regions = read_regions(ATTENTION_PATH)
+    _pages, regions = read_regions(ATTENTION_PATH)
     caption = _attention_caption(regions, page=8)
     filtered = _without_region_and_table_boxes(regions, page=8)
     with pymupdf.open(ATTENTION_PATH) as doc:
@@ -129,7 +129,7 @@ def test_find_artwork_returns_none_when_nothing_matches():
     region also removed every branch comes up empty. This pins the drop path that
     `build_figures` currently never exercises on the three fixtures (0 captions
     dropped)."""
-    pages, regions = read_regions(ATTENTION_PATH)
+    _pages, regions = read_regions(ATTENTION_PATH)
     caption = _attention_caption(regions, page=5)
     filtered = _without_region_and_table_boxes(regions, page=5)
     with pymupdf.open(ATTENTION_PATH) as doc:
@@ -145,7 +145,7 @@ def test_image_branch_below_caption_picks_nearest_not_first_in_region_order(monk
     branch already picks nearest-below via `min(candidates, key=lambda r: r.rect[1])`;
     this pins the `image` branch to the same rule instead of `near[0]`
     (first-in-region-order, arbitrary)."""
-    pages, regions = read_regions(ATTENTION_PATH)
+    _pages, regions = read_regions(ATTENTION_PATH)
     caption = _attention_caption(regions, page=2)
     filtered = _without_region_and_table_boxes(regions, page=2)
     cap_x0, _cap_y0, cap_x1, cap_y1 = caption.rect
@@ -170,7 +170,7 @@ def test_drawings_branch_below_caption_picks_nearest_not_first_in_region_order(m
     forced empty so the `drawings` branch is the only one left standing. No
     real fixture page combines zero above-caption candidates with two or more
     below-caption vector-drawing clusters."""
-    pages, regions = read_regions(ATTENTION_PATH)
+    _pages, regions = read_regions(ATTENTION_PATH)
     caption = _attention_caption(regions, page=8)
     filtered = _without_region_and_table_boxes(regions, page=8)
     cap_x0, _cap_y0, cap_x1, cap_y1 = caption.rect

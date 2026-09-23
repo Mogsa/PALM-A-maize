@@ -9,6 +9,7 @@ from fastapi import FastAPI, File, Header, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, ValidationError
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
 from paperboard.board_model import Board, ChunkNode, FigureNode, NoteNode, TagFile
@@ -17,7 +18,16 @@ from paperboard.export import export_markdown
 from paperboard.extract import extract
 from paperboard.snap import Selection, select
 from paperboard.source_model import PageRect
-from paperboard.store import NoteNotFound, PaperNotFound, Store, VersionConflict, atomic_write
+from paperboard.store import (
+    NodeNotFound,
+    NoteNotFound,
+    PaperNotFound,
+    Store,
+    VersionConflict,
+    atomic_write,
+)
+
+LOCAL_HOSTS = ["127.0.0.1", "localhost"]
 
 
 class TextRequest(BaseModel):
@@ -41,9 +51,22 @@ def _error(status: int, code: str, message: str, **extra) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message, **extra}})
 
 
+def _anchors(board: Board) -> dict[str, tuple]:
+    """(state, geometry) for every highlight and piece, keyed by id: what a
+    re-extraction reports as changed when it differs before and after."""
+    out: dict[str, tuple] = {h.id: (h.anchor.state, h.anchor.page, h.anchor.rect) for h in board.highlights}
+    for n in board.nodes:
+        if isinstance(n, (ChunkNode, FigureNode)):
+            out[n.id] = (n.data.region.state, n.data.region.rects)
+    return out
+
+
 def create_app(root: Path) -> FastAPI:
     store = Store(root)
     app = FastAPI(title="paperboard", docs_url=None, redoc_url=None)
+    # Bound to 127.0.0.1, but a page elsewhere can rebind its own name to that
+    # address; it still sends its own name as Host, so refuse any other.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=LOCAL_HOSTS)
 
     @contextmanager
     def opened(paper_id: str):
@@ -84,6 +107,10 @@ def create_app(root: Path) -> FastAPI:
     async def _note_missing(_: Request, exc: NoteNotFound):
         return _error(404, "note_not_found", f"no note {exc}")
 
+    @app.exception_handler(NodeNotFound)
+    async def _node_missing(_: Request, exc: NodeNotFound):
+        return _error(404, "node_not_found", f"no node {exc!r}")
+
     @app.exception_handler(VersionConflict)
     async def _conflict(_: Request, exc: VersionConflict):
         return _error(409, "version_conflict", str(exc), current=exc.current)
@@ -92,13 +119,20 @@ def create_app(root: Path) -> FastAPI:
     async def _invalid(_: Request, exc: RequestValidationError):
         return _error(422, "invalid", str(exc.errors()[0].get("msg", "invalid request")))
 
+    # A request body that fails its model is a RequestValidationError, above. A
+    # ValidationError that reaches here came from reading board.json, source.json
+    # or tags.json off disk: the server's data is corrupt, not the client's payload.
     @app.exception_handler(ValidationError)
-    async def _invalid_model(_: Request, exc: ValidationError):
-        return _error(422, "invalid", str(exc.errors()[0].get("msg", "invalid request")))
+    async def _corrupt(_: Request, exc: ValidationError):
+        return _error(500, "corrupt_data", f"{exc.title}: {exc.errors()[0].get('msg', 'invalid data')}")
 
     @app.exception_handler(ValueError)
     async def _value(_: Request, exc: ValueError):
         return _error(422, "invalid", str(exc))
+
+    @app.exception_handler(Exception)
+    async def _unhandled(_: Request, exc: Exception):
+        return _error(500, "internal", f"{type(exc).__name__}: {exc}")
 
     # -- papers -------------------------------------------------------------
 
@@ -124,11 +158,11 @@ def create_app(root: Path) -> FastAPI:
             doc = extract(store.pdf_path(paper_id))
         except Exception as exc:  # noqa: BLE001 -- turned into a 500, not swallowed
             return _error(500, "extraction_failed", f"{type(exc).__name__}: {exc}")
+        before = _anchors(resolved_board(paper_id))
         store.write_source(paper_id, doc)
-        board = resolved_board(paper_id)
-        states = {h.id: h.anchor.state for h in board.highlights}
-        states.update({n.id: n.data.region.state for n in board.nodes if isinstance(n, (ChunkNode, FigureNode))})
-        return {"states": states}
+        after = _anchors(resolved_board(paper_id))
+        changed = [anchor_id for anchor_id, anchor in after.items() if before.get(anchor_id) != anchor]
+        return {"changed": changed, "states": {anchor_id: anchor[0] for anchor_id, anchor in after.items()}}
 
     @app.get("/api/papers/{paper_id}/pdf")
     def get_pdf(paper_id: str):
@@ -193,15 +227,24 @@ def create_app(root: Path) -> FastAPI:
             if "t-question" in h.tags and h.note is None and h.id not in answered:
                 out.append({"id": h.id, "kind": "highlight", "text": h.anchor.quote.exact})
         for n in board.nodes:
-            if "t-question" in n.data.tags and n.id not in answered and not isinstance(n, NoteNode):
-                text = n.data.region.start.exact if isinstance(n, (ChunkNode, FigureNode)) else (n.data.name or "")
-                out.append({"id": n.id, "kind": n.type, "text": text})
+            if "t-question" in n.data.tags and n.id not in answered:
+                out.append({"id": n.id, "kind": n.type, "text": question_text(paper_id, n)})
         return out
+
+    def question_text(paper_id: str, node) -> str:
+        if isinstance(node, (ChunkNode, FigureNode)):
+            return node.data.region.start.exact
+        if isinstance(node, NoteNode):
+            try:
+                return store.read_note(paper_id, node.id).strip()
+            except NoteNotFound:
+                return ""
+        return node.data.name or ""
 
     @app.post("/api/papers/{paper_id}/export")
     def export(paper_id: str, body: ExportRequest):
         doc = store.read_source(paper_id)
-        board = store.read_board(paper_id)
+        board = resolved_board(paper_id)
         notes = {}
         for n in board.nodes:
             if isinstance(n, NoteNode):

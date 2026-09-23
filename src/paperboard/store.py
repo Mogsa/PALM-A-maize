@@ -18,6 +18,9 @@ from paperboard.extract import extract
 from paperboard.source_model import SourceDocument
 
 _FRONT_MATTER = re.compile(r"\A---\nid: (?P<id>[^\n]+)\n---\n", re.DOTALL)
+# A node id as the client mints it: "n-" and a ULID (addendum 4.5). Checked
+# before an id becomes a filename or a front-matter line.
+_NODE_ID = re.compile(r"n-[0-9A-HJKMNP-TV-Z]{26}")
 
 
 class PaperNotFound(Exception):
@@ -26,6 +29,10 @@ class PaperNotFound(Exception):
 
 class NoteNotFound(Exception):
     pass
+
+
+class NodeNotFound(Exception):
+    """An id no client could have minted, so no node can have it."""
 
 
 class VersionConflict(Exception):
@@ -55,6 +62,11 @@ def atomic_write(path: Path, data: bytes) -> None:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _check_node_id(node_id: str) -> None:
+    if not _NODE_ID.fullmatch(node_id):
+        raise NodeNotFound(node_id)
 
 
 @dataclass
@@ -92,20 +104,19 @@ class Store:
                 continue
             doc = self.read_source(folder.name)
             title = doc.sections[0].title if doc.sections else folder.name
-            out.append(PaperSummary(paper_id=doc.paper_id, title=title, page_count=len(doc.pages)))
+            out.append(PaperSummary(paper_id=folder.name, title=title, page_count=len(doc.pages)))
         return out
 
     def add_paper(self, pdf_bytes: bytes) -> SourceDocument:
         """Extract a PDF and lay out its folder. Idempotent for the same bytes,
-        because paper_id is a pure function of the file (extractor Task 7)."""
+        because paper_id is a pure function of the file (extractor Task 7).
+        A newer arXiv version has the same id, so the PDF is always replaced
+        along with source.json: the two in one folder must describe one file."""
         with tempfile.TemporaryDirectory() as scratch:
             staged = Path(scratch) / "paper.pdf"
             staged.write_bytes(pdf_bytes)
             doc = extract(staged)
-        folder = self.papers_dir / doc.paper_id
-        folder.mkdir(parents=True, exist_ok=True)
-        if not (folder / "paper.pdf").exists():
-            atomic_write(folder / "paper.pdf", pdf_bytes)
+        atomic_write(self.papers_dir / doc.paper_id / "paper.pdf", pdf_bytes)
         self.write_source(doc.paper_id, doc)
         return doc
 
@@ -113,6 +124,9 @@ class Store:
         return SourceDocument.model_validate_json((self.paper_dir(paper_id) / "source.json").read_text())
 
     def write_source(self, paper_id: str, doc: SourceDocument) -> None:
+        """The folder name is the paper id, always: a re-extraction that names the
+        paper differently (a changed title slug) must not move its board."""
+        doc = doc.model_copy(update={"paper_id": paper_id})
         folder = self.papers_dir / paper_id
         atomic_write(folder / "source.json", doc.model_dump_json(by_alias=True, indent=2).encode())
 
@@ -139,13 +153,14 @@ class Store:
 
     def read_note(self, paper_id: str, node_id: str) -> str:
         path = self.paper_dir(paper_id) / "notes" / f"{node_id}.md"
-        if not path.exists():
+        if not _NODE_ID.fullmatch(node_id) or not path.exists():
             raise NoteNotFound(node_id)
         raw = path.read_text(encoding="utf-8")
         match = _FRONT_MATTER.match(raw)
         return raw[match.end():] if match else raw
 
     def write_note(self, paper_id: str, node_id: str, markdown: str) -> None:
+        _check_node_id(node_id)
         body = f"---\nid: {node_id}\n---\n{markdown}"
         atomic_write(self.paper_dir(paper_id) / "notes" / f"{node_id}.md", body.encode("utf-8"))
 
@@ -162,6 +177,7 @@ class Store:
     # -- clips --------------------------------------------------------------
 
     def clip_path(self, paper_id: str, node_id: str) -> Path:
+        _check_node_id(node_id)
         return self.paper_dir(paper_id) / "clips" / f"{node_id}.png"
 
     def write_clip(self, paper_id: str, node_id: str, png: bytes) -> str:

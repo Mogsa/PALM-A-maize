@@ -148,6 +148,58 @@ def test_highlight_note_field_and_edge_agreeing_prints_once(resnet):
     assert "## Notes" not in md
 
 
+def _mark(id, page, rect, quote):
+    return Highlight(id=id, tags=[], note=None, anchor=HighlightAnchor(page=page, rect=rect, quote=QuoteSelector(exact=quote)))
+
+
+def _chunk(id, rects):
+    region = ChunkAnchor(rects=rects, start=QuoteSelector(exact=id), end=QuoteSelector(exact=id))
+    return ChunkNode(id=id, type="chunk", position={"x": 0, "y": 0},
+                     data={"tags": [], "collapsed": False, "region": region.model_dump(), "text": id})
+
+
+def test_highlights_in_a_chunk_follow_the_paper_not_the_board(resnet):
+    doc, pdf = resnet
+    method = next(s for s in doc.sections if s.number == "3.1")
+    x0, y0, x1, _ = method.extent[0].rect
+    first = _mark("h-first", method.extent[0].page, (x0 + 2, y0 + 20, x1 - 2, y0 + 40), "the earlier passage")
+    later = _mark("h-later", method.extent[0].page, (x0 + 2, y0 + 100, x1 - 2, y0 + 120), "the later passage")
+    board = Board(paper_id=doc.paper_id, nodes=[_chunk("n-method", method.extent)], highlights=[later, first])
+    md = export_markdown(doc, board, {}, pdf, tags=[])
+    assert md.index("the earlier passage") < md.index("the later passage")
+
+
+def test_loose_highlights_follow_reading_order_on_a_two_column_page(resnet):
+    """ResNet page 2: a mark high in the right column reads after one lower in
+    the left column; sorting by (page, y0) put it first."""
+    doc, pdf = resnet
+    texts = [r for r in doc.regions if r.page == 2 and r.label == "text"]
+    left = next(r for r in texts if r.rect[0] < 100 and r.rect[1] > 140)
+    right = next(r for r in texts if r.rect[0] > 300)
+    lx0, ly0, lx1, _ = left.rect
+    rx0, ry0, rx1, _ = right.rect
+    assert ry0 + 5 < ly0 + 40
+    board = Board(paper_id=doc.paper_id, highlights=[
+        _mark("h-right", 2, (rx0 + 2, ry0 + 5, rx1 - 2, ry0 + 15), "right column mark"),
+        _mark("h-left", 2, (lx0 + 2, ly0 + 40, lx1 - 2, ly0 + 50), "left column mark"),
+    ])
+    md = export_markdown(doc, board, {}, pdf, tags=[])
+    assert md.index("left column mark") < md.index("right column mark")
+
+
+def test_a_highlight_in_overlapping_chunks_is_printed_once_under_the_first(resnet):
+    doc, pdf = resnet
+    method = next(s for s in doc.sections if s.number == "3.1")
+    page, (x0, y0, x1, _) = method.extent[0].page, method.extent[0].rect
+    inner = PageRect(page=page, rect=(x0, y0 + 10, x1, y0 + 60))
+    mark = _mark("h-shared", page, (x0 + 2, y0 + 20, x1 - 2, y0 + 40), "a shared passage")
+    board = Board(paper_id=doc.paper_id, nodes=[_chunk("n-inner", [inner]), _chunk("n-method", method.extent)],
+                  highlights=[mark])
+    md = export_markdown(doc, board, {}, pdf, tags=[])
+    assert md.count("a shared passage") == 1
+    assert md.index("## n-method") < md.index("a shared passage") < md.index("## n-inner")
+
+
 def test_a_one_line_cut_sorts_by_the_region_it_sits_in(resnet):
     """A cut of one line matches no region by "region midpoint inside the
     node's rect", so it used to sort after everything on its page (final

@@ -71,9 +71,19 @@ def _order_key(doc: SourceDocument, node: ChunkNode | FigureNode):
     nodes on its page, by `(y0, x0)`.
     """
     first = node.data.region.rects[0]
-    idx = _region_index(doc, first.page, first.rect)
-    x0, y0, _x1, _y1 = normalise(first.rect)
-    return (first.page, idx if idx is not None else float("inf"), y0, x0)
+    return _reading_key(doc, first.page, first.rect)
+
+
+def _mark_key(doc: SourceDocument, highlight: Highlight):
+    """A highlight's place in reading order, by the same rule as a node's."""
+    return _reading_key(doc, highlight.anchor.page, highlight.anchor.rect)
+
+
+def _reading_key(doc: SourceDocument, page: int, rect):
+    idx = _region_index(doc, page, rect)
+    x0, y0, _x1, _y1 = normalise(rect)
+    # Within one region, top to bottom then left to right.
+    return (page, idx if idx is not None else float("inf"), y0, x0)
 
 
 def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pdf: pymupdf.Document, tags: list[str]) -> str:
@@ -117,7 +127,9 @@ def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pd
     pieces = sorted((n for n in board.nodes if isinstance(n, (ChunkNode, FigureNode))),
                      key=lambda n: _order_key(doc, n))
     for node in pieces:
-        marks = [h for h in highlights_in(board, node)]
+        # A mark inside overlapping chunks is printed once, under the first in paper order.
+        marks = sorted((h for h in highlights_in(board, node) if h.id not in placed),
+                       key=lambda h: _mark_key(doc, h))
         placed.update(h.id for h in marks)
         if not _wanted(tags, node.data.tags) and not any(_wanted(tags, h.tags) for h in marks):
             continue
@@ -139,7 +151,7 @@ def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pd
     loose = [h for h in board.highlights if h.id not in placed and _wanted(tags, h.tags)]
     if loose:
         out += ["## Highlights outside any chunk", ""]
-        for h in sorted(loose, key=lambda h: (h.anchor.page, h.anchor.rect[1])):
+        for h in sorted(loose, key=lambda h: _mark_key(doc, h)):
             out += [f"> {h.anchor.quote.exact.strip()}  (page {h.anchor.page + 1})"]
             out += note_lines(h.id)
             out += [""]

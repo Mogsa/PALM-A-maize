@@ -13,6 +13,9 @@ MANIFEST = json.loads((PAPER_DIR / "MANIFEST.json").read_text())
 
 FIXTURES = {name: PAPER_DIR / f"{name}.pdf" for name in MANIFEST}
 
+# The server only answers requests addressed to localhost; test clients say so.
+LOCAL = "http://127.0.0.1"
+
 MISSING_FIXTURE = (
     "fixture paper {path} is not present. The PDFs are not committed (see "
     "tests/fixtures/papers/SOURCES.md); fetch them once with:\n\n"

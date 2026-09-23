@@ -1,6 +1,5 @@
 """`paperboard extract` and `paperboard serve`."""
 
-import shutil
 from pathlib import Path
 
 import typer
@@ -9,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from paperboard.api import create_app
 from paperboard.extract import extract
+from paperboard.store import atomic_write
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -57,13 +57,11 @@ def extract_command(
         typer.echo(f"error: could not extract {pdf.name}: {error}", err=True)
         raise typer.Exit(code=2) from error
 
+    # Both files every time, each atomically: a newer arXiv version shares the
+    # paper id, and the folder's PDF and source must describe one file.
     folder = out / document.paper_id
-    folder.mkdir(parents=True, exist_ok=True)
-    if not (folder / "paper.pdf").exists():
-        shutil.copy2(pdf, folder / "paper.pdf")
-    (folder / "source.json").write_text(
-        document.model_dump_json(indent=2, by_alias=True), encoding="utf-8"
-    )
+    atomic_write(folder / "paper.pdf", pdf.read_bytes())
+    atomic_write(folder / "source.json", document.model_dump_json(indent=2, by_alias=True).encode("utf-8"))
     typer.echo(
         f"{document.paper_id}: {len(document.sections)} sections, "
         f"{len(document.figures)} figures"

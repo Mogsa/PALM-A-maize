@@ -6,9 +6,15 @@ from itertools import groupby
 import pymupdf
 from pydantic import BaseModel
 
-from paperboard.anchoring import PageIndex, build_index, global_position, rect_for_stripped, strip_whitespace
+from paperboard.anchoring import (
+    PageIndex,
+    build_index,
+    global_position,
+    rect_for_stripped,
+    strip_whitespace,
+)
 from paperboard.board_model import CONTEXT_CHARS, ChunkAnchor, HighlightAnchor, QuoteSelector
-from paperboard.geometry import Rect, area, contains_point, midpoint, normalise
+from paperboard.geometry import Rect, area, contains_point, intersection, midpoint, normalise, union
 from paperboard.source_model import PageRect, SourceDocument
 
 SNAP_THRESHOLD = 0.6   # a rough drag covering this share of a region's characters takes the region
@@ -76,13 +82,16 @@ def _smallest_region_at(doc: SourceDocument, page: int, point: tuple[float, floa
 
 
 def _snap_rect(pdf: pymupdf.Document, rect: PageRect, region) -> PageRect:
-    """The whole region if the selection covers enough of its characters, else
-    exactly what was selected."""
+    """Grown to take in the whole region if the selection covers enough of the
+    region's characters, else exactly what was selected. Coverage counts only the
+    region's characters inside the selection, and the result is the union of the
+    two, so a drag that runs past the region is never cut back to it."""
     page = pdf[rect.page]
-    selected, _ = strip_whitespace(text_under(page, rect.rect))
+    inside = intersection(rect.rect, region.rect)
+    covered, _ = strip_whitespace(text_under(page, inside)) if inside else ("", [])
     whole, _ = strip_whitespace(text_under(page, region.rect))
-    if whole and len(selected) / len(whole) >= SNAP_THRESHOLD:
-        return PageRect(page=rect.page, rect=normalise(region.rect))
+    if whole and len(covered) / len(whole) >= SNAP_THRESHOLD:
+        return PageRect(page=rect.page, rect=union(rect.rect, region.rect))
     return rect
 
 

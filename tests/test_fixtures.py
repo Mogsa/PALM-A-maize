@@ -1,9 +1,8 @@
 import hashlib
 
 import pymupdf
+import pymupdf.layout  # import must not touch the network
 import pymupdf4llm
-import pymupdf.layout  # noqa: F401  -- import must not touch the network
-
 from conftest import MANIFEST
 
 

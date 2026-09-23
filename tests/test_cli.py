@@ -1,6 +1,8 @@
 import json
+import os
+from datetime import UTC, datetime
 
-from conftest import FIXTURES
+from conftest import FIXTURES, LOCAL
 from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
@@ -33,6 +35,38 @@ def test_extract_is_idempotent(tmp_path):
     assert len(list(tmp_path.iterdir())) == 1
 
 
+def test_extract_writes_atomically_and_keeps_pdf_and_source_together(tmp_path, monkeypatch, extracted):
+    """A crash mid-write leaves the previous source.json intact, and a re-run
+    with a newer PDF of the same paper replaces the PDF along with the source."""
+    import paperboard.cli as cli_module
+
+    doc = extracted["resnet"]
+    monkeypatch.setattr(cli_module, "extract", lambda _path: doc)
+    v1 = tmp_path / "v1.pdf"
+    v1.write_bytes(FIXTURES["resnet"].read_bytes())
+    out = tmp_path / "papers"
+    assert runner.invoke(app, ["extract", str(v1), "--out", str(out)]).exit_code == 0
+    source = out / doc.paper_id / "source.json"
+    before = source.read_bytes()
+
+    later = doc.model_copy(update={"extracted_at": datetime(2030, 1, 1, tzinfo=UTC)})
+    monkeypatch.setattr(cli_module, "extract", lambda _path: later)
+
+    def crash(src, dst):
+        raise OSError("simulated crash between tmp and replace")
+
+    with monkeypatch.context() as crashing:
+        crashing.setattr(os, "replace", crash)
+        assert runner.invoke(app, ["extract", str(v1), "--out", str(out)]).exit_code != 0
+    assert source.read_bytes() == before
+    assert not list(source.parent.glob("*.tmp"))
+
+    v2 = tmp_path / "v2.pdf"
+    v2.write_bytes(v1.read_bytes() + b"\n% revised\n")
+    assert runner.invoke(app, ["extract", str(v2), "--out", str(out)]).exit_code == 0
+    assert (out / doc.paper_id / "paper.pdf").read_bytes() == v2.read_bytes()
+
+
 def test_missing_file_exits_nonzero_with_a_readable_message(tmp_path):
     result = runner.invoke(app, ["extract", str(tmp_path / "nope.pdf")])
     assert result.exit_code != 0
@@ -44,7 +78,7 @@ def test_missing_file_exits_nonzero_with_a_readable_message(tmp_path):
 
 
 def test_build_app_serves_the_api_and_a_placeholder_root(tmp_path):
-    client = TestClient(build_app(tmp_path / "data", tmp_path / "missing-web"))
+    client = TestClient(build_app(tmp_path / "data", tmp_path / "missing-web"), base_url=LOCAL)
     assert client.get("/api/papers").json() == []
     assert client.get("/").json()["message"].startswith("paperboard API")
 
@@ -53,7 +87,7 @@ def test_build_app_serves_the_frontend_when_built(tmp_path):
     dist = tmp_path / "dist"
     dist.mkdir(parents=True)
     (dist / "index.html").write_text("<!doctype html><title>board</title>")
-    client = TestClient(build_app(tmp_path / "data", dist))
+    client = TestClient(build_app(tmp_path / "data", dist), base_url=LOCAL)
     assert client.get("/").status_code == 200
     assert "board" in client.get("/").text
 

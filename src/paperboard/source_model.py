@@ -65,6 +65,12 @@ class PageText(BaseModel):
     text: str
 
 
+# Layout labels for page furniture: running heads, page numbers, footnotes and
+# captions. Never a section heading, never part of a section's extent or of a
+# chunk rebuilt from regions.
+FURNITURE = {"page-header", "page-footer", "footnote", "caption"}
+
+
 class LayoutRegion(BaseModel):
     """One labelled layout box. Stored for the snap rule in SPEC-ADDENDUM.md section 5.3
     and nothing else: the API must not re-run the layout model per request."""

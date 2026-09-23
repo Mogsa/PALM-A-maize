@@ -3,11 +3,20 @@ import os
 import threading
 
 import pytest
-
-from paperboard.board_model import Board, NoteNode, PRESET_TAGS
-from paperboard.store import PaperNotFound, Store, VersionConflict, atomic_write
 from conftest import FIXTURES
 
+from paperboard.board_model import PRESET_TAGS, Board, NoteNode
+from paperboard.store import (
+    NodeNotFound,
+    NoteNotFound,
+    PaperNotFound,
+    Store,
+    VersionConflict,
+    atomic_write,
+)
+
+NOTE = "n-01J8Z3QABCDEFGHJKMNPQRSTVW"   # a node id as the client mints it (addendum 4.5)
+FIG = "n-01J8Z3QABCDEFGHJKMNPQRSTVX"
 BARRIER_SECONDS = 1.0  # how long one board write waits for the other to have read
 
 
@@ -104,10 +113,22 @@ def test_write_board_with_no_expected_version_is_refused(store_root):
 def test_notes_round_trip_with_front_matter(store_root):
     store = Store(store_root)
     paper_id = store.list_papers()[0].paper_id
-    store.write_note(paper_id, "n-01", "Multi-head attention is *h* attentions.\n")
-    raw = (store.paper_dir(paper_id) / "notes" / "n-01.md").read_text()
-    assert raw.startswith("---\nid: n-01\n---\n")
-    assert store.read_note(paper_id, "n-01") == "Multi-head attention is *h* attentions.\n"
+    store.write_note(paper_id, NOTE, "Multi-head attention is *h* attentions.\n")
+    raw = (store.paper_dir(paper_id) / "notes" / f"{NOTE}.md").read_text()
+    assert raw.startswith(f"---\nid: {NOTE}\n---\n")
+    assert store.read_note(paper_id, NOTE) == "Multi-head attention is *h* attentions.\n"
+
+
+def test_a_malformed_node_id_never_reaches_a_filename(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    with pytest.raises(NodeNotFound):
+        store.write_note(paper_id, f"{NOTE}\nid: forged", "x")
+    with pytest.raises(NodeNotFound):
+        store.write_clip(paper_id, "n-../../escape", b"png")
+    with pytest.raises(NoteNotFound):
+        store.read_note(paper_id, "n-../../escape")
+    assert not (store.paper_dir(paper_id) / "notes").exists()
 
 
 def test_tags_default_to_presets_and_persist(store_root):
@@ -130,9 +151,36 @@ def test_add_paper_extracts_and_lays_out_the_folder(tmp_path):
     assert len(list((tmp_path / "papers").iterdir())) == 1
 
 
+def test_re_adding_a_newer_version_replaces_the_pdf_with_its_source(tmp_path, monkeypatch, extracted):
+    """arXiv v1 and v2 share a paper id (the id carries no version). The folder
+    must not end up holding the old PDF beside the new version's source.json."""
+    import paperboard.store as store_module
+
+    monkeypatch.setattr(store_module, "extract", lambda _path: extracted["resnet"])
+    store = Store(tmp_path)
+    v1 = FIXTURES["resnet"].read_bytes()
+    v2 = v1 + b"\n% revised\n"
+    paper_id = store.add_paper(v1).paper_id
+    assert store.add_paper(v2).paper_id == paper_id
+    assert store.pdf_path(paper_id).read_bytes() == v2
+
+
+def test_the_folder_name_is_the_paper_id(store_root, extracted):
+    """A re-extraction whose extractor names the paper differently (a changed
+    title slug) must not change the id: the board lives in the folder."""
+    store = Store(store_root)
+    paper_id = extracted["resnet"].paper_id
+    store.write_source(paper_id, extracted["resnet"].model_copy(update={"paper_id": "renamed"}))
+    assert store.read_source(paper_id).paper_id == paper_id
+
+    path = store.paper_dir(paper_id) / "source.json"
+    path.write_text(path.read_text().replace(f'"{paper_id}"', '"hand-edited"'))
+    assert paper_id in [p.paper_id for p in store.list_papers()]
+
+
 def test_clip_is_written_under_clips_and_referenced_relatively(store_root):
     store = Store(store_root)
     paper_id = store.list_papers()[0].paper_id
-    rel = store.write_clip(paper_id, "n-fig", b"\x89PNG\r\n\x1a\nfake")
-    assert rel == "clips/n-fig.png"
+    rel = store.write_clip(paper_id, FIG, b"\x89PNG\r\n\x1a\nfake")
+    assert rel == f"clips/{FIG}.png"
     assert (store.paper_dir(paper_id) / rel).read_bytes().startswith(b"\x89PNG")

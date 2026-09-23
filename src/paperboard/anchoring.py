@@ -19,7 +19,7 @@ from rapidfuzz import fuzz
 
 from paperboard.board_model import ChunkAnchor, HighlightAnchor, QuoteSelector
 from paperboard.geometry import Rect, column_runs, contains_point, midpoint, normalise, union
-from paperboard.source_model import PageRect, SourceDocument
+from paperboard.source_model import FURNITURE, PageRect, SourceDocument
 
 MIN_SCORE = 0.5            # below this, a quote is orphaned
 MIN_QUOTE_SCORE = 0.6      # the quote itself must match at least this well to be a candidate
@@ -360,8 +360,9 @@ def resolve_highlight(anchor: HighlightAnchor, index: list[PageIndex], pdf: pymu
 def _regions_between(doc: SourceDocument, start: tuple[int, Rect], end: tuple[int, Rect]) -> list[tuple[int, Rect]]:
     """Layout regions in reading order from the one holding `start` to the one
     holding `end`, inclusive. Regions are stored in extraction order, which is
-    reading order, so this is a slice."""
-    regions = [(r.page, r.rect) for r in doc.regions]
+    reading order, so this is a slice. Page furniture is left out, as it is
+    from section extents."""
+    regions = [(r.page, r.rect) for r in doc.regions if r.label not in FURNITURE]
 
     def holding(target: tuple[int, Rect]) -> int | None:
         page, rect = target
@@ -378,14 +379,21 @@ def _regions_between(doc: SourceDocument, start: tuple[int, Rect], end: tuple[in
     return regions[first:last + 1]
 
 
+def _quoted(selector: QuoteSelector) -> bool:
+    return bool(strip_whitespace(selector.exact)[0])
+
+
 def resolve_chunk(anchor: ChunkAnchor, index: list[PageIndex], pdf: pymupdf.Document, doc: SourceDocument) -> ChunkAnchor:
     """Anchor the two ends independently. If both hold where they were (ruling
     R12: each end's text box has its midpoint inside a stored rect on its
     page), keep the stored rects. If they moved, rebuild the region from the
     layout regions between them with the same column-run rule extraction uses.
     A chunk with no quotable text at either end (a figure with no text layer)
-    has nothing to re-find and anchors on its geometry alone."""
-    if not strip_whitespace(anchor.start.exact)[0] and not strip_whitespace(anchor.end.exact)[0]:
+    has nothing to re-find and anchors on its geometry alone. An end with an
+    empty quote (a split section ending on a picture) is no evidence either way:
+    the chunk anchors on its other end plus the stored geometry."""
+    start_quoted, end_quoted = _quoted(anchor.start), _quoted(anchor.end)
+    if not start_quoted and not end_quoted:
         return anchor.model_copy(update={"state": "anchored"})
     first_page = anchor.rects[0].page
     start = find_quote(index, anchor.start, anchor.position, first_page)
@@ -399,10 +407,13 @@ def resolve_chunk(anchor: ChunkAnchor, index: list[PageIndex], pdf: pymupdf.Docu
         rect = _recover_rect(pdf, index, match)
         return (match.page, rect) if rect else (fallback.page, fallback.rect)
 
+    def holds(match: Match | None, quoted: bool, at: tuple[int, Rect]) -> bool:
+        return _holds(at, anchor.rects) if match else not quoted
+
     start_at = located(start, anchor.rects[0])
     end_at = located(end, anchor.rects[-1])
-    if start and end and _holds(start_at, anchor.rects) and _holds(end_at, anchor.rects):
-        position = global_position(index, start.page, start.start)
+    if holds(start, start_quoted, start_at) and holds(end, end_quoted, end_at):
+        position = global_position(index, start.page, start.start) if start else anchor.position
         return anchor.model_copy(update={"state": "anchored", "position": position})
 
     widths = {p.index: p.width for p in doc.pages}
