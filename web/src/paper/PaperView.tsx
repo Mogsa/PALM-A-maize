@@ -14,12 +14,13 @@ type Props = {
   paperId: string;
   source: Source;
   board: Board;
-  focus: PageRect | null;                       // scroll here when it changes
+  focus: PageRect | null;                       // scroll here once, then onFocusHandled
+  onFocusHandled: () => void;
   onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean) => void;
   onOutlineClick: (nodeId: string) => void;
 };
 
-export function PaperView({ paperId, source, board, focus, onSelect, onOutlineClick }: Props) {
+export function PaperView({ paperId, source, board, focus, onFocusHandled, onSelect, onOutlineClick }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
 
@@ -31,7 +32,8 @@ export function PaperView({ paperId, source, board, focus, onSelect, onOutlineCl
     const scale = canvas.clientWidth / source.pages[focus.page].width;
     el.scrollIntoView({ block: "start" });
     container.current.scrollBy({ top: focus.rect[1] * scale - 80 });
-  }, [focus, ready, source]);
+    onFocusHandled();   // a jump is an event: consumed, so it never re-applies
+  }, [focus, ready, source, onFocusHandled]);
 
   const onMouseUp = (event: React.MouseEvent) => {
     if (!container.current) return;

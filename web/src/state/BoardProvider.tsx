@@ -1,16 +1,20 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "../api/client";
+import { paperWords } from "../board/marks";
 import { boardReducer, initialBoardState, type BoardAction, type BoardState } from "../model/boardReducer";
 import type { Source } from "../model/types";
 import { createPersistence } from "./persistence";
 
-type Ctx = { state: BoardState; dispatch: React.Dispatch<BoardAction>; source: Source; notice: string | null; paperId: string };
+/** `words` is the paper's vocabulary, for reflowing its text (board/marks). */
+type Ctx = { state: BoardState; dispatch: React.Dispatch<BoardAction>; source: Source; words: ReadonlySet<string>; notice: string | null; paperId: string };
 const BoardContext = createContext<Ctx | null>(null);
 
 export function BoardProvider({ paperId, children }: { paperId: string; children: React.ReactNode }) {
   const [state, dispatch] = useReducer(boardReducer, initialBoardState);
   const [source, setSource] = useState<Source | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const persistence = useRef<ReturnType<typeof createPersistence> | null>(null);
 
   useEffect(() => {
@@ -19,7 +23,16 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
       if (!live) return;
       setSource(s);
       dispatch({ type: "load", board: b });
+    }, (error: unknown) => {
+      // An ApiError's message is the server's own ({"error": {code, message}}).
+      console.error("Could not open the paper", error);
+      if (live) setFailure(error instanceof Error ? error.message : String(error));
     });
+    return () => { live = false; };
+  }, [paperId, attempt]);
+
+  useEffect(() => {
+    let live = true;
     // Callbacks are bound to this paper. After cleanup they are ignored, so a late save of this paper
     // cannot change the state of the next one; the save itself still goes to this paper's route.
     const persist = createPersistence({
@@ -53,7 +66,16 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
     if (state.dirty) persistence.current?.schedule(state.board, state.revision);
   }, [state]);
 
-  const value = useMemo(() => (source ? { state, dispatch, source, notice, paperId } : null), [state, source, notice, paperId]);
+  const words = useMemo(() => paperWords(source?.page_text ?? []), [source]);
+  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId } : null), [state, source, words, notice, paperId]);
+  if (!value && failure) {
+    return (
+      <div className="loading load-failed" role="alert">
+        <p>Could not open this paper: {failure}</p>
+        <button onClick={() => { setFailure(null); setAttempt((n) => n + 1); }}>Retry</button>
+      </div>
+    );
+  }
   if (!value) return <p className="loading">Loading</p>;
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
 }

@@ -42,6 +42,39 @@ describe("boardReducer", () => {
     expect(s.board.nodes.map((n) => n.id)).toEqual(["n-1"]);
     expect(s.board.edges).toEqual([]);
   });
+  it("removeNode on a group lifts its children in place, keeps nested groups and surviving edges", () => {
+    const group = (id: string, x: number, y: number, parentId?: string): BoardNode =>
+      ({ id, type: "group", position: { x, y }, width: 400, height: 300, data: { tags: [], name: null }, ...(parentId ? { parentId } : {}) });
+    const child = (id: string, x: number, y: number, parentId: string): BoardNode => ({ ...note, id, position: { x, y }, parentId });
+    const nodes = [group("n-G", 100, 100), group("n-H", 10, 20, "n-G"), child("n-C", 5, 7, "n-H"), child("n-D", 30, 40, "n-G"), { ...note, id: "n-O" }];
+    const edges = [{ id: "e-1", source: "n-D", target: "n-O" }, { id: "e-2", source: "n-G", target: "n-O" }];
+    let s = boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), nodes, edges } });
+    s = boardReducer(s, { type: "removeNode", id: "n-G" });
+    const byId = new Map(s.board.nodes.map((n) => [n.id, n]));
+    expect([...byId.keys()].sort()).toEqual(["n-C", "n-D", "n-H", "n-O"]);
+    expect(byId.get("n-H")).toMatchObject({ position: { x: 110, y: 120 } });
+    expect(byId.get("n-H")!.parentId).toBeUndefined();
+    expect(byId.get("n-C")).toMatchObject({ parentId: "n-H", position: { x: 5, y: 7 } });
+    expect(byId.get("n-D")!.parentId).toBeUndefined();
+    expect(byId.get("n-D")!.position).toEqual({ x: 130, y: 140 });
+    expect(s.board.edges.map((e) => e.id)).toEqual(["e-1"]);
+  });
+  it("removeNode on a nested group lifts its children into the surviving parent", () => {
+    const nodes: BoardNode[] = [
+      { id: "n-G", type: "group", position: { x: 100, y: 100 }, data: { tags: [], name: null } },
+      { id: "n-H", type: "group", position: { x: 10, y: 20 }, parentId: "n-G", data: { tags: [], name: null } },
+      { ...note, id: "n-C", position: { x: 5, y: 7 }, parentId: "n-H" },
+    ];
+    let s = boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), nodes } });
+    s = boardReducer(s, { type: "removeNode", id: "n-H" });
+    expect(s.board.nodes.find((n) => n.id === "n-C")).toMatchObject({ parentId: "n-G", position: { x: 15, y: 27 } });
+  });
+  it("removeNode clears a highlight's note when that note is removed", () => {
+    const board = { ...emptyBoard("p"), nodes: [note], highlights: [{ ...highlight, note: "n-1" }, { ...highlight, id: "h-2", note: "n-9" }] };
+    let s = boardReducer(initialBoardState, { type: "load", board });
+    s = boardReducer(s, { type: "removeNode", id: "n-1" });
+    expect(s.board.highlights.map((h) => h.note)).toEqual([null, "n-9"]);
+  });
 });
 
 describe("boardReducer, ruling 7", () => {
@@ -75,6 +108,18 @@ describe("boardReducer, ruling 7", () => {
     expect(s.board.nodes[0].width).toBe(250);
     // NodeResizer's onEnd: resizing false, no setAttributes.
     s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-1", resizing: false, dimensions: { width: 250, height: 90 } }] });
+    expect(s.dirty).toBe(true);
+  });
+  it("(d) a resize by the reader marks a chunk user_sized; a measurement does not", () => {
+    const region = { rects: [{ page: 0, rect: [0, 0, 1, 1] as [number, number, number, number] }], start: q, end: q, position: 0, state: "anchored" as const };
+    const chunk: BoardNode = { id: "n-c", type: "chunk", position: { x: 0, y: 0 }, data: { tags: [], collapsed: false, region, text: "t", user_sized: false } };
+    const sized = (s: ReturnType<typeof boardReducer>) => (s.board.nodes[0].data as { user_sized: boolean }).user_sized;
+    let s = boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), nodes: [chunk] } });
+    s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-c", dimensions: { width: 200, height: 80 } }] });
+    expect(sized(s)).toBe(false);
+    s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-c", resizing: true, setAttributes: true, dimensions: { width: 250, height: 90 } }] });
+    s = boardReducer(s, { type: "nodes", changes: [{ type: "dimensions", id: "n-c", resizing: false, dimensions: { width: 250, height: 90 } }] });
+    expect(sized(s)).toBe(true);
     expect(s.dirty).toBe(true);
   });
   it("(d) an expand-parent dimensions change (setAttributes, not resizing) dirties", () => {

@@ -1,4 +1,6 @@
 import { applyEdgeChanges, applyNodeChanges, type EdgeChange, type NodeChange } from "@xyflow/react";
+import { planDelete } from "./dissolve";
+import type { XY } from "./reparent";
 import { emptyBoard, type Board, type BoardEdge, type BoardNode, type Highlight, type Viewport } from "./types";
 
 /** `revision` counts the reader's saveable changes. It never resets, so a "saved" can tell whether the
@@ -36,6 +38,45 @@ function dirtiesNodes(c: NodeChange<BoardNode>): boolean {
   return DIRTYING_NODE_CHANGES.has(c.type) && !("dragging" in c && c.dragging);
 }
 
+/** Once the reader resizes a chunk it keeps that size (addendum 4.2). Only NodeResizer's changes carry
+ *  `resizing`; a measurement or an expanding parent does not. Notes and figures have no `user_sized`. */
+function markUserSized(nodes: BoardNode[], changes: NodeChange<BoardNode>[]): BoardNode[] {
+  const resized = new Set(changes.filter((c) => c.type === "dimensions" && c.resizing !== undefined).map((c) => (c as { id: string }).id));
+  if (!resized.size) return nodes;
+  return nodes.map((n) => (n.type === "chunk" && resized.has(n.id) && !n.data.user_sized ? { ...n, data: { ...n.data, user_sized: true } } : n));
+}
+
+/** A node's absolute position from the stored ones: its own plus every ancestor's. */
+function absoluteIn(nodes: BoardNode[]): (id: string) => XY {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  return (id) => {
+    let x = 0, y = 0;
+    for (let node = byId.get(id); node; node = node.parentId ? byId.get(node.parentId) : undefined) {
+      x += node.position.x;
+      y += node.position.y;
+    }
+    return { x, y };
+  };
+}
+
+/** Remove one node as the delete key would (planDelete): its direct children are lifted in place, and
+ *  its edges and any highlight's note reference to it go, so the next save is valid. */
+function removeNode(board: Board, id: string): Board {
+  const target = board.nodes.find((n) => n.id === id);
+  if (!target) return board;
+  const touching = board.edges.filter((e) => e.source === id || e.target === id);
+  const plan = planDelete(board.nodes, [target], touching, absoluteIn(board.nodes));
+  const removed = new Set(plan.nodes.map((n) => n.id));
+  const droppedEdges = new Set(plan.edges.map((e) => e.id));
+  const lifted = new Map(plan.lifted.map((n) => [n.id, n]));
+  return {
+    ...board,
+    nodes: board.nodes.filter((n) => !removed.has(n.id)).map((n) => lifted.get(n.id) ?? n),
+    edges: board.edges.filter((e) => !droppedEdges.has(e.id)),
+    highlights: board.highlights.map((h) => (h.note && removed.has(h.note) ? { ...h, note: null } : h)),
+  };
+}
+
 /** The next state after an action; a saveable change marks it dirty and bumps the revision. */
 function next(state: BoardState, board: Board, saveable: boolean): BoardState {
   if (!saveable) return { ...state, board };
@@ -48,7 +89,7 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
     case "load":
       return { board: action.board, dirty: false, revision: state.revision };
     case "nodes": {
-      const nodes = applyNodeChanges(action.changes, board.nodes) as BoardNode[];
+      const nodes = markUserSized(applyNodeChanges(action.changes, board.nodes) as BoardNode[], action.changes);
       return next(state, { ...board, nodes }, action.changes.some(dirtiesNodes));
     }
     case "edges": {
@@ -62,11 +103,7 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
     case "replaceNode":
       return next(state, { ...board, nodes: board.nodes.map((n) => (n.id === action.node.id ? action.node : n)) }, true);
     case "removeNode":
-      return next(state, {
-        ...board,
-        nodes: board.nodes.filter((n) => n.id !== action.id && n.parentId !== action.id),
-        edges: board.edges.filter((e) => e.source !== action.id && e.target !== action.id),
-      }, true);
+      return next(state, removeNode(board, action.id), true);
     case "viewport":
       if (board.viewport.x === action.viewport.x && board.viewport.y === action.viewport.y
           && board.viewport.zoom === action.viewport.zoom) return state;

@@ -14,9 +14,13 @@ import { NoteNode } from "./nodes/NoteNode";
 
 const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group: GroupNode };
 
-type Props = { onOpenInPaper: (rect: PageRect) => void; focusNode?: string | null; onFocusHandled?: () => void };
+/** `active` is false while the paper view is shown: the board stays mounted but hidden, and must not
+ *  take the delete key from the paper. */
+type Props = { onOpenInPaper: (rect: PageRect) => void; active?: boolean; focusNode?: string | null; onFocusHandled?: () => void };
 
-function Inner({ onOpenInPaper, focusNode, onFocusHandled }: Props) {
+const DELETE_KEYS = ["Backspace", "Delete"];
+
+function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Props) {
   const { state, dispatch } = useBoard();
   const { getInternalNode, fitView, getZoom } = useReactFlow<BoardNode>();
   const initialized = useNodesInitialized();
@@ -29,21 +33,24 @@ function Inner({ onOpenInPaper, focusNode, onFocusHandled }: Props) {
   /** On drop, a node belongs to the smallest group that wholly contains it, or to none. This one rule
    *  covers dropping in, dragging out, moving between groups, and nesting groups. Whole containment,
    *  not intersection, because a partial overlap is where the spike saw nodes jump (findings, section 2).
-   *  Coordinates converted explicitly (addendum 4.2). */
-  const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, dragged) => {
+   *  Coordinates converted explicitly (addendum 4.2). The rule applies to every dragged node: React Flow
+   *  calls onNodeDragStop for a multi-selection and for a dragged selection box too, with all of them in `nodes`. */
+  const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, __, draggedNodes) => {
     const box = (id: string): Box => {
       const internal = getInternalNode(id)!;
       return { ...internal.internals.positionAbsolute, width: internal.measured?.width ?? 0, height: internal.measured?.height ?? 0 };
     };
-    const me = box(dragged.id);
-    const target = state.board.nodes
-      .filter((n) => n.type === "group" && n.id !== dragged.id && !isDescendant(state.board.nodes, n.id, dragged.id))
-      .map((n) => ({ id: n.id, box: box(n.id) }))
-      .filter((g) => fitsInside(me, g.box))
-      .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)[0] ?? null;
-    if ((target?.id ?? null) === (dragged.parentId ?? null)) return;
-    const stored = state.board.nodes.find((n) => n.id === dragged.id)!;
-    dispatch({ type: "replaceNode", node: reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null) });
+    for (const dragged of draggedNodes) {
+      const me = box(dragged.id);
+      const target = state.board.nodes
+        .filter((n) => n.type === "group" && n.id !== dragged.id && !isDescendant(state.board.nodes, n.id, dragged.id))
+        .map((n) => ({ id: n.id, box: box(n.id) }))
+        .filter((g) => fitsInside(me, g.box))
+        .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)[0] ?? null;
+      if ((target?.id ?? null) === (dragged.parentId ?? null)) continue;
+      const stored = state.board.nodes.find((n) => n.id === dragged.id)!;
+      dispatch({ type: "replaceNode", node: reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null) });
+    }
   }, [dispatch, getInternalNode, state.board.nodes]);
 
   const addGroup = () => {
@@ -59,9 +66,9 @@ function Inner({ onOpenInPaper, focusNode, onFocusHandled }: Props) {
 
   // Every path into <ReactFlow> goes through parentsFirst, not only saving: a node re-parented into a
   // group created after it would otherwise be listed before its parent (findings, section 3).
-  // Collapse only the rendered height, retaining the expanded size in the saved board.
+  // Collapse only the rendered height of any piece, retaining the expanded size in the saved board.
   const nodes = useMemo(() => parentsFirst(state.board.nodes).map((node) =>
-    node.type === "chunk" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node), [state.board.nodes]);
+    node.type !== "group" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node), [state.board.nodes]);
   return (
     <div className="board">
       <div className="board-tools">
@@ -85,7 +92,7 @@ function Inner({ onOpenInPaper, focusNode, onFocusHandled }: Props) {
         }}
         defaultViewport={state.board.viewport}
         onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
-        minZoom={0.2} fitView={false} deleteKeyCode={["Backspace", "Delete"]}
+        minZoom={0.2} fitView={false} deleteKeyCode={active ? DELETE_KEYS : null}
       >
         <Background />
         <Controls />
