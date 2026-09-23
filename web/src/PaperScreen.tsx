@@ -27,13 +27,11 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
     try {
       const selection = await api.postText(paperId, pending.rects, !pending.exact);
       if (kind === "highlight") {
-        if (!selection.highlight) return;   // the server gives a highlight anchor only for one rect; never cut instead
-
-        dispatch({ type: "addHighlight", highlight: { id: newId("h"), tags: [], note: null, anchor: selection.highlight } });
+        dispatch({ type: "addHighlight", highlight: { id: newId("h"), tags: [], anchor: selection.highlight } });
       } else {
         const node: ChunkNode = {
           id: newId("n"), type: "chunk", position: nextChunkPosition(state.board.nodes), width: CHUNK_WIDTH,
-          data: { tags: [], collapsed: false, region: selection.chunk, text: selection.text, user_sized: false, source_id: null },
+          data: { tags: [], collapsed: false, region: selection.chunk, blocks: selection.blocks, user_sized: false, source_id: null },
         };
         dispatch({ type: "addNode", node });
       }

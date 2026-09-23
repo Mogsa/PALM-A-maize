@@ -7,6 +7,11 @@ function mockFetch(status: number, body: unknown) {
   return fn;
 }
 
+function lastCall(fn: { mock: { calls: unknown[][] } }): { url: string; init: RequestInit; body: unknown } {
+  const [url, init] = fn.mock.calls.at(-1) as [string, RequestInit];
+  return { url, init, body: typeof init?.body === "string" ? JSON.parse(init.body) : init?.body };
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("api.putBoard", () => {
@@ -27,5 +32,80 @@ describe("api.putBoard", () => {
   it("throws ApiError with the server's code on other errors", async () => {
     mockFetch(404, { error: { code: "paper_not_found", message: "no paper p" } });
     await expect(api.getBoard("p")).rejects.toMatchObject({ code: "paper_not_found" });
+  });
+});
+
+describe("api, schema 2 routes", () => {
+  it("postText sends the selection mode, text by default", async () => {
+    const fn = mockFetch(200, {});
+    const rects = [{ page: 2, rect: [1, 2, 3, 4] as [number, number, number, number] }];
+    await api.postText("p", rects, true);
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/text", body: { rects, snap: true, mode: "text" } });
+    await api.postText("p", rects, false, "area");
+    expect(lastCall(fn).body).toMatchObject({ snap: false, mode: "area" });
+  });
+
+  it("renderUrl builds the stateless render query, with dpi only when given", () => {
+    const target = { page: 3, rect: [10, 20.5, 30, 40] as [number, number, number, number] };
+    expect(api.renderUrl("p", target)).toBe("/api/papers/p/render?page=3&x0=10&y0=20.5&x1=30&y1=40");
+    expect(api.renderUrl("p", target, 100)).toBe("/api/papers/p/render?page=3&x0=10&y0=20.5&x1=30&y1=40&dpi=100");
+  });
+
+  it("exportMarkdown sends tags and the order, paper by default", async () => {
+    const fn = mockFetch(200, { path: "/x/export.md", markdown: "# x" });
+    expect(await api.exportMarkdown("p", ["t-claim"])).toEqual({ path: "/x/export.md", markdown: "# x" });
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/export", body: { tags: ["t-claim"], order: "paper" } });
+    await api.exportMarkdown("p", [], "template");
+    expect(lastCall(fn).body).toEqual({ tags: [], order: "template" });
+  });
+
+  it("split posts and returns the drafts", async () => {
+    const fn = mockFetch(200, { nodes: [] });
+    expect(await api.split("p")).toEqual({ nodes: [] });
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/split", init: { method: "POST" } });
+  });
+
+  it("template and tags are read and replaced whole", async () => {
+    const template = { schema: 1 as const, slots: [{ name: "Problem", prompt: "Why?" }] };
+    const fn = mockFetch(200, template);
+    expect(await api.getTemplate()).toEqual(template);
+    expect(lastCall(fn).url).toBe("/api/template");
+    await api.putTemplate(template);
+    expect(lastCall(fn)).toMatchObject({ url: "/api/template", init: { method: "PUT" }, body: template });
+    await api.getTags();
+    expect(lastCall(fn).url).toBe("/api/tags");
+    await api.putTags({ schema: 1, tags: [] });
+    expect(lastCall(fn)).toMatchObject({ url: "/api/tags", init: { method: "PUT" } });
+  });
+
+  it("notes, clips, questions and re-extraction go to their routes", async () => {
+    const fn = mockFetch(200, { markdown: "hi" });
+    expect(await api.getNote("p", "n-1")).toBe("hi");
+    expect(lastCall(fn).url).toBe("/api/papers/p/notes/n-1");
+    await api.putClip("p", "n-1", { page: 1, rect: [1, 2, 3, 4] });
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/clips/n-1", init: { method: "PUT" }, body: { page: 1, rect: [1, 2, 3, 4] } });
+    await api.putClip("p", "n-1", { page: 1, rect: [1, 2, 3, 4] }, 100);
+    expect(lastCall(fn).body).toEqual({ page: 1, rect: [1, 2, 3, 4], dpi: 100 });
+    expect(api.clipUrl("p", "n-1")).toBe("/api/papers/p/clips/n-1.png");
+    await api.questions("p");
+    expect(lastCall(fn).url).toBe("/api/papers/p/questions");
+    await api.reextract("p");
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/extract", init: { method: "POST" } });
+  });
+
+  it("putNote accepts a 204", async () => {
+    const fn = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fn);
+    await api.putNote("p", "n-1", "text");
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/notes/n-1", init: { method: "PUT" }, body: { markdown: "text" } });
+  });
+
+  it("addPaper uploads the PDF as multipart, without a JSON content type", async () => {
+    const fn = mockFetch(201, { paper_id: "p" });
+    expect(await api.addPaper(new Blob(["%PDF-"]), "paper.pdf")).toEqual({ paper_id: "p" });
+    const { url, init } = lastCall(fn);
+    expect(url).toBe("/api/papers");
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(new Headers(init.headers).get("content-type")).toBeNull();
   });
 });

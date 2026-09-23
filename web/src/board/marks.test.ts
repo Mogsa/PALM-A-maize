@@ -3,7 +3,7 @@ import { paintMarks, paperWords, reflow } from "./marks";
 import type { Highlight } from "../model/types";
 
 const mark = (id: string, exact: string): Highlight =>
-  ({ id, tags: [], note: null, anchor: { page: 0, rect: [0, 0, 1, 1], quote: { exact, prefix: "", suffix: "" }, position: 0, state: "anchored" } });
+  ({ id, tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], quote: { exact, prefix: "", suffix: "" }, position: 0, state: "anchored" } });
 const none = new Set<string>();
 
 describe("paintMarks", () => {

@@ -17,7 +17,7 @@ import { BoardProvider, useBoard } from "./BoardProvider";
 import { SAVE_FAILED_MESSAGE } from "./persistence";
 
 const q = { exact: "x", prefix: "", suffix: "" };
-const highlight: Highlight = { id: "h-1", tags: [], note: null, anchor: { page: 0, rect: [0, 0, 1, 1], quote: q, position: 0, state: "anchored" } };
+const highlight: Highlight = { id: "h-1", tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], quote: q, position: 0, state: "anchored" } };
 
 type Board = ReturnType<typeof useBoard>;
 let ctx: Board | null = null;

@@ -1,5 +1,6 @@
-import { applyEdgeChanges, applyNodeChanges, type EdgeChange, type NodeChange } from "@xyflow/react";
+import { applyNodeChanges, type EdgeChange, type NodeChange } from "@xyflow/react";
 import { planDelete } from "./dissolve";
+import type { FlowEdge } from "./edges";
 import type { XY } from "./reparent";
 import { emptyBoard, type Board, type BoardEdge, type BoardNode, type Highlight, type Viewport } from "./types";
 
@@ -11,7 +12,7 @@ export const initialBoardState: BoardState = { board: emptyBoard(""), dirty: fal
 export type BoardAction =
   | { type: "load"; board: Board }
   | { type: "nodes"; changes: NodeChange<BoardNode>[] }
-  | { type: "edges"; changes: EdgeChange<BoardEdge>[] }
+  | { type: "edges"; changes: EdgeChange<FlowEdge>[] }
   | { type: "addHighlight"; highlight: Highlight }
   | { type: "addNode"; node: BoardNode }
   | { type: "replaceNode"; node: BoardNode }
@@ -59,12 +60,24 @@ function absoluteIn(nodes: BoardNode[]): (id: string) => XY {
   };
 }
 
+/** React Flow's edge changes carry the stored edge's id (model/edges.ts), so they apply to the stored
+ *  edges by id: `select` sets the runtime flag, `remove` drops the edge. React Flow emits no `add` or
+ *  `replace` here, because the board draws no new connections yet. */
+function applyEdgeChangesById(changes: EdgeChange<FlowEdge>[], edges: BoardEdge[]): BoardEdge[] {
+  let out = edges;
+  for (const change of changes) {
+    if (change.type === "select") out = out.map((e) => (e.id === change.id ? { ...e, selected: change.selected } : e));
+    else if (change.type === "remove") out = out.filter((e) => e.id !== change.id);
+  }
+  return out;
+}
+
 /** Remove one node as the delete key would (planDelete): its direct children are lifted in place, and
- *  its edges and any highlight's note reference to it go, so the next save is valid. */
+ *  every edge with an end on it goes, so the next save is valid. Highlights stay: they are the paper's. */
 function removeNode(board: Board, id: string): Board {
   const target = board.nodes.find((n) => n.id === id);
   if (!target) return board;
-  const touching = board.edges.filter((e) => e.source === id || e.target === id);
+  const touching = board.edges.filter((e) => e.from === id || e.to === id);
   const plan = planDelete(board.nodes, [target], touching, absoluteIn(board.nodes));
   const removed = new Set(plan.nodes.map((n) => n.id));
   const droppedEdges = new Set(plan.edges.map((e) => e.id));
@@ -73,7 +86,6 @@ function removeNode(board: Board, id: string): Board {
     ...board,
     nodes: board.nodes.filter((n) => !removed.has(n.id)).map((n) => lifted.get(n.id) ?? n),
     edges: board.edges.filter((e) => !droppedEdges.has(e.id)),
-    highlights: board.highlights.map((h) => (h.note && removed.has(h.note) ? { ...h, note: null } : h)),
   };
 }
 
@@ -93,7 +105,7 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
       return next(state, { ...board, nodes }, action.changes.some(dirtiesNodes));
     }
     case "edges": {
-      const edges = applyEdgeChanges(action.changes, board.edges) as BoardEdge[];
+      const edges = applyEdgeChangesById(action.changes, board.edges);
       return next(state, { ...board, edges }, action.changes.some((c) => c.type !== "select"));
     }
     case "addHighlight":
