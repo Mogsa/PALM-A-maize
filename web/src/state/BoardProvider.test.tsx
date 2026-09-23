@@ -1,4 +1,4 @@
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyBoard, type Highlight, type Source } from "../model/types";
 
@@ -60,6 +60,15 @@ describe("BoardProvider", () => {
     act(() => { window.dispatchEvent(event); });
     expect(event.defaultPrevented).toBe(true);
     await waitFor(() => expect(api.putBoard).toHaveBeenCalledTimes(1));   // flushed now, not after the 500 ms debounce
+  });
+
+  it("shows the server's message when the paper cannot be loaded, and retries", async () => {
+    vi.mocked(api.getSource).mockRejectedValueOnce(new Error("No paper named p"));
+    const { findByText, findByRole, findByTestId } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    expect(await findByText(/No paper named p/)).toBeTruthy();
+    fireEvent.click(await findByRole("button", { name: "Retry" }));
+    expect(await findByTestId("notice")).toBeTruthy();
+    expect(api.getSource).toHaveBeenCalledTimes(2);
   });
 
   it("lets the tab close without a prompt when nothing is unsaved", async () => {
