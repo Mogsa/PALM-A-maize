@@ -1,6 +1,6 @@
 # Paper Board: spec and plan
 
-Fourth revision, 16 September 2026. Grounded in RESEARCH.md and TOOLS.md. This revision closes the open items and fixes the design principles.
+Fifth revision, 23 September 2026. Grounded in RESEARCH.md and TOOLS.md. The fourth revision closed the open items and fixed the design principles. This one writes in fourteen decisions taken after the first code review, D1 to D14 in section 12: any span can be highlighted, a chunk shows its equations and figures as images, a connection ends on the thing itself rather than on the card that holds it, the board comes back exactly as you left it, and an AI answer may be pasted in as a marked note that never answers a question for you.
 
 ## 1. Purpose
 
@@ -12,7 +12,7 @@ There is no right way to read a paper with it. It is a tool for making your own 
 
 Every later decision is checked against these eight. If a feature fails one, it is not in the tool.
 
-1. **The reader does the work.** Nothing is generated: no summaries, no explanations, no suggested tags or connections. The measured gains in understanding come from the reader constructing links and explaining in their own words (RESEARCH.md section 5). Anything automatic that does that work removes the gain.
+1. **The reader does the work.** Nothing is generated: no summaries, no explanations, no suggested tags or connections. The measured gains in understanding come from the reader constructing links and explaining in their own words (RESEARCH.md section 5). Anything automatic that does that work removes the gain. Text written elsewhere by an AI may be pasted in as a note marked as AI; it never answers a question for you (section 6).
 2. **Nothing is forced.** No reading order, no required pass, no required label or type. Structure is available when the reader wants it and invisible when they do not (Shipman and Marshall).
 3. **The paper is never edited, and the source is always one click away.** Every piece cut from the paper keeps a link back to where it came from.
 4. **Four primitives, one set of operations.** Anything on the board is a piece, a tag, a connection, or a group. One thing lives on the paper instead: the highlight, which shows through the pieces that contain it. Anything new must be one of those or it is not added.
@@ -38,16 +38,18 @@ Everything else in the spec is plumbing for these four.
 
 Think of a printed paper, a marker, and a pair of scissors. You mark the paper as you read. You cut it into pieces and spread them on a table. You write on scraps beside the pieces. The tool is that, with nothing destroyed.
 
-A paper is opened in one of two views, and you switch between them at any time. Switching never moves anything.
+A paper is opened in one of two views, and you switch between them at any time. Switching never moves anything: each view keeps its place while the other is showing. Closing and reopening restores everything as you left it: the view you were in, where you were in the paper, where you were on the board, and the tag filter.
 
-**Paper view.** The PDF itself, full width, as the authors laid it out. This is the only place you mark or cut. Select a span, from any start to any end, across headings or columns if you like, or drag a rectangle around a figure. Then choose: **highlight** or **cut**. One selection, one choice after it, no modes.
+**Paper view.** The PDF itself, full width, as the authors laid it out. This is the only place you mark or cut. Select a span, from any start to any end, across headings, columns or pages if you like, or drag a rectangle around a figure, table or equation. Then choose: **highlight** or **cut**. One selection, one choice after it, no modes.
 
-- A **highlight** is the marker. It stays on the paper. Tag it, write a note on it, and the note shows in the margin here. A highlighted word does not become a piece; it is too small to be one.
+- A **highlight** is the marker. It stays on the paper and paints exactly the words you selected, line by line, however many columns or pages they cross. Tag it, write a note on it, and the note shows in the margin here. Connect it to another mark or to a section heading without leaving the paper; the connection shows in the margin as a chip that jumps to the other end. A highlighted word does not become a piece; it is too small to be one.
 - A **cut** is the scissors. The selected region becomes a chunk on the board. Clicking a heading cuts that section. **Split** cuts every section and figure at once. A cut is drawn on the paper as an outline, so you can always see what you have pulled out and what you have not.
+
+**Moving around the paper.** The paper's own links work. "Section 3", "Eq. (2)" and "[12]" scroll the paper view to what they point at, and a web address opens in a new tab. The links belong to the paper, so following one adds nothing the reader did not make. **Find in paper** takes a selected word and lists everywhere else it appears, with page and section; click one to go there. It suggests nothing: what to mark and what to connect stays your decision.
 
 **Board view.** The table. Every chunk is a jigsaw piece here: move it, resize it, put it beside anything, collapse it out of the way. The highlights inside a chunk are painted on it. Notes, tags, connections, and groups live here. Clicking any chunk or mark jumps the paper view to where it came from.
 
-The two views are mirrors. A chunk on the board is an outline on the paper. A mark on the paper shows through whichever chunk contains it. A note is in both. A highlight made in a part of the paper with no chunk stays on the paper until you cut something around it: mark everything first and cut afterwards if that is how you read.
+The two views are mirrors. A chunk on the board is an outline on the paper. A mark on the paper shows through whichever chunk contains it. A note is in both. A highlight made in a part of the paper with no chunk stays on the paper until you cut something around it, and its connections show only as margin chips until then: mark and connect everything first and cut afterwards if that is how you read.
 
 **First open.** The paper view, with an empty board behind it. One line on the empty board says: highlight anything, cut anything, or split the paper into the authors' sections.
 
@@ -67,32 +69,42 @@ Anything on the board.
 | the split command | one chunk per section, one per figure or table | yes |
 | writing | a note, any length, Markdown, URLs inside if you have a source | no |
 
-Every piece has the same operations: move, resize, collapse or expand, open source, tag, connect, group. There are no piece-specific operations.
+Every piece has the same operations: move, resize, collapse or expand, open source, tag, connect, group, delete. There are no piece-specific operations.
 
-A chunk collapsed shows its first line and a count of the marks and notes on it. Expanded, it shows the full region in the paper's own words with your highlights painted on it, so one section can be read closely and annotated with everything else collapsed. Figures and equations are rectangles, rendered from the PDF into PNG clips in the board folder. Never LaTeX, never re-typeset. Text in a chunk is read, not selected; to mark or cut again, open the source and do it in the paper.
+Delete or Backspace removes whatever is selected: pieces, marks or connections. Every board and highlight action in a session can be undone and redone, with Cmd-Z and Shift-Cmd-Z, so nothing is lost by trying something. Deleting a group lifts what was inside it out rather than deleting it.
 
-**Highlights are not pieces.** They live on the paper and show through chunks. A highlight takes tags, notes, and connections, but it does not move, resize, or group, because it is not on the table. A chunk finds its highlights by geometry: every mark inside the chunk's region is shown on it, including marks made before the chunk was cut. Overlapping chunks are allowed and share their marks.
+A chunk collapsed shows its first line and a count of the marks and notes on it. Expanded, it shows the full region in the paper's own words with your highlights painted on it, so one section can be read closely and annotated with everything else collapsed.
 
-Selection is deliberately forgiving: a rough drag across a paragraph selects the whole paragraph, and holding a modifier key keeps exactly what you selected. Cutting never changes the paper.
+An expanded chunk is mixed, the way the page is: its paragraphs, lists and headings are text, and its displayed equations, figures and tables are images of the paper as printed, all in reading order. Maths inside a sentence stays text. Figures and equations are rectangles rendered from the PDF, never LaTeX, never re-typeset. A figure piece keeps its PNG clip in the board folder; the images inside a chunk are rendered when shown and never stored, because nothing else refers to them. Text in a chunk is read, not selected; to mark or cut again, open the source and do it in the paper.
 
-A chunk is anchored by its region, one rectangle per page it crosses, plus the quoted text at its start and end. A highlight is anchored by page and rectangle plus the quoted text with a few words either side. Both re-anchor by quote first, rectangle second, and are flagged if neither matches. The shapes are in SPEC-ADDENDUM.md section 5.
+**Highlights are not pieces.** They live on the paper and show through chunks. A highlight takes tags, notes, and connections, but it does not move, resize, or group, because it is not on the table. A chunk finds its highlights by geometry: every mark with a line inside the chunk's region is shown on it, including marks made before the chunk was cut, and only the lines inside are painted. A highlight paints exactly the words selected, line by line, on the paper and in every chunk that holds one of its lines. Overlapping chunks are allowed and share their marks.
+
+Selection is deliberately forgiving: a rough drag across a paragraph selects the whole paragraph, and holding a modifier key keeps exactly what you selected. A rough rectangle snaps the same way to the figure, table or equation it mostly covers, taking a figure's or table's caption with it, and the same modifier keeps the exact rectangle. The image is rendered sharp, at three times the page's own resolution. Cutting never changes the paper.
+
+A chunk is anchored by its region, one rectangle per page it crosses, plus the quoted text at its start and end. A highlight is anchored by one rectangle per line, each with its page, plus the quoted text with a few words either side. Both re-anchor by quote first, rectangle second, and are flagged if neither matches. The shapes are in SPEC-ADDENDUM.md section 5.
 
 ### 5.2 Tag
 
-A word with a colour. Attached to any piece, highlight, or connection. Filter the board by tag.
+A word with a colour. Attached to any piece, highlight, or connection. Filter the board by tag: the board shows anything carrying any of the active tags and hides the rest, a group stays visible while any of its children is, and marks inside a chunk dim by the same rule. With no tag active, nothing is filtered.
 
 Tags do the jobs the earlier drafts gave to four separate things:
 
 - **Reading role.** `problem`, `claim`, `method`, `evidence`, `assumption` are presets because those are the questions every reading guide converges on (RESEARCH.md section 1).
 - **Pass.** `pass 1`, `pass 2` are presets. Add `pass 3`, `pass 7`, or none. Filter to `pass 1` to see what you knew after pass 1.
 - **Connection kind.** `supports`, `contradicts` are presets. A tag on a connection colours the line.
-- **Not yet understood.** `question` is a preset. The board lists every `question`-tagged highlight or piece with no note connected to it. That list is the queue of things to go look up. Connecting a note clears it.
+- **Not yet understood.** `question` is a preset. The board lists every `question`-tagged highlight or piece with no note of yours connected to it. That list is the queue of things to go look up. Connecting a note you wrote clears it. A note marked as AI does not (section 6).
 
 Presets can be renamed, recoloured, or deleted. New tags are one click. No piece or connection needs a tag. Tags are global across all boards, never per paper.
 
 ### 5.3 Connection
 
-A line between two things: pieces, or highlights inside them. A line to a highlight ends at the mark inside its chunk. Tag it or leave it plain. There is no other label on a line. If you want to say something about a connection, that is a note piece connected to the same pieces.
+A line between two things: two pieces, a piece and a highlight, or two highlights, including a highlight that no chunk holds. The connection is stored between the two things themselves, never between the cards that happen to hold them, so re-cutting or deleting a chunk never breaks one.
+
+On the board it is a line, and a line to a highlight ends at the mark inside the chunk that holds it. A highlight in no chunk has no line yet; its line appears the moment you cut a chunk around it. On the paper, every connection with a marked end shows in the margin beside that mark as a chip that jumps to the other end.
+
+Connect on the board by dragging from one piece or mark to another. Connect on the paper from a mark's popover: choose Connect, then click another mark or a section heading. Connecting to a heading highlights the heading and connects to that.
+
+Tag it or leave it plain. There is no other label on a line. If you want to say something about a connection, that is a note piece connected to the same pieces.
 
 A note that belongs to several marks is a note with a connection to each. There is no separate "attach to many" feature because connections already do that.
 
@@ -112,7 +124,11 @@ Proximity without a group also counts. Readers use position as meaning long befo
 
 **Question list.** A filter over pieces, described in section 5.2.
 
-**Export.** One command writes the board to a single Markdown file in the paper's own order, with figure clips as images, not placeholders: the goal, then each chunk with its highlights and the notes connected to them, then highlights outside any chunk, then any notes connected to nothing. Filtered by tag if you want, so "export pass 1" or "export claims and evidence" is the same command. This is the literature note.
+**Tidy.** A command that runs only when you ask. It lays out the top-level pieces and groups that have connections, so connected things sit near each other. It leaves everything unconnected, and everything inside a group, exactly where it is, and it is one undo step. This is in tension with section 3. Arranging things in space is one of the four acts the evidence supports, and section 12's first-open row says the tool must not decide the layout. Tidy does that act for you and may move pieces whose positions you remember. It is in by the owner's choice, and its limits are its whole design: it runs only on request, one Cmd-Z puts everything back, and it never touches what you have not connected or what you have grouped.
+
+**Ask elsewhere.** For a term or step you do not understand. A mark's popover offers Ask elsewhere, which copies a prompt to the clipboard: the marked words, their sentence, the text of their section, and your reading goal. Paste it into whatever AI you use, then paste the answer back into a new note marked as AI. The tool makes no network call and generates nothing itself; TOOLS.md section 2 anticipated exactly this, a separate note clearly marked as generated. Three rules keep the work with the reader. An AI note is visibly marked. It never clears a question: only a note you wrote does, because the gain comes from explaining it yourself (RESEARCH.md section 5). Export labels it as AI.
+
+**Export.** One command writes the board to a single Markdown file in the paper's own order, with figure clips as images, not placeholders. First the goal. Then each chunk, as a heading with its page, followed by each highlight inside it as a quote with its tags, and the notes connected to the chunk or to its highlights. Then highlights outside any chunk, then any notes connected to nothing. The chunk's full text is left out: the paper already holds it, and the note is what you marked and wrote. A note marked as AI is labelled as AI. Export saves any pending change first, so it writes what is on screen. Filtered by tag if you want, so "export pass 1" or "export claims and evidence" is the same command. This is the literature note.
 
 ## 7. Files
 
@@ -141,11 +157,16 @@ Standalone. Python backend, browser front end, runs locally. The tool is open so
 
 Model weights ship inside the `pymupdf-layout` wheel, so the tool needs no network access at any point, including first run.
 
-API: get source, get and put board, get and put note, get text under a rectangle, get clip for a page and rectangle, list questions, export. Routes, file schemas, and the anchoring rules are in SPEC-ADDENDUM.md.
+API: get source, get and put board, get and put note, get text under a rectangle, get clip for a page and rectangle, render a region on request, list questions, export. Routes, file schemas, and the anchoring rules are in SPEC-ADDENDUM.md.
 
 ## 9. Not in v1
 
-- Any generated text: summaries, explanations, suggested tags, suggested connections. Principle 1.
+- Any generated text: summaries, explanations, suggested tags, suggested connections. Principle 1. The tool generates none; an AI answer you paste in yourself is a marked note (section 6).
+- Calling an AI directly from the tool. Copying a prompt keeps the tool free of network access, keys and cost (principle 5). Revisit only if copy and paste proves to be the bottleneck.
+- Linking terms automatically. That would generate connections. Principle 1. Find in paper shows where a word appears; connecting the occurrences is yours.
+- Back and Forward in the paper view. Following a link does lose your place. If that becomes a nuisance, Back is the first thing to add.
+- A section outline. The paper's own links, find in paper, and split already move you around the paper; an outline would be a second way to do the same thing.
+- Citation peek. Following the paper's own link to its reference list does the same job with one more click.
 - A fixed number of passes, a fixed reading order, or any required label. Principle 2.
 - Marking or cutting from the board. The paper is the only place you highlight or cut.
 - Free-text labels on connections. Tags only.
@@ -182,7 +203,7 @@ If any step fails, the tool is not done.
 
 ## 12. Decisions taken in this revision
 
-Recorded so the reasoning is not lost.
+Recorded so the reasoning is not lost. Rows marked D1 to D14 were taken on 23 September 2026, after the first code review; SPEC-ADDENDUM.md section 12 holds their shapes.
 
 | Question | Decision | Why |
 |---|---|---|
@@ -203,3 +224,17 @@ Recorded so the reasoning is not lost.
 | Grain | Chunks on the board, highlights on the paper | A paper cut into ten pieces can be played with; a hundred sentences cannot. The reader chooses the regions. |
 | Gesture | One selection, then highlight or cut | Collect first, decide after. A mode is what MarginNote gets wrong. |
 | Name | Still a placeholder | Decides nothing. |
+| Highlight across columns and pages (D1) | One rectangle per line, computed from the words selected | Section 4 promised any span, but the anchor held one rectangle, and a two-line mark painted as one box. Lines rather than column runs, because a run still paints the unselected ends of its first and last lines. |
+| Equations and figures inside a chunk (D2) | Mixed blocks: text regions as text; formulas, figures and tables as images; in reading order | They came out garbled or were dropped. Maths inside a sentence stays text. |
+| Cutting figures and equations cleanly (D3) | A rough rectangle snaps to the figure, table or equation it mostly covers, with its caption; the modifier keeps it exact; images at three times resolution | The forgiving rule again, for rectangles. Reverses addendum section 11's removal of formulas as unused: formula regions were in `source.json` all along, and now the rectangle snap and chunk blocks read them. Not chosen: click-to-cut on figures, which fights text selection, and equations in split, which would make 30 pieces on Adam. |
+| Delete and undo (D4) | An undo stack for the session; Delete removes the selection; a deleted note's file stays on disk | Nothing could be taken back, which made every gesture a commitment. Keeping the file is what lets undo restore a note. |
+| Coming back to it (D5) | Restore the view, the paper's scroll position, the board viewport and the tag filter, all kept in `board.json` | Section 3's fourth act. In the file beside the viewport, rather than per browser. |
+| What export contains (D6) | Per chunk in paper order: heading and page, highlights as quotes with tags, connected notes; figure clips embedded; the chunk's text left out | The literature note is what you marked and wrote. The paper already holds the text. |
+| A highlight's note cache (D7) | Deleted; the question list and the margins walk the connections | The cache caused three bugs, and walking the connections of one paper is cheap. Supersedes the `highlights[].note` cache in addendum section 4.0. |
+| Filter semantics (D8) | Any active tag shows; a group shows while any child does; marks dim | The features plan's rule, written down. |
+| Re-uploading a paper that exists (D9) | Replace the PDF, re-extract, re-anchor, report what changed | Keeping the old PDF anchored everything against the wrong text. |
+| Moving around the paper (D10) | The paper's own links are followable | The links belong to the paper, so they add no generated connection. Back, outline and citation peek declined (section 9). |
+| Tidying the board (D11) | A force layout of connected top-level pieces, on request only, one undo step | The owner's choice, against the grain of section 3; section 6 states the tension and the limits. |
+| Connections to marks outside any chunk (D12) | A connection is stored between the two things themselves and drawn on whichever card holds them; connect from the paper; margin chips | Mark first, cut later broke the moment you wanted to connect two marks. Supersedes addendum section 4.0's rule that an edge ends on a highlight through its chunk. |
+| Finding a term elsewhere in the paper (D13) | Find in paper, suggesting nothing | Linking terms automatically would generate connections (principle 1). |
+| Not understanding a concept (D14) | Ask elsewhere: copy a prompt, paste the answer into a note marked as AI, which never clears a question | Reverses principle 1 as written through the fourth revision, where nothing generated could enter the board at all. The tool still generates nothing; pasted AI text is allowed as a marked note. Only a note you wrote clears a question, so the self-explanation step stays with the reader. |
