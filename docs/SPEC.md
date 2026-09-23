@@ -1,6 +1,6 @@
 # Paper Board: spec and plan
 
-Fifth revision, 23 September 2026. Grounded in RESEARCH.md and TOOLS.md. The fourth revision closed the open items and fixed the design principles. This one writes in fourteen decisions taken after the first code review, D1 to D14 in section 12: any span can be highlighted, a chunk shows its equations and figures as images, a connection ends on the thing itself rather than on the card that holds it, the board comes back exactly as you left it, and an AI answer may be pasted in as a marked note that never answers a question for you.
+Fifth revision, 23 September 2026. Grounded in RESEARCH.md and TOOLS.md. The fourth revision closed the open items and fixed the design principles. This one writes in nineteen decisions taken on 23 September 2026, D1 to D19 in section 12. Fourteen came from the first code review: any span can be highlighted, a chunk shows its equations and figures as images, a connection ends on the thing itself rather than on the card that holds it, the board comes back exactly as you left it, and an AI answer may be pasted in as a marked note that never answers a question for you. Five came from a review of how papers are read and written (RESEARCH.md section 6): a new board opens already split into the paper's sections, beside a template of empty groups that each ask one question.
 
 ## 1. Purpose
 
@@ -12,8 +12,8 @@ There is no right way to read a paper with it. It is a tool for making your own 
 
 Every later decision is checked against these eight. If a feature fails one, it is not in the tool.
 
-1. **The reader does the work.** Nothing is generated: no summaries, no explanations, no suggested tags or connections. The measured gains in understanding come from the reader constructing links and explaining in their own words (RESEARCH.md section 5). Anything automatic that does that work removes the gain. Text written elsewhere by an AI may be pasted in as a note marked as AI; it never answers a question for you (section 6).
-2. **Nothing is forced.** No reading order, no required pass, no required label or type. Structure is available when the reader wants it and invisible when they do not (Shipman and Marshall).
+1. **The reader does the work.** Nothing is generated: no summaries, no explanations, no suggested tags or connections. The measured gains in understanding come from the reader constructing links and explaining in their own words (RESEARCH.md section 5). Anything automatic that does that work removes the gain. Text written elsewhere by an AI may be pasted in as a note marked as AI; it never answers a question for you (section 6). A template's questions are fixed questions about papers in general, written once, never text generated about this paper.
+2. **Nothing is forced.** No reading order, no required pass, no required label or type. Structure may be offered, empty and deletable; it is never required. Nothing has to be sorted, labelled or filled in before the reader is ready (Shipman and Marshall).
 3. **The paper is never edited, and the source is always one click away.** Every piece cut from the paper keeps a link back to where it came from.
 4. **Four primitives, one set of operations.** Anything on the board is a piece, a tag, a connection, or a group. One thing lives on the paper instead: the highlight, which shows through the pieces that contain it. Anything new must be one of those or it is not added.
 5. **Plain local files, no account, no cloud.** A board is a folder you can copy.
@@ -43,7 +43,7 @@ A paper is opened in one of two views, and you switch between them at any time. 
 **Paper view.** The PDF itself, full width, as the authors laid it out. This is the only place you mark or cut. Select a span, from any start to any end, across headings, columns or pages if you like, or drag a rectangle around a figure, table or equation. Then choose: **highlight** or **cut**. One selection, one choice after it, no modes.
 
 - A **highlight** is the marker. It stays on the paper and paints exactly the words you selected, line by line, however many columns or pages they cross. Tag it, write a note on it, and the note shows in the margin here. Connect it to another mark or to a section heading without leaving the paper; the connection shows in the margin as a chip that jumps to the other end. A highlighted word does not become a piece; it is too small to be one.
-- A **cut** is the scissors. The selected region becomes a chunk on the board. Clicking a heading cuts that section. **Split** cuts every section and figure at once. A cut is drawn on the paper as an outline, so you can always see what you have pulled out and what you have not.
+- A **cut** is the scissors. The selected region becomes a chunk on the board. Clicking a heading cuts that section. **Split** cuts every section and figure the board does not have yet, into the tray (section 6). A cut is drawn on the paper as an outline, so you can always see what you have pulled out and what you have not.
 
 **Moving around the paper.** The paper's own links work. "Section 3", "Eq. (2)" and "[12]" scroll the paper view to what they point at, and a web address opens in a new tab. The links belong to the paper, so following one adds nothing the reader did not make. **Find in paper** takes a selected word and lists everywhere else it appears, with page and section; click one to go there. It suggests nothing: what to mark and what to connect stays your decision.
 
@@ -51,7 +51,9 @@ A paper is opened in one of two views, and you switch between them at any time. 
 
 The two views are mirrors. A chunk on the board is an outline on the paper. A mark on the paper shows through whichever chunk contains it. A note is in both. A highlight made in a part of the paper with no chunk stays on the paper until you cut something around it, and its connections show only as margin chips until then: mark and connect everything first and cut afterwards if that is how you read.
 
-**First open.** The paper view, with an empty board behind it. One line on the empty board says: highlight anything, cut anything, or split the paper into the authors' sections.
+**First open.** The paper view, with the board behind it already laid out. On the left is a group named **Paper**, the tray: every section and figure of the paper, collapsed, in the paper's order. To its right is the template: a grid of empty groups, each named for one question a reader of a paper should be able to answer, with the question itself shown faintly inside it. The whole first layout is one undo step.
+
+The reason is speed: the reader starts building their own map of the paper at once, instead of cutting it up first. Section headings in CS papers are numbered and bold, so the sections found are reliable. This reverses the earlier rule that the tool must not decide the layout before the reader has read a word (section 12). The answer to that rule is what gets placed: the paper's own sections, and empty groups that can be renamed, deleted or ignored. Nothing is generated, and nothing has to be sorted. A piece can stay in the tray for good.
 
 **Why chunks, not excerpts.** A paper is written in the order that persuades a reviewer. Its argument is scattered across that order: the claim in the introduction, the mechanism in section 3, the assumption in 4.1, the evidence in a figure in section 5. Reading is reassembling the argument, and the unit you move is the region that carries one idea. Sometimes that is a section, often a paragraph, a figure with its caption, or a span that runs from the end of 3.2 into 3.3. The authors' sections only approximate it, so split is a starting point and the reader chooses the regions. Ten pieces on a table can be played with. A hundred sentences cannot.
 
@@ -116,11 +118,31 @@ Groups are the cheap way to say "these belong together" before deciding how. The
 
 Proximity without a group also counts. Readers use position as meaning long before they can name it. The tool never asks them to.
 
+**A slot is a group with a question.** Any group may carry a prompt, a guiding question shown faintly inside it until it holds a note. Clicking the question starts a note of your own inside the group, with the question as the empty note's placeholder. A slot is still just a group: rename it, delete it, add another, nest it. Putting a piece in a slot does not tag it; slots and tags are independent. The template's slots are the default set a new board starts with (section 6); a slot is not a new primitive.
+
 ## 6. Things that are not primitives
 
 **Reading goal.** One optional line at the top of the board: why am I reading this. It is a note pinned to the header.
 
-**Split.** A command, described in section 4. It adds pieces; it is not a kind of piece.
+**Split.** A command, described in section 4. It adds pieces; it is not a kind of piece. It adds, into the tray, every section and figure piece the board does not have yet, so running it twice adds nothing. A new board runs it once on first open. It has one implementation, on the server.
+
+**The tray.** The group named Paper that a new board opens with. It lists every section of the paper in order. When a section's piece has been moved out of the tray, the tray keeps a faint ghost row in its place, such as "§3 Model → in Method · 4 marks · 2 notes"; clicking it jumps to the piece. The counts are worked out from the section's region, the same way a chunk finds its marks. So the tray is also where you find the notes for each section. It is the place for anything the template did not anticipate, which is why the template has no slot for what surprised you.
+
+**Template.** The slots a new board starts with, kept in one global file and edited like the tags. Editing it changes future boards only. The default is nine questions, three to a row:
+
+| Slot | Question |
+|---|---|
+| Background | What do you need to know first: terms, notation, setup? |
+| Problem | What problem is this solving, and why should anyone care? |
+| Prior work & gap | What did earlier work do, and what did it miss? |
+| Main point | In your own words: what is the one thing this paper shows? |
+| How it works | What are the key parts of the approach? |
+| Evidence | Does the evidence actually support the claim? |
+| Limits | What does it assume, and where does it stop holding? |
+| My take | What do the authors conclude, and do you agree? |
+| Open questions | What is still open? What would you ask the authors? |
+
+They are questions, not labels, because the gain comes from the reader writing the answer (RESEARCH.md section 6). Every one is optional and deletable, and a piece need not go in any of them.
 
 **Question list.** A filter over pieces, described in section 5.2.
 
@@ -128,12 +150,13 @@ Proximity without a group also counts. Readers use position as meaning long befo
 
 **Ask elsewhere.** For a term or step you do not understand. A mark's popover offers Ask elsewhere, which copies a prompt to the clipboard: the marked words, their sentence, the text of their section, and your reading goal. Paste it into whatever AI you use, then paste the answer back into a new note marked as AI. The tool makes no network call and generates nothing itself; TOOLS.md section 2 anticipated exactly this, a separate note clearly marked as generated. Three rules keep the work with the reader. An AI note is visibly marked. It never clears a question: only a note you wrote does, because the gain comes from explaining it yourself (RESEARCH.md section 5). Export labels it as AI.
 
-**Export.** One command writes the board to a single Markdown file in the paper's own order, with figure clips as images, not placeholders. First the goal. Then each chunk, as a heading with its page, followed by each highlight inside it as a quote with its tags, and the notes connected to the chunk or to its highlights. Then highlights outside any chunk, then any notes connected to nothing. The chunk's full text is left out: the paper already holds it, and the note is what you marked and wrote. A note marked as AI is labelled as AI. Export saves any pending change first, so it writes what is on screen. Filtered by tag if you want, so "export pass 1" or "export claims and evidence" is the same command. This is the literature note.
+**Export.** One command writes the board to a single Markdown file in the paper's own order, with figure clips as images, not placeholders. First the goal. Then each chunk, as a heading with its page, followed by each highlight inside it as a quote with its tags, and the notes connected to the chunk or to its highlights. Then highlights outside any chunk, then any notes connected to nothing. The chunk's full text is left out: the paper already holds it, and the note is what you marked and wrote. A note marked as AI is labelled as AI. Export saves any pending change first, so it writes what is on screen. Filtered by tag if you want, so "export pass 1" or "export claims and evidence" is the same command. It can also be written in template order: each slot with its question, the notes and pieces inside it, and then everything not in a slot, in the paper's order. This is the literature note.
 
 ## 7. Files
 
 ```
 tags.json            # global tags: name, colour
+template.json        # global template: the slots a new board starts with
 papers/<paper-id>/
   paper.pdf
   source.json        # sections, figures, anchors. Generated. Never hand-edited.
@@ -157,7 +180,7 @@ Standalone. Python backend, browser front end, runs locally. The tool is open so
 
 Model weights ship inside the `pymupdf-layout` wheel, so the tool needs no network access at any point, including first run.
 
-API: get source, get and put board, get and put note, get text under a rectangle, get clip for a page and rectangle, render a region on request, list questions, export. Routes, file schemas, and the anchoring rules are in SPEC-ADDENDUM.md.
+API: get source, get and put board, get and put note, get text under a rectangle, get clip for a page and rectangle, render a region on request, split, get and put the template, list questions, export. Routes, file schemas, and the anchoring rules are in SPEC-ADDENDUM.md.
 
 ## 9. Not in v1
 
@@ -172,7 +195,7 @@ API: get source, get and put board, get and put note, get text under a rectangle
 - Free-text labels on connections. Tags only.
 - Concept notes shared across boards. A note is a note. Cross-paper arrives with multi-paper, if it arrives.
 - Citation graphs, paper discovery, library management, multi-paper canvases.
-- Templates, themes, folders.
+- Themes, folders. Templates were listed here until D17; a template is now a set of groups with questions (section 6), not a new kind of thing.
 - Editing source text.
 
 ## 10. Build plan
@@ -203,7 +226,7 @@ If any step fails, the tool is not done.
 
 ## 12. Decisions taken in this revision
 
-Recorded so the reasoning is not lost. Rows marked D1 to D14 were taken on 23 September 2026, after the first code review; SPEC-ADDENDUM.md section 12 holds their shapes.
+Recorded so the reasoning is not lost. Rows marked D1 to D19 were taken on 23 September 2026, D1 to D14 after the first code review and D15 to D19 after the research in RESEARCH.md section 6; SPEC-ADDENDUM.md section 12 holds their shapes.
 
 | Question | Decision | Why |
 |---|---|---|
@@ -214,7 +237,7 @@ Recorded so the reasoning is not lost. Rows marked D1 to D14 were taken on 23 Se
 | Reference piece | Folded into notes | A reference is a note with a URL in it. |
 | Connection labels | Tags only | Two vocabularies for one thing. A sentence about a connection is a note. |
 | Where you cut | Paper view only | One gesture, one anchoring path. The board is where you arrange. |
-| First open | Empty board, split on request | The tool must not decide the layout before the reader has read a word. |
+| First open | Empty board, split on request. Superseded by D15. | The tool must not decide the layout before the reader has read a word. |
 | Extractor | `pymupdf-layout` | The hierarchy and figure-quality advantages the heavier tools are bought for did not survive measurement. Same project and licence as PyMuPDF, 43 MB, no downloads. |
 | Paper view | `react-pdf` plus our own selection layer | The library first named was abandoned in 2024 and stores no quote text, so it could not re-anchor. |
 | Equations | Rendered clips, never LaTeX | A cut equation is a rectangle like any chunk. Extracting equations separately serves no command. |
@@ -238,3 +261,8 @@ Recorded so the reasoning is not lost. Rows marked D1 to D14 were taken on 23 Se
 | Connections to marks outside any chunk (D12) | A connection is stored between the two things themselves and drawn on whichever card holds them; connect from the paper; margin chips | Mark first, cut later broke the moment you wanted to connect two marks. Supersedes addendum section 4.0's rule that an edge ends on a highlight through its chunk. |
 | Finding a term elsewhere in the paper (D13) | Find in paper, suggesting nothing | Linking terms automatically would generate connections (principle 1). |
 | Not understanding a concept (D14) | Ask elsewhere: copy a prompt, paste the answer into a note marked as AI, which never clears a question | Reverses principle 1 as written through the fourth revision, where nothing generated could enter the board at all. The tool still generates nothing; pasted AI text is allowed as a marked note. Only a note you wrote clears a question, so the self-explanation step stays with the reader. |
+| First open (D15) | The board opens already split: every section and figure, collapsed, in a tray group named Paper, beside the template's empty slots; one undo step | Reverses the first-open row above. The owner's reason is speed: building your own map of the paper should start at once. What is placed is the paper's own sections and empty, deletable groups, so nothing is generated and nothing is required. |
+| Where split runs (D16) | On the server, one route, used by first open and the Split button; it adds only what the board is missing, and the client adds it so it can be undone | The server already builds anchors and blocks, so there is one path, tested with pytest. |
+| Templates (D17) | A slot is a group with an optional question; a global template holds the default nine | Reverses section 9's "templates not in v1". No new primitive: a slot is a group. Questions rather than labels, because the reader writing the answer is the gain (RESEARCH.md section 6). Slots and tags stay independent. |
+| Notes per section (D18) | The tray keeps a ghost row for each section whose piece has moved out, with its marks and notes counted | The place to find what you wrote about each section, derived at render and never stored. |
+| Export by template (D19) | Export can be written in template order as well as paper order | The literature note in the shape of the questions you answered. AI notes stay labelled. |

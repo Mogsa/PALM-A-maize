@@ -2,7 +2,7 @@
 
 15 September 2026, revised 23 September 2026 for board schema 2. Companion to SPEC.md.
 Grounded in three verification passes over the libraries SPEC.md section 8 names. The
-schema 2 revision writes in the fourteen decisions of SPEC.md's fifth revision; section 12
+schema 2 revision writes in the nineteen decisions of SPEC.md's fifth revision; section 12
 lists them and every **[CHOICE]** they added.
 
 SPEC.md decides *what* the tool is and *why*. It does not say what shape anything is.
@@ -217,9 +217,26 @@ connects, and its React Flow form is computed at render (section 4.0).
   "viewport": { "x": 0, "y": 0, "zoom": 1 },
   "nodes": [
     {
+      "id": "n-01J8Z3G",
+      "type": "group",
+      "position": { "x": 0, "y": 0 },
+      "width": 360,
+      "height": 1800,
+      "data": { "name": "Paper", "tags": [], "tray": true }
+    },
+    {
+      "id": "n-01J8Z3H",
+      "type": "group",
+      "position": { "x": 420, "y": 0 },
+      "width": 400,
+      "height": 300,
+      "data": { "name": "Main point", "tags": [],
+                "prompt": "In your own words: what is the one thing this paper shows?" }
+    },
+    {
       "id": "n-01J8Z3K",
       "type": "group",
-      "position": { "x": 400, "y": 120 },
+      "position": { "x": 900, "y": 120 },
       "width": 640,
       "height": 480,
       "data": { "name": "the attention argument", "tags": ["t-claim"] }
@@ -248,7 +265,7 @@ connects, and its React Flow form is computed at render (section 4.0).
     {
       "id": "n-01J8Z3P",
       "type": "figure",
-      "position": { "x": 1100, "y": 120 },
+      "position": { "x": 1600, "y": 120 },
       "width": 436,
       "height": 644,
       "data": {
@@ -264,7 +281,7 @@ connects, and its React Flow form is computed at render (section 4.0).
     {
       "id": "n-01J8Z3Q",
       "type": "note",
-      "position": { "x": 1600, "y": 200 },
+      "position": { "x": 2100, "y": 200 },
       "initialWidth": 280,
       "data": { "tags": ["t-question"], "collapsed": false, "note": "notes/n-01J8Z3Q.md", "origin": "reader" }
     }
@@ -297,6 +314,9 @@ What schema 2 changed, field by field:
   written. It is set when the note is created and never changes (section 6.2).
 - An edge is `{id, from, to, data: {tags}}` (section 4.0).
 - A highlight is `{id, tags, anchor}`. Its `note` is gone (section 4.0).
+- A group's `data.tray` is `true` on the tray, the group named Paper that a new board
+  opens with, and absent elsewhere. A group's `data.prompt` is its question, absent on a
+  group without one. A group with a prompt is a slot (section 4.9).
 
 `tags.json` stays at schema 1: nothing in it changed. The board and tags schema numbers
 are independent from here on.
@@ -403,14 +423,16 @@ Nodes: `id`, `type`, `position`, `data`, `parentId`, `extent`, `width`, `height`
 `initialWidth`, `initialHeight`, `hidden`, `zIndex`.
 Node `data`, by type:
 - chunk: `tags`, `collapsed`, `region`, `blocks`, `user_sized`, `source_id`;
-- figure: `tags`, `collapsed`, `region`, `clip`, `clip_size`, `caption`, `source_id`;
+- figure: `tags`, `collapsed`, `region`, `clip`, `clip_size`, `caption`, `user_sized`,
+  `source_id`;
 - note: `tags`, `collapsed`, `note`, `origin`, `user_sized`;
-- group: `tags`, `name`.
+- group: `tags`, `name`, `tray`, `prompt`.
 
 Edges: `id`, `from`, `to`, `data`, and `data` holds `tags` only.
 
-A note's `user_sized` is listed because section 4.2 already sets it on a resized note;
-schema 1's model never allowed it, so a resized note could not be saved.
+A note's and a figure's `user_sized` are listed because section 4.2 already sets it on a
+resized piece; schema 1's models reject it on both, so a resized note or figure could not
+be saved.
 
 The tool itself never writes `extent`: the spike measured that `extent: "parent"` clamps a
 node the moment it is re-parented and traps it inside the group. It stays in the list above
@@ -529,8 +551,10 @@ client never sees schema 1 and never migrates anything. The steps, in order:
    one entry. The rect is kept as it is, not split into lines, so a schema 1 mark that
    spans lines paints as one box until the source changes and re-anchoring recomputes its
    lines (section 5.2).
-2. **Edges.** `from = sourceHandle ?? source`, `to = targetHandle ?? target`. `source`,
-   `sourceHandle`, `target`, `targetHandle` and `type` are dropped; `data` is kept.
+2. **Edges.** `from = sourceHandle ?? source`, `to = targetHandle ?? target`, where a
+   handle counts only when it is a highlight id; any other handle, such as a node's own
+   `${id}-in` or `${id}-out`, falls back to the node id. `source`, `sourceHandle`,
+   `target`, `targetHandle` and `type` are dropped; `data` is kept.
 3. **The note cache.** A highlight whose `note` names an existing note node, with no edge
    between that highlight and that note in either direction after step 2, gains the edge
    `{id, from: highlight id, to: note id, data: {tags: []}}`. A `note` naming a node that
@@ -589,6 +613,80 @@ confused you.
 **[CHOICE]** Tidy uses `d3-force` (ISC licence, small), because a paper's graph has
 several centres and no root. You would prefer `dagre` (MIT) for tiered left-to-right
 layouts, such as claim, then evidence, then assumptions.
+
+### 4.8 `template.json`
+
+Global, one file, beside `tags.json`, outside `papers/`.
+
+```json
+{
+  "schema": 1,
+  "slots": [
+    { "name": "Background",       "prompt": "What do you need to know first: terms, notation, setup?" },
+    { "name": "Problem",          "prompt": "What problem is this solving, and why should anyone care?" },
+    { "name": "Prior work & gap", "prompt": "What did earlier work do, and what did it miss?" },
+    { "name": "Main point",       "prompt": "In your own words: what is the one thing this paper shows?" },
+    { "name": "How it works",     "prompt": "What are the key parts of the approach?" },
+    { "name": "Evidence",         "prompt": "Does the evidence actually support the claim?" },
+    { "name": "Limits",           "prompt": "What does it assume, and where does it stop holding?" },
+    { "name": "My take",          "prompt": "What do the authors conclude, and do you agree?" },
+    { "name": "Open questions",   "prompt": "What is still open? What would you ask the authors?" }
+  ]
+}
+```
+
+`slots` is in grid order, row by row, three columns. A missing file means these nine
+defaults, as a missing `tags.json` means the ten preset tags. The template is read once,
+when a board is first laid out (section 4.9), and copied into that board's groups; nothing
+in a board refers back to it. So editing the template changes future boards only, and a
+board is still a folder you can copy. The prompts are fixed questions about papers in
+general, never text generated about a particular paper (SPEC.md principle 1).
+
+### 4.9 First open, the tray, and slots
+
+**First open** (D15). When `GET /board` returns `version` 0, which means `board.json` has
+never been written, the client lays the board out before showing it:
+
+1. It calls `POST /split` (section 6), which returns every section and figure piece,
+   collapsed, in paper order.
+2. It makes the tray: a group named `Paper` with `data.tray: true`, on the left, and puts
+   the split pieces inside it as its children.
+3. It reads the template (`GET /api/template`) and makes one group per slot, with the
+   slot's `name` and `prompt`, empty, in a grid of three columns to the right of the tray.
+4. It adds all of this as one reducer action, so the whole first layout is one undo step,
+   and saves it on the usual debounce. Then it stores each figure's clip with
+   `PUT /clips` (clip files are outside undo, section 4.7).
+
+Sizes and spacing are named constants in the client. A board saved even once is never
+laid out again, even if the reader deletes everything on it.
+
+**The tray** is the first group in `nodes` order with `data.tray: true`; there is at most
+one in practice. Deleting it dissolves it like any group (section 4.2). The Split button
+adds its pieces to the tray, and makes a new tray first if there is none.
+
+**Ghost rows** (D18). The tray lists every section of `source.json` in paper order. For a
+section with no chunk among the tray's children whose `data.source_id` is the section's
+id, the tray draws a ghost row in that section's place: faint, and reading, for example,
+"§3 Model → in Method · 4 marks · 2 notes".
+
+- "→ in Method" names the group the section's chunk is now in, found by `source_id`
+  anywhere on the board. A chunk at the top level reads "→ on the board". When no chunk
+  on the board has that `source_id`, the row reads "not on the board".
+- Clicking a ghost row selects and centres the piece on the board, or scrolls the paper
+  view to the section when there is no piece.
+- The marks are the highlights with at least one line inside the section's `extent`, by
+  section 4.0's midpoint test. The notes are the note nodes connected to one of those
+  highlights or to the section's chunk.
+
+Ghost rows are computed at render and never stored. They are where the reader finds the
+notes for each section. Figures have no ghost rows.
+
+**Slots** (D17). A slot is a group with a `prompt`. Until the group has a note among its
+children, the prompt shows as faint placeholder text inside it. Clicking the prompt makes
+an empty note with `origin: "reader"` inside the group, with the prompt as the editor's
+placeholder; the prompt is never written into the note. A slot is otherwise an ordinary
+group: rename, delete, add, nest. Putting a piece in a slot does not tag it, and a tag
+does not put anything in a slot.
 
 ---
 
@@ -792,8 +890,10 @@ FastAPI, bound to localhost only. All geometry per section 2.
 | `GET` | `/api/papers/{id}/clips/{node_id}.png` | — | `image/png` |
 | `GET` | `/api/papers/{id}/render` | `?page&x0&y0&x1&y1&dpi`, `dpi` default 216 | `image/png`; stateless, writes nothing |
 | `GET` | `/api/papers/{id}/questions` | — | `[{id, kind, text}]` |
-| `POST` | `/api/papers/{id}/export` | `{tags: [tag_id]}` | `{path}` |
+| `POST` | `/api/papers/{id}/split` | — | `{nodes: [draft]}`; the section and figure pieces the board is missing, writes nothing |
+| `POST` | `/api/papers/{id}/export` | `{tags: [tag_id], order}` | `{path}` |
 | `GET` | `/api/tags` / `PUT` `/api/tags` | `tags.json` | `tags.json` |
+| `GET` | `/api/template` / `PUT` `/api/template` | `template.json` | `template.json` |
 
 Errors are `{"error": {"code": "...", "message": "..."}}` with `404` unknown paper or
 node, `409` version conflict on board PUT, `422` malformed geometry, `500` extraction
@@ -851,6 +951,36 @@ is `200 {paper_id, changed, states}`. A failed extraction leaves the paper as it
 returns `500`. The board, notes and stored clips are kept. A stored figure clip still
 shows the old PDF until that figure is cut again.
 
+`POST /split` (D16) is the one implementation of split, used by first open and by the
+Split button. It reads `source.json` and the board as saved, so the client saves any
+pending change first, as for export. It returns a draft node for every section and figure
+whose id is not the `data.source_id` of any node on the board:
+
+- a section becomes `{type: "chunk", position, data}`, with `region` a chunk anchor built
+  from the section's `extent` by section 5.1's rule for split, `blocks` by section 4.0,
+  `collapsed: true`, and `source_id` the section id;
+- a figure becomes `{type: "figure", position, data}`, with `region` a one-rectangle chunk
+  anchor per section 5.1, `caption` from `source.json`, `clip` and `clip_size` null,
+  `collapsed: true`, and `source_id` the figure id.
+
+Drafts carry no `id` and no `parentId`. `position` is relative to the tray's top-left
+corner: one column, in paper order across sections and figures together (section 6.1's
+key), each piece at its own index. So a piece re-added after a delete goes back to its own
+place. The route never writes `board.json`; the client mints the ids, adds the drafts to
+the tray through the reducer so they can be undone, and then stores the figure clips.
+
+**[CHOICE]** Split runs on the server, not in the client-side `split.ts` the features plan
+described. The server already builds anchors and blocks, so there is one path and it is
+tested with pytest. You would prefer the client if split latency ever became visible.
+
+**[CHOICE]** Split returns drafts without ids, and the client mints them, because section
+4.5 has the client mint every id and a clip is stored under its node's id. That costs one
+`PUT /clips` per figure after the drafts are added. You would prefer the server minting ids
+and storing the clips in the same call if first open felt slow on a figure-heavy paper.
+
+`GET /api/template` returns `template.json`, or the nine defaults when there is no file.
+`PUT /api/template` replaces it, atomically, like `PUT /api/tags`.
+
 The question list is a server-side filter, defined precisely as: every highlight or node
 carrying the `question` tag that has no edge connecting it to a note node whose
 `data.origin` is `"reader"`. A note carrying the tag is on the list like anything else.
@@ -890,6 +1020,23 @@ written once, under the first of them in paper order.
 With `tags`, a highlight is written when it carries one of them, a chunk or figure when it
 or a highlight inside it does, and a note when it carries one or is written under
 something that is. Without `tags`, everything is written.
+
+**Template order** (D19). `order` is `"paper"` (the default, as above) or `"template"`. In
+template order, after the title and goal:
+
+1. Each slot, a group with a `prompt`, in `nodes` order: `## <name>`, then the prompt in
+   italics, then the notes that are its children, then its pieces as in paper order, each
+   one heading level down, with their quoted highlights and connected notes. Its pieces
+   are the chunks and figures inside it, at any depth, except those inside a nested slot,
+   which are written under that slot.
+2. `## Not in a slot`, then everything that is in no slot, in paper order, exactly as
+   above, including the highlights outside any chunk and the remaining notes.
+
+AI notes stay labelled (D14). A highlight or note is written once, at its first place.
+
+**[CHOICE]** An empty slot is still written, as its name and question with nothing under
+it, so the literature note shows which questions are still unanswered. You would leave
+empty slots out if the exported file were meant to be shared with someone else.
 
 ### 6.2 What needs no route
 
@@ -1027,6 +1174,14 @@ Schema 2 adds these, applied in SPEC.md's fifth revision of 23 September 2026:
 18. **Section 9**: Back and Forward, a section outline, citation peek, automatic term
     linking, and calling an AI directly are not in v1.
 19. **Section 12**: one row per decision, D1 to D14.
+20. **Section 2**: principle 2 allows structure that is offered, empty and deletable, and
+    principle 1 notes that a template's questions are fixed, never generated (D17).
+21. **Section 4, first open**: the board opens already split into a tray beside the
+    template's slots (D15). Section 12's first-open row is marked superseded.
+22. **Sections 5.4 and 6**: a slot is a group with a question; split, the tray and its
+    ghost rows, the template, and export in template order (D16 to D19).
+23. **Sections 7, 8 and 9**: `template.json` in the files, split and the template in the
+    API, and templates removed from "not in v1".
 
 ---
 
@@ -1104,6 +1259,25 @@ same numbering as SPEC.md section 12. Together they move `board.json` to schema 
 - **D14, AI notes.** `data.origin` (section 4); the question list counts only the
   reader's notes (section 6). Supersedes SPEC.md principle 1's absolute wording.
 
+**The template, decided after the research in RESEARCH.md section 6.** Five more.
+
+- **D15, first open is already split.** Section 4.9. Reverses SPEC.md section 12's
+  first-open row, "empty board, split on request".
+- **D16, split on the server.** `POST /split` (section 6). Replaces the features plan's
+  client-side `split.ts`.
+- **D17, slots are groups with a prompt.** `data.prompt` (section 4), `template.json`
+  (section 4.8), `GET` and `PUT /api/template` (section 6). No new primitive. Reverses
+  SPEC.md section 9's "templates" as not in v1.
+- **D18, ghost rows in the tray.** `data.tray` (section 4); section 4.9. Derived at
+  render, never stored.
+- **D19, export by template.** `order` on `POST /export` (section 6.1).
+
+A note for the schema 2 contract task. Today `board_model.py` accepts an edge handle only
+when it is a highlight id, so the node-to-node handles `${id}-in` and `${id}-out` that the
+client draws would fail validation. That is moot under D12, because schema 2 stores no
+handles, but the migration in section 4.6 must map any such handle to its node, which
+step 2 now says.
+
 The **[CHOICE]**s these added, for red-penning:
 
 - View state in `board.json`, not localStorage (section 4).
@@ -1118,3 +1292,6 @@ The **[CHOICE]**s these added, for red-penning:
 - One `SNAP_THRESHOLD` for text and rectangles (section 5.3).
 - Chunk clips rendered on request, not stored (section 6).
 - A note's `origin` fixed at creation (section 6.2).
+- Split on the server, not client-side (section 6).
+- Split drafts without ids; the client mints them and stores figure clips (section 6).
+- An empty slot still written in template-order export (section 6.1).
