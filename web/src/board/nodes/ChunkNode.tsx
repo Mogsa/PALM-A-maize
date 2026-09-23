@@ -6,12 +6,12 @@ import { paintMarks, reflow } from "../marks";
 import { useOverflow } from "../overflow";
 
 export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
-  const { state, dispatch } = useBoard();
+  const { state, dispatch, words } = useBoard();
   // NodeProps.height also includes automatic measurements; only a stored height fixes the box size.
   const height = state.board.nodes.find((node) => node.id === id)?.height;
   const marks = highlightsIn(state.board.highlights, data.region);
-  const text = reflow(data.text);
-  const title = reflow(data.region.start.exact).slice(0, 80);
+  const text = reflow(data.text, words);
+  const title = reflow(data.region.start.exact, words).slice(0, 80);
   const page = data.region.rects[0].page + 1;
   const [bodyRef, overflowing] = useOverflow<HTMLDivElement>();
   const toggle = () => {
@@ -31,7 +31,7 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
       </div>
       {!data.collapsed && (
         <div className="node-body" ref={bodyRef}>
-          {paintMarks(text, marks).map((run, i) => run.highlightId ? <mark key={i}>{run.text}</mark> : <span key={i}>{run.text}</span>)}
+          {paintMarks(text, marks, words).map((run, i) => run.highlightId ? <mark key={i}>{run.text}</mark> : <span key={i}>{run.text}</span>)}
         </div>
       )}
       {marks.map((h, i) => (

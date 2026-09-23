@@ -1,10 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { api } from "../api/client";
+import { paperWords } from "../board/marks";
 import { boardReducer, initialBoardState, type BoardAction, type BoardState } from "../model/boardReducer";
 import type { Source } from "../model/types";
 import { createPersistence } from "./persistence";
 
-type Ctx = { state: BoardState; dispatch: React.Dispatch<BoardAction>; source: Source; notice: string | null; paperId: string };
+/** `words` is the paper's vocabulary, for reflowing its text (board/marks). */
+type Ctx = { state: BoardState; dispatch: React.Dispatch<BoardAction>; source: Source; words: ReadonlySet<string>; notice: string | null; paperId: string };
 const BoardContext = createContext<Ctx | null>(null);
 
 export function BoardProvider({ paperId, children }: { paperId: string; children: React.ReactNode }) {
@@ -64,7 +66,8 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
     if (state.dirty) persistence.current?.schedule(state.board, state.revision);
   }, [state]);
 
-  const value = useMemo(() => (source ? { state, dispatch, source, notice, paperId } : null), [state, source, notice, paperId]);
+  const words = useMemo(() => paperWords(source?.page_text ?? []), [source]);
+  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId } : null), [state, source, words, notice, paperId]);
   if (!value && failure) {
     return (
       <div className="loading load-failed" role="alert">
