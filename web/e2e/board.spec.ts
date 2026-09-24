@@ -5,7 +5,8 @@ test.afterEach(async ({request}) => {
   const path = `/api/papers/${papers[0].paper_id}/board`;
   const board = await (await request.get(path)).json();
   board.nodes = []; board.edges = []; board.highlights = [];
-  board.viewport = {x: 0, y: 0, zoom: 1};
+  board.viewport = {x: 0, y: 0, zoom: 1}; board.active_tags = [];
+  board.view = 'paper'; delete board.paper_scroll;   // view state is saved (D5): don't leak it into the next test
   await request.put(path, {data: board, headers: {'If-Match': String(board.version)}});
 });
 const quote = { exact: 'Review chunk', prefix: '', suffix: '' };
@@ -19,12 +20,13 @@ async function seed(page: Page, x = 40) {
 }
 
 /** Saves a board with these nodes and highlights, and opens it in the paper view. */
-async function seedBoard(page: Page, { nodes = [], highlights = [] }: { nodes?: object[]; highlights?: object[] }) {
+async function seedBoard(page: Page, { nodes = [], highlights = [], activeTags = [] }: { nodes?: object[]; highlights?: object[]; activeTags?: string[] }) {
   const papers = await (await page.request.get(`/api/papers`)).json();
   const id = papers[0].paper_id;
   const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
   board.nodes = nodes;
-  board.edges = []; board.highlights = highlights; board.viewport = { x: 0, y: 0, zoom: 1 };
+  board.edges = []; board.highlights = highlights; board.viewport = { x: 0, y: 0, zoom: 1 }; board.active_tags = activeTags;
+  board.view = 'paper'; delete board.paper_scroll;
   const saved = await page.request.put(`/api/papers/${id}/board`, {data: board, headers: {'If-Match': String(board.version)}});
   expect(saved.ok()).toBeTruthy();
   await page.goto('/');
@@ -105,7 +107,28 @@ test('a chunk counts only the marks it paints, and keeps a handle for every mark
   const card = page.locator('.react-flow__node[data-id="n-marks"]');
   await expect(card.locator('mark')).toHaveCount(1);
   await expect(card.locator('.count')).toHaveText('1');
-  await expect(card.locator('.react-flow__handle.source')).toHaveCount(2);
+  await expect(card.locator('.react-flow__handle[data-handleid^="h-"]')).toHaveCount(2);
+});
+
+test('a chunk shows its text and clip blocks in reading order, painting a mark only in its own block', async ({page}) => {
+  const block = (rect: number[], text: string) => ({ kind: 'text', page: 0, rect, text });
+  const base = chunk('n-mixed', 40, 100, '');
+  const mixed = { ...base, data: { ...base.data,
+    blocks: [block([50, 130, 280, 180], 'Before the formula.'), { kind: 'clip', page: 0, rect: [50, 190, 280, 230], label: 'formula' },
+             block([50, 240, 280, 300], 'After the formula.')] } };
+  const mark = { id: 'h-after', tags: [],
+    anchor: { rects: [{ page: 0, rect: [60, 250, 200, 260] }], quote: { exact: 'After the formula', prefix: '', suffix: '' }, position: 0, state: 'anchored' } };
+  await seedBoard(page, { nodes: [mixed], highlights: [mark] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  const body = page.locator('.react-flow__node[data-id="n-mixed"] .node-body');
+  await expect(body.locator(':scope > *')).toHaveCount(3);
+  await expect(body.locator(':scope > :nth-child(2)')).toHaveClass('block-clip');
+  const clip = body.locator('img.block-clip');
+  await expect(clip).toHaveAttribute('src', /\/render\?page=0&x0=50&y0=190&x1=280&y1=230&dpi=216$/);
+  await expect(clip).toHaveAttribute('alt', 'formula');
+  await expect.poll(() => clip.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  await expect(body.locator('p.block-text').nth(0).locator('mark')).toHaveCount(0);
+  await expect(body.locator('p.block-text').nth(1).locator('mark[data-highlight-id="h-after"]')).toHaveText('After the formula');
 });
 
 test('a jump to the paper happens once, not again on every return to the paper', async ({page}) => {
@@ -215,4 +238,52 @@ test('a figure and a note collapse and expand like a chunk', async ({page}) => {
     await expect(outer.locator('.node-body')).toHaveCount(1);
     await expect.poll(async () => (await outer.boundingBox())!.height).toBeGreaterThan(200);
   }
+});
+
+test('New note and a slot\'s question each open a note ready for typing', async ({page}) => {
+  const slot = { id: 'n-slot', type: 'group', position: { x: 40, y: 400 }, width: 400, height: 300,
+    data: { tags: [], name: 'Main point', prompt: 'What is the one thing?' } };
+  const id = await seedBoard(page, { nodes: [slot] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await page.getByRole('button', {name: 'New note'}).click();
+  await expect(page.locator('textarea.note-text')).toBeFocused();
+  await page.keyboard.type('In my own words');
+  await page.locator('.react-flow__pane').click({ position: { x: 1200, y: 900 } });
+  await page.locator('.slot-prompt').click();
+  const answer = page.locator('textarea.note-text');
+  await expect(answer).toBeFocused();
+  await expect(answer).toHaveAttribute('placeholder', 'What is the one thing?');
+  await page.keyboard.type('The answer');
+  await page.locator('.react-flow__pane').click({ position: { x: 1200, y: 900 } });
+  await expect(page.locator('.slot-prompt')).toHaveCount(0);
+  await expect(page.locator('.notice')).toHaveText(/Saved/);
+  const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
+  const notes = board.nodes.filter((n: { type: string }) => n.type === 'note');
+  const texts = await Promise.all(notes.map(async (n: { id: string }) => (await (await page.request.get(`/api/papers/${id}/notes/${n.id}`)).json()).markdown));
+  expect(texts.sort()).toEqual(['In my own words', 'The answer']);
+});
+
+test('a ghost row or a slot question does not select the group it sits in', async ({page}) => {
+  const papers = await (await page.request.get('/api/papers')).json();
+  const source = await (await page.request.get(`/api/papers/${papers[0].paper_id}/source`)).json();
+  const tray = { id: 'n-tray', type: 'group', position: { x: 0, y: 0 }, width: 360, height: 400, data: { tags: [], name: 'Paper', tray: true } };
+  const slot = { id: 'n-slot', type: 'group', position: { x: 1000, y: 0 }, width: 400, height: 300, data: { tags: [], name: 'Main point', prompt: 'What is the one thing?' } };
+  const base = chunk('n-out', 500, 0, 'Moved out.');
+  const out = { ...base, data: { ...base.data, source_id: source.sections[0].id, collapsed: true } };
+  await seedBoard(page, { nodes: [tray, slot, out] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await page.locator('.ghost-row', { hasText: '→ on the board' }).click();
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(1);
+  await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', 'n-out');
+  await page.locator('.slot-prompt').click();
+  await expect(page.locator('.react-flow__node[data-id="n-slot"].selected')).toHaveCount(0);
+});
+
+test('a note made while a tag filter is on stays in sight, ready for typing', async ({page}) => {
+  const base = chunk('n-tagged', 40, 100, 'Tagged.');
+  await seedBoard(page, { nodes: [{ ...base, data: { ...base.data, tags: ['t-shown'] } }], activeTags: ['t-shown'] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await expect(page.locator('.react-flow__node[data-id="n-tagged"]')).toBeVisible();
+  await page.getByRole('button', {name: 'New note'}).click();
+  await expect(page.locator('textarea.note-text')).toBeFocused();
 });

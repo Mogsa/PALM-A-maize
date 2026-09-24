@@ -1,4 +1,5 @@
-import type { Highlight } from "../model/types";
+import { linesInside } from "../model/geometry";
+import type { Block, Highlight } from "../model/types";
 
 export type Run = { text: string; highlightId: string | null };
 
@@ -37,6 +38,20 @@ function stripped(text: string): { s: string; offsets: number[] } {
   return { s: chars.join(""), offsets };
 }
 
+/** Below this many characters a quote's end matching a block's end is a coincidence, not the mark. */
+export const MIN_PARTIAL_CHARS = 12;
+
+/** The part of a mark in this text when the whole quote is not: it starts here and runs on past the end, it started
+ *  before and ends here, or the whole text lies inside it (D1: a card paints only its own lines). */
+function partialSpan(s: string, needle: string): { at: number; length: number } | null {
+  for (let k = Math.min(needle.length - 1, s.length); k >= MIN_PARTIAL_CHARS; k--) {
+    if (s.endsWith(needle.slice(0, k))) return { at: s.length - k, length: k };
+    if (s.startsWith(needle.slice(needle.length - k))) return { at: 0, length: k };
+  }
+  if (s.length >= MIN_PARTIAL_CHARS && needle.includes(s)) return { at: 0, length: s.length };
+  return null;
+}
+
 /** Split a chunk's text into runs so each highlight inside it can be drawn as a <mark>. */
 export function paintMarks(text: string, marks: Highlight[], words: ReadonlySet<string>): Run[] {
   const { s, offsets } = stripped(text);
@@ -58,7 +73,12 @@ export function paintMarks(text: string, marks: Highlight[], words: ReadonlySet<
       candidates.push({ at, score: before + after });
     }
     candidates.sort((a, b) => b.score - a.score);
-    if (!candidates.length || (candidates.length > 1 && candidates[0].score === candidates[1].score)) continue;
+    if (!candidates.length) {
+      const part = partialSpan(s, needle);
+      if (part) spans.push({ start: offsets[part.at], end: offsets[part.at + part.length - 1] + 1, id: mark.id });
+      continue;
+    }
+    if (candidates.length > 1 && candidates[0].score === candidates[1].score) continue;
     const at = candidates[0].at;
     spans.push({ start: offsets[at], end: offsets[at + needle.length - 1] + 1, id: mark.id });
   }
@@ -73,4 +93,20 @@ export function paintMarks(text: string, marks: Highlight[], words: ReadonlySet<
   }
   if (cursor < text.length) runs.push({ text: text.slice(cursor), highlightId: null });
   return runs;
+}
+
+export type PaintedBlock = { block: Block; runs: Run[] };
+
+/** A chunk's blocks in reading order (addendum 4.0). A text block paints the marks with a line inside it; a clip block
+ *  is an image and paints nothing. */
+export function paintBlocks(blocks: Block[], marks: Highlight[], words: ReadonlySet<string>): PaintedBlock[] {
+  return blocks.map((block) => {
+    if (block.kind === "clip") return { block, runs: [] };
+    const here = marks.filter((m) => linesInside(m, [{ page: block.page, rect: block.rect }]).length > 0);
+    return { block, runs: paintMarks(reflow(block.text, words), here, words) };
+  });
+}
+
+export function paintedIds(painted: PaintedBlock[]): Set<string> {
+  return new Set(painted.flatMap(({ runs }) => runs.flatMap((run) => (run.highlightId ? [run.highlightId] : []))));
 }

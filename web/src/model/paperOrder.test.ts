@@ -24,6 +24,14 @@ describe("paper order (addendum 6.1)", () => {
   it("puts a rect that starts in no region after the page's regions", () => {
     expect(orderKey(source, pr(0, [5, 5, 10, 10]))[1]).toBe(Number.MAX_SAFE_INTEGER);
   });
+  it("finds a centred heading's region by its top-centre, as the server does", () => {
+    // The extent starts left of the region, so its top-left corner lies in no region.
+    expect(orderKey(source, pr(1, [30, 60, 560, 700]))[1]).toBe(2);
+  });
+  it("falls back to the first region whose midpoint the rect holds", () => {
+    // A padded figure rect whose top-centre sits above every region.
+    expect(orderKey(source, pr(0, [310, 20, 570, 400]))[1]).toBe(1);
+  });
   it("orders sections and figures together", () => {
     expect(trayOrder(source)).toEqual(["sec-1", "fig-1", "sec-2"]);
   });

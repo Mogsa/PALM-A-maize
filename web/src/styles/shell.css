@@ -5,11 +5,25 @@ button, select, input, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-.app { display: grid; grid-template-rows: var(--topbar-height) 1fr; height: 100%; }
+.app { display: grid; grid-template-rows: var(--topbar-height) auto 1fr; height: 100%; }
+/* the start screen and the board's loading states have no subbar: they span rows 2 and 3 */
+.app > .start, .app > .loading { grid-row: 2 / 4; }
+.subbar { display: flex; align-items: center; gap: 16px; padding: 4px 16px; background: var(--surface); border-bottom: 1px solid var(--border); min-height: 36px; }
+.goal { flex: 1; min-width: 160px; border: 0; border-bottom: 1px dashed var(--border-strong); background: none; padding: 2px 4px; color: var(--ink); font-family: var(--font-read); font-size: var(--text-read); }
+.goal::placeholder { color: var(--ink-faint); font-style: italic; }
+.workspace { display: grid; grid-template-columns: 1fr auto; min-height: 0; }
 /* the two views share one cell and both stay laid out; visibility, not display, so the paper keeps
    its scroll offset and React Flow keeps its size while hidden */
-.view { grid-row: 2; grid-column: 1; min-height: 0; }
+.views { display: grid; min-height: 0; min-width: 0; }
+.view { grid-row: 1; grid-column: 1; min-height: 0; }
 .view.inactive { visibility: hidden; }
+.panel { width: 320px; overflow: auto; padding: 12px 14px; border-left: 1px solid var(--border); background: var(--surface); }
+.panel h3 { margin: 0 0 8px; font-size: var(--text-ui); font-weight: 600; }
+.panel .hint { margin: 0 0 8px; color: var(--ink-faint); font-size: var(--text-ui-small); }
+.panel-error { margin: 6px 0; color: var(--lost); font-size: var(--text-ui-small); }
+.panel-buttons { display: inline-flex; gap: 4px; }
+.panel-button { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); color: var(--ink-muted); font-weight: 500; }
+.panel-button[aria-pressed="true"] { background: var(--surface-muted); color: var(--ink); border-color: var(--border-strong); }
 
 /* top bar: wordmark, paper title (a select in disguise), view switch, save state */
 .topbar { display: flex; align-items: center; gap: 16px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
@@ -45,3 +59,35 @@ button { cursor: pointer; }
 .load-failed { gap: 12px; justify-items: center; text-align: center; }
 .load-failed p { margin: 0; color: var(--lost); }
 .load-failed button { padding: 6px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); background: var(--surface); font-weight: 500; }
+
+/* the tag filter (subbar) and the tag manager (side panel) */
+.filter-bar { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.filter-bar .chip { cursor: pointer; opacity: 0.55; }
+.filter-bar .chip.on { opacity: 1; font-weight: 600; }
+.filter-bar .clear { color: var(--ink-muted); font-size: var(--text-ui-small); }
+.tag-manager ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tag-manager li { display: flex; align-items: center; gap: 6px; }
+.tag-manager input[type="text"] { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--radius-small); }
+.tag-manager input[type="color"] { width: 26px; height: 22px; padding: 0; border: 0; background: none; }
+
+/* the question list (side panel) */
+.question-list ul { list-style: none; margin: 0; padding: 0; }
+.question-list li { border-top: 1px solid var(--border); }
+.question-list li button { width: 100%; padding: 6px 0; border: 0; background: none; text-align: left; font-family: var(--font-read); font-size: 13px; }
+.question-list li button:hover { color: var(--cut); }
+.question-list .kind { margin-right: 6px; font-family: var(--font-ui); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+
+/* export (side panel) */
+.export-dialog { display: flex; flex-direction: column; gap: 8px; }
+.export-dialog .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-ui-small); color: var(--ink-muted); }
+.export-dialog select, .export-dialog button { padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); background: var(--surface); }
+.export-result code { font-family: var(--font-mono); font-size: var(--text-ui-small); word-break: break-all; }
+.export-result pre { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-family: var(--font-read); font-size: 12.5px; line-height: var(--leading-read); background: var(--surface-muted); padding: 8px; border-radius: var(--radius-small); }
+
+/* the template editor (side panel) */
+.template-editor ol { margin: 0 0 8px; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; }
+.template-editor li { display: flex; flex-direction: column; gap: 4px; }
+.template-editor input, .template-editor textarea { padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--radius-small); }
+.template-editor textarea { min-height: 44px; resize: vertical; font-family: var(--font-read); }
+.template-editor .row-tools { display: flex; gap: 4px; }
+.template-editor .row-tools button { padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); }

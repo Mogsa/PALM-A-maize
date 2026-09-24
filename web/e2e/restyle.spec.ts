@@ -35,19 +35,17 @@ test("the popover previews the selection and Escape dismisses it", async ({ page
   await expect(popover).toHaveCount(0);
 });
 
-test("an empty board shows one hint, and a long chunk fades", async ({ page }) => {
+test("a long chunk fades", async ({ page }) => {
   await page.goto("/");
   await page.locator("select").selectOption({ index: 1 });
   await expect(page.locator(".react-pdf__Page").first()).toBeVisible();
   await page.getByRole("button", { name: "Board", exact: true }).click();
-  await expect(page.locator(".empty-hint")).toBeVisible();
   await page.getByRole("button", { name: "Paper", exact: true }).click();
   // spans 4 to 70 of page 3 sit in one column (step3.spec cuts 50 to 70 there); the rough drag snaps to whole paragraphs
   await selectSpans(page, 3, 4, 70);
   await page.getByRole("button", { name: "Cut" }).click();
   await expect(page.locator(".notice")).toHaveText(/Saved v\d+/);
   await page.getByRole("button", { name: "Board", exact: true }).click();
-  await expect(page.locator(".empty-hint")).toHaveCount(0);
   const card = page.locator(".node.chunk").first();
   await expect(card.locator(".badge")).toHaveText("p3");
   await expect(card).toHaveClass(/overflowing/);
