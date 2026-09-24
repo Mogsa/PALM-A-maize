@@ -1,17 +1,49 @@
+import { useState } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
+import { firstLine } from "../../model/notes";
 import type { NoteNode as NoteNodeType } from "../../model/types";
+import { useBoard, useNote } from "../../state/BoardProvider";
+import { useBoardActions } from "../BoardActions";
+import { inHandle, outHandle } from "../handles";
+import { slotPrompt } from "../slots";
 import { CollapseToggle } from "./CollapseToggle";
+import { NodeTags } from "./NodeTags";
 
-/** A note in the reader's own words. This plan draws it; editing and the note file
- *  arrive in the next plan, so the body shows the note path as a placeholder. */
+export const NOTE_PLACEHOLDER = "Write in your own words";
+
+/** A note in the reader's own words, or an AI's answer marked as such (D14). The text lives in notes/<id>.md;
+ *  the text area keeps its own undo (addendum 4.7). */
 export function NoteNode({ id, data, selected }: NodeProps<NoteNodeType>) {
+  const { state } = useBoard();
+  const { editing, setEditing } = useBoardActions();
+  const { text, error, save } = useNote(id);
+  const [draft, setDraft] = useState<string | null>(null);
+  const prompt = slotPrompt(state.board.nodes, state.board.nodes.find((n) => n.id === id)?.parentId);
+  const finish = () => {
+    if (draft !== null && draft !== text) void save(draft);
+    setDraft(null);
+    setEditing(null);
+  };
+  const origin = data.origin ?? "reader";
+  const ai = origin === "ai";
   return (
-    <div className="node note">
+    <div className={`node note ${origin}`}>
       <NodeResizer isVisible={selected && !data.collapsed} minWidth={160} minHeight={60} />
-      <div className="node-head"><CollapseToggle id={id} collapsed={data.collapsed} /><span className="badge note-badge">note</span><span className="title">Note</span></div>
-      {!data.collapsed && <div className="node-body">{data.note}</div>}
-      <Handle id={`${id}-in`} type="target" position={Position.Left} />
-      <Handle id={`${id}-out`} type="source" position={Position.Right} />
+      <div className="node-head">
+        <CollapseToggle id={id} collapsed={data.collapsed} />
+        <span className={`badge note-badge ${origin}`}>{ai ? "AI" : "note"}</span>
+        <span className="title">{firstLine(text ?? "") || (ai ? "AI answer" : "Note")}</span>
+        <NodeTags id={id} tags={data.tags} />
+      </div>
+      {!data.collapsed && (editing === id
+        ? <textarea className="note-text nodrag nowheel" autoFocus value={draft ?? text ?? ""} aria-label="Note"
+                    placeholder={prompt ?? NOTE_PLACEHOLDER} onChange={(e) => setDraft(e.target.value)} onBlur={finish} />
+        : <div className="node-body note-body" onDoubleClick={() => setEditing(id)} title="Double-click to write">
+            {text || <span className="hint">{prompt ?? NOTE_PLACEHOLDER}</span>}
+          </div>)}
+      {error && <p className="note-error" role="alert">{error}</p>}
+      <Handle id={inHandle(id)} type="target" position={Position.Left} />
+      <Handle id={outHandle(id)} type="source" position={Position.Right} />
     </div>
   );
 }

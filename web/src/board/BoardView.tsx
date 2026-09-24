@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized,
   type EdgeChange, type Node, type OnBeforeDelete, type OnConnect, type OnNodeDrag,
@@ -7,11 +7,13 @@ import "@xyflow/react/dist/style.css";
 import { hiddenNodeIds } from "../model/filter";
 import { newId } from "../model/ids";
 import { newEdge } from "../model/links";
+import { newNote } from "../model/notes";
 import { fitsInside, isDescendant, reparent, type Box } from "../model/reparent";
 import { parentsFirst } from "../model/serialize";
 import type { BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
 import { useTags } from "../state/TagsProvider";
+import { BoardActionsProvider } from "./BoardActions";
 import { EdgePopover } from "./EdgePopover";
 import { applySelection, endOf, flowEdges, type FlowEdge } from "./handles";
 import { ChunkNode } from "./nodes/ChunkNode";
@@ -30,7 +32,9 @@ const DELETE_KEYS = ["Backspace", "Delete"];
 function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Props) {
   const { state, dispatch } = useBoard();
   const { byId } = useTags();
-  const { getInternalNode, fitView, getZoom } = useReactFlow<BoardNode>();
+  const { getInternalNode, fitView, getZoom, screenToFlowPosition } = useReactFlow<BoardNode>();
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const initialized = useNodesInitialized();
   const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(() => new Set());
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; at: DOMRect } | null>(null);
@@ -66,6 +70,19 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
     }
     if (moved.length) dispatch({ type: "upsertNodes", nodes: moved, merge: true });
   }, [dispatch, getInternalNode, state.board.nodes]);
+
+  const focusOn = useCallback((id: string) => {
+    void fitView({ nodes: [{ id }], minZoom: 0.2, maxZoom: getZoom(), duration: 300 });
+    dispatch({ type: "nodes", changes: [{ type: "select", id, selected: true }] });
+  }, [fitView, getZoom, dispatch]);
+  const actions = useMemo(() => ({ focusNode: focusOn, openInPaper: onOpenInPaper, editing, setEditing }), [focusOn, onOpenInPaper, editing]);
+
+  const addNote = () => {
+    const box = boardRef.current!.getBoundingClientRect();
+    const note = newNote({ position: screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 }), origin: "reader" });
+    dispatch({ type: "add", nodes: [note] });
+    setEditing(note.id);
+  };
 
   const addGroup = () => {
     const node: GroupNodeType = { id: newId("n"), type: "group", position: { x: 400, y: 40 }, width: 480, height: 320, data: { tags: [], name: null } };
@@ -106,13 +123,12 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   const closeEdgeMenu = useCallback(() => setEdgeMenu(null), []);
 
   return (
-    <div className="board">
+    <BoardActionsProvider value={actions}>
+    <div className="board" ref={boardRef}>
       <div className="board-tools">
         <button onClick={addGroup} title="A rectangle to pile pieces in. Drag pieces wholly inside it."><span aria-hidden="true">▢</span> New group</button>
+        <button onClick={addNote} title="A note in your own words"><span aria-hidden="true">✎</span> New note</button>
       </div>
-      {state.board.nodes.length === 0 && (
-        <div className="empty-hint"><p>Nothing here yet. In the paper, select some text and choose <b>Cut</b> to place it on the board.</p></div>
-      )}
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
       <ReactFlow<BoardNode, FlowEdge>
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
@@ -130,6 +146,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       </ReactFlow>
       {edgeMenu && <EdgePopover edgeId={edgeMenu.id} at={edgeMenu.at} onClose={closeEdgeMenu} />}
     </div>
+    </BoardActionsProvider>
   );
 }
 

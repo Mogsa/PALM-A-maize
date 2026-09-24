@@ -6,6 +6,7 @@ import { useBoard } from "../../state/BoardProvider";
 import { inHandle, outHandle } from "../handles";
 import { CollapseToggle } from "./CollapseToggle";
 import { Counts } from "./Counts";
+import { NodeTags } from "./NodeTags";
 
 /** A figure is a clip of the paper as printed. One with no clip yet is one whose clip is still being stored on
  *  first open; it shows its caption meanwhile. */
@@ -22,6 +23,7 @@ export function FigureNode({ id, data, selected }: NodeProps<FigureNodeType>) {
         <span className="badge" title={`Page ${data.region.rects[0].page + 1}`}>p{data.region.rects[0].page + 1}</span>
         <span className="title">{title}</span>
         <Counts marks={marks.length} notes={notes} />
+        <NodeTags id={id} tags={data.tags} />
         <button className="quiet open-source" data-testid="open-source" title="Open in paper">↗</button>
       </div>
       {!data.collapsed && (

@@ -12,6 +12,7 @@ import { useOverflow } from "../overflow";
 import { ChunkBody } from "./ChunkBody";
 import { CollapseToggle } from "./CollapseToggle";
 import { Counts } from "./Counts";
+import { NodeTags } from "./NodeTags";
 
 export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const { state, words } = useBoard();
@@ -36,6 +37,7 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
         <span className="badge" title={`Page ${page}`}>p{page}</span>
         <span className="title">{title}</span>
         <Counts marks={shown} unplaced={marks.length - shown} notes={notes} />
+        <NodeTags id={id} tags={data.tags} />
         <button className="quiet open-source" data-testid="open-source" title="Open in paper" aria-label="Open in paper">↗</button>
       </div>
       {!data.collapsed && <div className="node-body" ref={bodyRef}><ChunkBody painted={painted} dimmed={dimmed} /></div>}
