@@ -13,10 +13,13 @@ button { cursor: pointer; }
 .goal::placeholder { color: var(--ink-faint); font-style: italic; }
 .workspace { display: grid; grid-template-columns: 1fr auto; min-height: 0; }
 /* the two views share one cell and both stay laid out; visibility, not display, so the paper keeps
-   its scroll offset and React Flow keeps its size while hidden */
+   its scroll offset and React Flow keeps its size while hidden. React Flow sets `visibility: visible` and
+   `pointer-events: all` inline on every measured node (and edge label), which beats an inherited `hidden`:
+   so every element of the hidden view is hidden and takes no pointer, or the board's cards would show over
+   the paper and take its clicks */
 .views { display: grid; min-height: 0; min-width: 0; }
 .view { grid-row: 1; grid-column: 1; min-height: 0; }
-.view.inactive { visibility: hidden; }
+.view.inactive, .view.inactive * { visibility: hidden !important; pointer-events: none !important; }
 .panel { width: 320px; overflow: auto; padding: 12px 14px; border-left: 1px solid var(--border); background: var(--surface); }
 .panel h3 { margin: 0 0 8px; font-size: var(--text-ui); font-weight: 600; }
 .panel .hint { margin: 0 0 8px; color: var(--ink-faint); font-size: var(--text-ui-small); }

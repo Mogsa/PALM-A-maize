@@ -178,6 +178,38 @@ test("export in the template's order lists the nine slot names, in the template'
   expect(headings.filter((h) => names.includes(h))).toEqual(names);
 });
 
+test("in the paper view the hidden board's tray and slots neither show nor take the paper's clicks", async ({ page }) => {
+  // The laid-out board of first open, saved in the paper view at zoom 1, so the slots sit over the paper's first page.
+  const laidOut = await boardOf(page.request, attention);
+  expect(laidOut.nodes.filter((n: Json) => n.type === "group" && n.data.prompt)).toHaveLength(9);
+  expect(laidOut.nodes.some((n: Json) => n.data.tray)).toBe(true);
+  const put = await page.request.put(`/api/papers/${attention}/board`, {
+    data: { ...laidOut, view: "paper", viewport: { x: 0, y: 0, zoom: 1 } }, headers: { "If-Match": String(laidOut.version), ...WRITE },
+  });
+  expect(put.ok()).toBeTruthy();
+  await open(page, attention);
+  const slots = page.locator(".react-flow__node:has(.node.group.slot)");
+  await expect(slots).toHaveCount(9);
+  await expect(slots.first()).toBeHidden();
+  const boxes = (els: Element[]) => els.map((el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+  const slotBoxes = await slots.evaluateAll(boxes);
+  const spans = page.locator('.react-pdf__Page[data-page-number="1"] .react-pdf__Page__textContent span');
+  await expect(spans.first()).toBeAttached();
+  const spanBoxes = await spans.evaluateAll(boxes);
+  const inSlot = (x: number, y: number) => slotBoxes.some((s) => s.left < x && x < s.right && s.top < y && y < s.bottom);
+  const under = spanBoxes.find((b) => b.right - b.left > 60 && inSlot(b.left + 2, (b.top + b.bottom) / 2) && inSlot(b.right - 2, (b.top + b.bottom) / 2))!;
+  expect(under).toBeTruthy();
+  const y = (under.top + under.bottom) / 2;
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest(".paper, .react-flow__node")?.className ?? "", [under.left + 4, y]);
+  expect(hit).toContain("paper");
+  await page.mouse.move(under.left + 2, y);
+  await page.mouse.down();
+  await page.mouse.move(under.right - 2, y, { steps: 6 });
+  await page.mouse.up();
+  expect((await page.evaluate(() => window.getSelection()?.toString() ?? "")).trim()).not.toBe("");
+  await expect(page.getByRole("button", { name: "Highlight", exact: true })).toBeVisible();
+});
+
 test("a chunk over Attention's §3.2.1 shows equation (1) as an image of the page", async ({ page }) => {
   // Its own board: the section's piece as split makes it, so the test does not lean on the first-open test.
   const sections: Json[] = (await sourceOf(page.request, attention)).sections;
