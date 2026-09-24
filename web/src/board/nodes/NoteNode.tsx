@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import { firstLine } from "../../model/notes";
+import { NoteMarkdown } from "../../notes/NoteMarkdown";
+import { NoteSketch, SketchButton } from "../../notes/NoteSketch";
 import type { NoteNode as NoteNodeType } from "../../model/types";
 import { useBoard, useNote } from "../../state/BoardProvider";
 import { useBoardActions } from "../BoardActions";
@@ -12,7 +14,8 @@ import { NodeTags } from "./NodeTags";
 export const NOTE_PLACEHOLDER = "Write in your own words";
 
 /** A note in the reader's own words, or an AI's answer marked as such (D14). The text lives in notes/<id>.md;
- *  the text area keeps its own undo (addendum 4.7). */
+ *  the text area keeps its own undo (addendum 4.7). It shows rendered, maths and all (D22); double-click edits it as
+ *  plain text, and leaving the field or Escape shows it rendered again. */
 export function NoteNode({ id, data, selected, width, height }: NodeProps<NoteNodeType>) {
   const { state } = useBoard();
   const { editing, setEditing } = useBoardActions();
@@ -30,14 +33,17 @@ export function NoteNode({ id, data, selected, width, height }: NodeProps<NoteNo
   const origin = data.origin ?? "reader";
   const ai = origin === "ai";
   return (
-    <div className={`node note ${origin}`}>
+    // A note the reader sized keeps that box, and its sketch shrinks to fit it; any other note grows to show its sketch.
+    <div className={`node note ${origin}${data.user_sized && !data.collapsed ? " sized" : ""}`}>
       <NodeResizer isVisible={selected && !data.collapsed} minWidth={160} minHeight={60} />
       <div className="node-head">
         <CollapseToggle id={id} collapsed={data.collapsed} />
         <span className={`badge note-badge ${origin}`}>{ai ? "AI" : "note"}</span>
         <span className="title">{firstLine(text ?? "") || (ai ? "AI answer" : "Note")}</span>
         <NodeTags id={id} tags={data.tags} />
+        <SketchButton noteId={id} className="nodrag" />
       </div>
+      {!data.collapsed && <NoteSketch noteId={id} />}
       {/* Read-only until the saved text is here, and no field at all when it could not be read: typing over a note
           not yet loaded would replace it (M3). */}
       {loadFailed
@@ -45,9 +51,10 @@ export function NoteNode({ id, data, selected, width, height }: NodeProps<NoteNo
         : <>
             {!data.collapsed && (editing === id
               ? <textarea ref={textRef} className="note-text nodrag nowheel" value={text ?? ""} aria-label="Note" readOnly={text === undefined}
-                          placeholder={prompt ?? NOTE_PLACEHOLDER} onChange={(e) => edit(e.target.value)} onBlur={finish} />
+                          placeholder={prompt ?? NOTE_PLACEHOLDER} onChange={(e) => edit(e.target.value)} onBlur={finish}
+                          onKeyDown={(e) => { if (e.key === "Escape") finish(); }} />
               : <div className="node-body note-body" onDoubleClick={() => setEditing(id)} title="Double-click to write">
-                  {text || <span className="hint">{prompt ?? NOTE_PLACEHOLDER}</span>}
+                  {text ? <NoteMarkdown text={text} /> : <span className="hint">{prompt ?? NOTE_PLACEHOLDER}</span>}
                 </div>)}
             {error && <p className="note-error" role="alert">{error}</p>}
           </>}

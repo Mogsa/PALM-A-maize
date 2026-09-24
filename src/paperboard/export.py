@@ -1,6 +1,7 @@
 """The board as one Markdown file in the paper's order. SPEC.md section 6: this
 is the literature note, and nothing else is ever written by hand."""
 
+from collections.abc import Set as AbstractSet
 from typing import Literal
 
 import pymupdf
@@ -144,8 +145,8 @@ class _Writer:
     or a note is written once, at its first place (addendum 6.1)."""
 
     def __init__(self, doc: SourceDocument, board: Board, notes: dict[str, str],
-                 tags: list[str], tag_names: dict[str, str]):
-        self.doc, self.board, self.notes = doc, board, notes
+                 tags: list[str], tag_names: dict[str, str], sketches: AbstractSet[str]):
+        self.doc, self.board, self.notes, self.sketches = doc, board, notes, sketches
         self.tags, self.tag_names = tags, tag_names
         self.out: list[str] = []
         self.written: set[str] = set()
@@ -164,12 +165,19 @@ class _Writer:
         if self.board.goal.strip():
             self.para(f"*Reading goal: {self.board.goal.strip()}*")
 
+    def has_content(self, note_id: str) -> bool:
+        return bool(self.notes.get(note_id, "").strip()) or note_id in self.sketches
+
     def note(self, note_id: str) -> None:
-        body = self.notes.get(note_id, "").strip()
-        if not body or note_id in self.written:
+        if not self.has_content(note_id) or note_id in self.written:
             return
-        # An AI's words are never passed off as the reader's (D14).
-        self.para(f"**AI:** {body}" if self.by_id[note_id].data.origin == "ai" else body)
+        # A sketch sits above its note's text, as on the board (D23); export.md is in the paper's folder, beside notes/.
+        if note_id in self.sketches:
+            self.para(f"![sketch](notes/{note_id}.svg)")
+        body = self.notes.get(note_id, "").strip()
+        if body:
+            # An AI's words are never passed off as the reader's (D14). The reader drew the sketch, so it is unlabelled.
+            self.para(f"**AI:** {body}" if self.by_id[note_id].data.origin == "ai" else body)
         self.written.add(note_id)
 
     def notes_of(self, owner: str) -> None:
@@ -216,7 +224,7 @@ class _Writer:
             for h in sorted(loose, key=lambda h: _mark_key(self.doc, h)):
                 self.mark(h, with_page=True)
         remaining = [n.id for n in self.board.nodes if isinstance(n, NoteNode) and n.id not in self.written
-                     and _wanted(self.tags, n.data.tags) and self.notes.get(n.id, "").strip()]
+                     and _wanted(self.tags, n.data.tags) and self.has_content(n.id)]
         if remaining:
             self.para(f"{'#' * level} Notes")
             for note_id in remaining:
@@ -247,11 +255,12 @@ class _Writer:
 
 def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pdf: pymupdf.Document,
                     tags: list[str], order: ExportOrder = "paper",
-                    tag_names: dict[str, str] | None = None) -> str:
+                    tag_names: dict[str, str] | None = None, sketches: AbstractSet[str] = frozenset()) -> str:
     """The literature note (addendum 6.1). `tags` filters; `order` is the paper's
     (default) or the template's (D19). `tag_names` maps tag ids to the names
-    written after a quote; an id it lacks is a deleted tag and is left out (4.3)."""
-    writer = _Writer(doc, board, notes, tags, tag_names or {})
+    written after a quote; an id it lacks is a deleted tag and is left out (4.3).
+    `sketches` holds the ids of the notes that have a sketch (D23)."""
+    writer = _Writer(doc, board, notes, tags, tag_names or {}, sketches)
     writer.header()
     if order == "template":
         writer.template_body()

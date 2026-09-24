@@ -88,6 +88,15 @@ export type SplitDraft =
   | { type: "figure"; position: { x: number; y: number }; data: FigureData };
 export type ReextractResult = { changed: string[]; states: Record<string, AnchorState> };
 
+/** A note's file (addendum 4.4): its text, and whether it has a sketch (D23). */
+export type NoteFile = { markdown: string; has_sketch: boolean };
+/** A freehand stroke as drawn: points of [x, y, pressure] and the pen's size (D23). */
+export type Stroke = { points: [number, number, number][]; size: number };
+/** notes/<id>.sketch.json: enough to draw the strokes again. */
+export type Sketch = { width: number; height: number; strokes: Stroke[] };
+/** A PUT of a sketch: the strokes, and each stroke's outline as SVG path data, which the server checks and draws. */
+export type SketchUpload = Sketch & { paths: string[] };
+
 export const emptyBoard = (paper_id: string): Board => ({
   schema: 2, paper_id, version: 0, goal: "", view: "paper", paper_scroll: null, active_tags: [],
   viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [], highlights: [],

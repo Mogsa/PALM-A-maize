@@ -1,6 +1,6 @@
 import type {
-  Board, ExportOrder, ExportResult, PageRect, PaperSummary, Question, ReextractResult, Selection, SelectionMode, Source, SplitDraft, TagFile,
-  TemplateFile,
+  Board, ExportOrder, ExportResult, NoteFile, PageRect, PaperSummary, Question, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload,
+  Source, SplitDraft, TagFile, TemplateFile,
 } from "../model/types";
 
 /** One method per route of SPEC-ADDENDUM.md section 6. */
@@ -68,15 +68,23 @@ export const api = {
     return { version: body.version };
   },
 
-  async getNote(id: string, nodeId: string): Promise<{ markdown: string }> {
+  async getNote(id: string, nodeId: string): Promise<NoteFile> {
     try {
-      return await call<{ markdown: string }>(`${paper(id)}/notes/${nodeId}`);
+      const note = await call<{ markdown: string; has_sketch?: boolean }>(`${paper(id)}/notes/${nodeId}`);
+      return { markdown: note.markdown, has_sketch: note.has_sketch ?? false };
     } catch (error) {
-      if (error instanceof ApiError && error.status === 404) return { markdown: "" };   // a note never written is empty
+      if (error instanceof ApiError && error.status === 404) return { markdown: "", has_sketch: false };   // a note never written is empty
       throw error;
     }
   },
   putNote: (id: string, nodeId: string, markdown: string) => send<void>("PUT", `${paper(id)}/notes/${nodeId}`, { markdown }),
+
+  /** A note's sketch (D23). The server builds its SVG from `paths`, which must be SVG path data and nothing else. */
+  putSketch: (id: string, nodeId: string, sketch: SketchUpload) => send<void>("PUT", `${paper(id)}/notes/${nodeId}/sketch`, sketch),
+  getSketch: (id: string, nodeId: string) => call<Sketch>(`${paper(id)}/notes/${nodeId}/sketch`),
+  deleteSketch: (id: string, nodeId: string) => send<void>("DELETE", `${paper(id)}/notes/${nodeId}/sketch`),
+  /** `version` changes after every save, so the browser never shows a sketch it cached before. */
+  sketchUrl: (id: string, nodeId: string, version: number) => `${paper(id)}/notes/${nodeId}/sketch.svg?v=${version}`,
 
   /** `lines`, a text selection's rects one per printed line, is what the highlight paints (contract 1); an older
    *  server ignores it. */

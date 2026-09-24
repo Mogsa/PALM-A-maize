@@ -415,6 +415,9 @@ test("a note typed into and never left is saved as it is typed, and is there aft
   await page.reload();
   await paperPicker(page).selectOption(resnet);
   await clickMark(page, id);
+  // A written note shows rendered (D22); a click edits its plain text.
+  await expect(page.locator(".mark-popover .note-editor.reader .note-rendered")).toContainText(words);
+  await page.locator(".mark-popover .note-editor.reader .note-rendered").click();
   await expect(page.locator(".mark-popover .note-editor.reader textarea")).toHaveValue(words);
 });
 

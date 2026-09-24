@@ -20,7 +20,7 @@ vi.mock("../api/client", () => ({
 
 import { StrictMode } from "react";
 import { api } from "../api/client";
-import { BoardProvider, FIRST_OPEN_FAILED_MESSAGE, FLUSH_FAILED_MESSAGE, useBoard } from "./BoardProvider";
+import { BoardProvider, FIRST_OPEN_FAILED_MESSAGE, FLUSH_FAILED_MESSAGE, useBoard, useNote } from "./BoardProvider";
 import { SAVE_FAILED_MESSAGE } from "./persistence";
 
 const q = { exact: "x", prefix: "", suffix: "" };
@@ -171,5 +171,24 @@ describe("BoardProvider, flush and split", () => {
     expect(added).toBe(1);
     expect(groups()).toHaveLength(1);
     expect(ctx!.state.history.past).toHaveLength(1);
+  });
+});
+
+describe("useNote, sketches (D23)", () => {
+  let note: ReturnType<typeof useNote> | null = null;
+  function NoteProbe() {
+    note = useNote("n-1");
+    return null;
+  }
+  it("says whether a note has a sketch, and a saved sketch changes its version but not the board", async () => {
+    vi.mocked(api.getNote).mockResolvedValueOnce({ markdown: "", has_sketch: true });
+    render(<BoardProvider paperId="p"><Probe /><NoteProbe /></BoardProvider>);
+    await waitFor(() => expect(note?.hasSketch).toBe(true));
+    const before = note!.sketchVersion;
+    act(() => note!.sketchSaved(true));
+    expect(note!.sketchVersion).toBeGreaterThan(before);
+    act(() => note!.sketchSaved(false));
+    expect(note!.hasSketch).toBe(false);
+    expect(ctx!.state.history.past).toHaveLength(0);
   });
 });
