@@ -32,6 +32,11 @@ from paperboard.store import (
 )
 
 LOCAL_HOSTS = ["127.0.0.1", "localhost"]
+# Every write to the API carries this header with the value "1" (addendum section 6).
+# A custom header forces a CORS preflight, which this server never grants, so no page
+# on another origin can send it: a form posted from elsewhere is refused.
+APP_HEADER = "X-Paperboard"
+READ_METHODS = {"GET", "HEAD"}
 
 
 class TextRequest(BaseModel):
@@ -98,6 +103,13 @@ def create_app(root: Path) -> FastAPI:
     # Bound to 127.0.0.1, but a page elsewhere can rebind its own name to that
     # address; it still sends its own name as Host, so refuse any other.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=LOCAL_HOSTS)
+
+    @app.middleware("http")
+    async def _writes_come_from_the_app(request: Request, call_next):
+        if (request.url.path.startswith("/api/") and request.method not in READ_METHODS
+                and request.headers.get(APP_HEADER) != "1"):
+            return _error(403, "forbidden", f"a write to the API must carry {APP_HEADER}: 1")
+        return await call_next(request)
 
     @contextmanager
     def opened(paper_id: str):

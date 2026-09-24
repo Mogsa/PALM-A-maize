@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from paperboard.extract import extract
 
@@ -15,6 +16,13 @@ FIXTURES = {name: PAPER_DIR / f"{name}.pdf" for name in MANIFEST}
 
 # The server only answers requests addressed to localhost; test clients say so.
 LOCAL = "http://127.0.0.1"
+# And refuses a write without this header (addendum section 6); the web client sends it on every request.
+APP_HEADERS = {"X-Paperboard": "1"}
+
+
+def local_client(app, **kwargs) -> TestClient:
+    """A test client as the web client is: addressed to localhost, sending the app's header."""
+    return TestClient(app, base_url=LOCAL, headers=APP_HEADERS, **kwargs)
 
 MISSING_FIXTURE = (
     "fixture paper {path} is not present. The PDFs are not committed (see "
