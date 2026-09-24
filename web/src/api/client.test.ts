@@ -45,17 +45,17 @@ describe("api, schema 2 routes", () => {
     expect(lastCall(fn).body).toMatchObject({ snap: false, mode: "area" });
   });
 
-  it("renderUrl builds the stateless render query, with dpi only when given", () => {
+  it("renderUrl builds the stateless render query, at CLIP_DPI unless given", () => {
     const target = { page: 3, rect: [10, 20.5, 30, 40] as [number, number, number, number] };
-    expect(api.renderUrl("p", target)).toBe("/api/papers/p/render?page=3&x0=10&y0=20.5&x1=30&y1=40");
+    expect(api.renderUrl("p", target)).toBe("/api/papers/p/render?page=3&x0=10&y0=20.5&x1=30&y1=40&dpi=216");
     expect(api.renderUrl("p", target, 100)).toBe("/api/papers/p/render?page=3&x0=10&y0=20.5&x1=30&y1=40&dpi=100");
   });
 
-  it("exportMarkdown sends tags and the order, paper by default", async () => {
+  it("postExport sends tags and the order, paper by default", async () => {
     const fn = mockFetch(200, { path: "/x/export.md", markdown: "# x" });
-    expect(await api.exportMarkdown("p", ["t-claim"])).toEqual({ path: "/x/export.md", markdown: "# x" });
+    expect(await api.postExport("p", ["t-claim"])).toEqual({ path: "/x/export.md", markdown: "# x" });
     expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/export", body: { tags: ["t-claim"], order: "paper" } });
-    await api.exportMarkdown("p", [], "template");
+    await api.postExport("p", [], "template");
     expect(lastCall(fn).body).toEqual({ tags: [], order: "template" });
   });
 
@@ -80,14 +80,14 @@ describe("api, schema 2 routes", () => {
 
   it("notes, clips, questions and re-extraction go to their routes", async () => {
     const fn = mockFetch(200, { markdown: "hi" });
-    expect(await api.getNote("p", "n-1")).toBe("hi");
+    expect(await api.getNote("p", "n-1")).toEqual({ markdown: "hi" });
     expect(lastCall(fn).url).toBe("/api/papers/p/notes/n-1");
     await api.putClip("p", "n-1", { page: 1, rect: [1, 2, 3, 4] });
-    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/clips/n-1", init: { method: "PUT" }, body: { page: 1, rect: [1, 2, 3, 4] } });
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/clips/n-1", init: { method: "PUT" }, body: { page: 1, rect: [1, 2, 3, 4], dpi: 216 } });
     await api.putClip("p", "n-1", { page: 1, rect: [1, 2, 3, 4] }, 100);
     expect(lastCall(fn).body).toEqual({ page: 1, rect: [1, 2, 3, 4], dpi: 100 });
     expect(api.clipUrl("p", "n-1")).toBe("/api/papers/p/clips/n-1.png");
-    await api.questions("p");
+    await api.getQuestions("p");
     expect(lastCall(fn).url).toBe("/api/papers/p/questions");
     await api.reextract("p");
     expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/extract", init: { method: "POST" } });

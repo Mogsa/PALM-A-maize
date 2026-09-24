@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { containsPoint, highlightsIn, midpoint, unionRects } from "./geometry";
+import { containsPoint, highlightsIn, lineInside, linesInside, midpoint, unionRects } from "./geometry";
 import type { ChunkAnchor, Highlight, PageRect, Rect } from "./types";
 
 const q = { exact: "x", prefix: "", suffix: "" };
@@ -28,5 +28,19 @@ describe("geometry", () => {
     const acrossColumns = mark("h-cross", line(2, [309, 380, 500, 392]), line(2, [60, 390, 200, 398]));
     const noLineInside = mark("h-none", line(2, [309, 380, 500, 392]), line(4, [60, 100, 200, 112]));
     expect(highlightsIn([acrossColumns, noLineInside], region).map((h) => h.id)).toEqual(["h-cross"]);
+  });
+});
+
+describe("lines inside (addendum 4.0)", () => {
+  const rects = [{ page: 2, rect: [50, 100, 286, 400] as Rect }];
+  it("a line is inside when its midpoint lies in a rect on its own page", () => {
+    expect(lineInside({ page: 2, rect: [60, 200, 200, 212] }, rects)).toBe(true);
+    expect(lineInside({ page: 3, rect: [60, 200, 200, 212] }, rects)).toBe(false);
+    expect(lineInside({ page: 2, rect: [270, 200, 400, 212] }, rects)).toBe(false);   // midpoint x 335 is past the rect
+  });
+  it("linesInside keeps a highlight's lines that are inside, in order", () => {
+    const q = { exact: "x", prefix: "", suffix: "" };
+    const h = { id: "h-1", tags: [], anchor: { rects: [{ page: 2, rect: [320, 380, 500, 392] as Rect }, { page: 2, rect: [60, 390, 200, 398] as Rect }, { page: 2, rect: [60, 410, 200, 420] as Rect }], quote: q, position: 0, state: "anchored" as const } };
+    expect(linesInside(h, rects)).toEqual([h.anchor.rects[1]]);
   });
 });

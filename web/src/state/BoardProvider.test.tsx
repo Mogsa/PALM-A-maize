@@ -5,15 +5,22 @@ import { emptyBoard, type Highlight, type Source } from "../model/types";
 const source: Source = { schema: 1, paper_id: "p", pages: [], sections: [], figures: [], regions: [], page_text: [] };
 
 vi.mock("../api/client", () => ({
+  CLIP_DPI: 216,
   api: {
     getSource: vi.fn(async () => source),
-    getBoard: vi.fn(async () => emptyBoard("p")),
-    putBoard: vi.fn(async () => ({ version: 1 })),
+    getBoard: vi.fn(async () => ({ ...emptyBoard("p"), version: 1 })),
+    putBoard: vi.fn(async () => ({ version: 2 })),
+    split: vi.fn(async () => ({ nodes: [] })),
+    getTemplate: vi.fn(async () => ({ schema: 1, slots: [{ name: "Main point", prompt: "What is it?" }] })),
+    putClip: vi.fn(),
+    getNote: vi.fn(async () => ({ markdown: "" })),
+    putNote: vi.fn(async () => undefined),
   },
 }));
 
+import { StrictMode } from "react";
 import { api } from "../api/client";
-import { BoardProvider, useBoard } from "./BoardProvider";
+import { BoardProvider, FIRST_OPEN_FAILED_MESSAGE, FLUSH_FAILED_MESSAGE, useBoard } from "./BoardProvider";
 import { SAVE_FAILED_MESSAGE } from "./persistence";
 
 const q = { exact: "x", prefix: "", suffix: "" };
@@ -78,5 +85,80 @@ describe("BoardProvider", () => {
     act(() => { window.dispatchEvent(event); });
     expect(event.defaultPrevented).toBe(false);
     expect(api.putBoard).not.toHaveBeenCalled();
+  });
+});
+
+const q2 = { exact: "x", prefix: "", suffix: "" };
+const draft = { type: "chunk" as const, position: { x: 0, y: 0 },
+  data: { tags: [], collapsed: true, region: { rects: [{ page: 0, rect: [0, 0, 9, 9] as [number, number, number, number] }], start: q2, end: q2, position: 0, state: "anchored" as const }, blocks: [], user_sized: false, source_id: "sec-1" } };
+const groups = () => ctx!.state.board.nodes.filter((n) => n.type === "group");
+
+describe("BoardProvider, first open (D15)", () => {
+  it("lays out a new board once under StrictMode, as one undo step, before showing it", async () => {
+    // StrictMode runs the load effect twice, so the board is fetched twice; split must run once.
+    vi.mocked(api.getBoard).mockResolvedValueOnce(emptyBoard("p")).mockResolvedValueOnce(emptyBoard("p"));
+    vi.mocked(api.split).mockResolvedValueOnce({ nodes: [draft] });
+    render(<StrictMode><BoardProvider paperId="p"><Probe /></BoardProvider></StrictMode>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    expect(groups().map((g) => g.data)).toEqual([
+      { tags: [], name: "Paper", tray: true },
+      { tags: [], name: "Main point", prompt: "What is it?" },
+    ]);
+    expect(ctx!.state.board.nodes.filter((n) => n.type === "chunk")).toHaveLength(1);
+    expect(ctx!.state.history.past).toHaveLength(1);
+    expect(api.split).toHaveBeenCalledTimes(1);
+  });
+  it("never lays out a saved board, even an empty one", async () => {
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    expect(api.split).not.toHaveBeenCalled();
+    expect(ctx!.state.board.nodes).toEqual([]);
+  });
+  it("shows the board with a notice when first open fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(api.getBoard).mockResolvedValueOnce(emptyBoard("p"));
+    vi.mocked(api.split).mockRejectedValueOnce(new Error("down"));
+    const { findByText } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    expect(await findByText(FIRST_OPEN_FAILED_MESSAGE)).toBeTruthy();
+    expect(ctx!.state.board.nodes).toEqual([]);
+  });
+});
+
+describe("BoardProvider, flush and split", () => {
+  it("flush waits for a note still being written", async () => {
+    let finish: () => void = () => undefined;
+    vi.mocked(api.putNote).mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve; }));
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    void ctx!.notes.save("n-1", "text");
+    let flushed = false;
+    const flushing = ctx!.flush().then(() => { flushed = true; });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(flushed).toBe(false);
+    finish();
+    await flushing;
+    expect(flushed).toBe(true);
+  });
+  it("flush rejects when the board could not be saved, and split then asks the server nothing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(api.putBoard).mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    act(() => ctx!.dispatch({ type: "addHighlight", highlight }));
+    await act(async () => { await expect(ctx!.flush()).rejects.toThrow(FLUSH_FAILED_MESSAGE); });
+    await act(async () => { await expect(ctx!.split()).rejects.toThrow(FLUSH_FAILED_MESSAGE); });
+    expect(api.split).not.toHaveBeenCalled();
+    vi.mocked(api.putBoard).mockReset();
+    vi.mocked(api.putBoard).mockResolvedValue({ version: 2 });
+  });
+  it("split adds what is missing to a new tray as one undo step and says how many", async () => {
+    vi.mocked(api.split).mockResolvedValueOnce({ nodes: [draft] });
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    let added = 0;
+    await act(async () => { added = await ctx!.split(); });
+    expect(added).toBe(1);
+    expect(groups()).toHaveLength(1);
+    expect(ctx!.state.history.past).toHaveLength(1);
   });
 });

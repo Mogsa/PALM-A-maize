@@ -1,5 +1,5 @@
 import type {
-  Board, ExportOrder, PageRect, PaperSummary, Question, ReextractResult, Selection, SelectionMode, Source, SplitDraft, TagFile,
+  Board, ExportOrder, ExportResult, PageRect, PaperSummary, Question, ReextractResult, Selection, SelectionMode, Source, SplitDraft, TagFile,
   TemplateFile,
 } from "../model/types";
 
@@ -30,8 +30,10 @@ const send = <T>(method: string, path: string, body?: unknown) =>
 
 const paper = (id: string) => `/api/papers/${id}`;
 
+/** Clips render at three times the page's 72 dpi, so an equation stays sharp (addendum 5.3). */
+export const CLIP_DPI = 216;
+
 export type AddPaperResult = { paper_id: string } & Partial<ReextractResult>;
-export type ExportResult = { path: string; markdown: string };
 export type ClipResult = { clip: string; clip_size: { width: number; height: number } };
 
 export const api = {
@@ -57,26 +59,32 @@ export const api = {
     return { version: body.version };
   },
 
-  getNote: async (id: string, nodeId: string) => (await call<{ markdown: string }>(`${paper(id)}/notes/${nodeId}`)).markdown,
+  async getNote(id: string, nodeId: string): Promise<{ markdown: string }> {
+    try {
+      return await call<{ markdown: string }>(`${paper(id)}/notes/${nodeId}`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return { markdown: "" };   // a note never written is empty
+      throw error;
+    }
+  },
   putNote: (id: string, nodeId: string, markdown: string) => send<void>("PUT", `${paper(id)}/notes/${nodeId}`, { markdown }),
 
   postText: (id: string, rects: PageRect[], snap: boolean, mode: SelectionMode = "text") =>
     send<Selection>("POST", `${paper(id)}/text`, { rects, snap, mode }),
 
-  /** Renders and stores a figure's clip; the server's default is 216 dpi. */
-  putClip: (id: string, nodeId: string, target: PageRect, dpi?: number) =>
-    send<ClipResult>("PUT", `${paper(id)}/clips/${nodeId}`, dpi === undefined ? target : { ...target, dpi }),
+  /** Renders and stores a figure's clip. */
+  putClip: (id: string, nodeId: string, target: PageRect, dpi = CLIP_DPI) =>
+    send<ClipResult>("PUT", `${paper(id)}/clips/${nodeId}`, { ...target, dpi }),
   clipUrl: (id: string, nodeId: string) => `${paper(id)}/clips/${nodeId}.png`,
   /** A stateless render of a rect of the paper, for a chunk's clip blocks; cached by the browser by ETag. */
-  renderUrl(id: string, { page, rect: [x0, y0, x1, y1] }: PageRect, dpi?: number): string {
-    const query = new URLSearchParams({ page: String(page), x0: String(x0), y0: String(y0), x1: String(x1), y1: String(y1) });
-    if (dpi !== undefined) query.set("dpi", String(dpi));
+  renderUrl(id: string, { page, rect: [x0, y0, x1, y1] }: PageRect, dpi = CLIP_DPI): string {
+    const query = new URLSearchParams({ page: String(page), x0: String(x0), y0: String(y0), x1: String(x1), y1: String(y1), dpi: String(dpi) });
     return `${paper(id)}/render?${query}`;
   },
 
-  questions: (id: string) => call<Question[]>(`${paper(id)}/questions`),
+  getQuestions: (id: string) => call<Question[]>(`${paper(id)}/questions`),
   split: (id: string) => send<{ nodes: SplitDraft[] }>("POST", `${paper(id)}/split`),
-  exportMarkdown: (id: string, tags: string[], order: ExportOrder = "paper") =>
+  postExport: (id: string, tags: string[], order: ExportOrder = "paper") =>
     send<ExportResult>("POST", `${paper(id)}/export`, { tags, order }),
 
   getTags: () => call<TagFile>("/api/tags"),
