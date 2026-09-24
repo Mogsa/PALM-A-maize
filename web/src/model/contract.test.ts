@@ -62,7 +62,7 @@ describe("the schema 2 contract this plan builds on", () => {
   });
   it("reads a missing note as empty", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { code: "note_not_found", message: "no note" } }), { status: 404 })));
-    expect(await api.getNote("p", "n-x")).toEqual({ markdown: "" });
+    expect(await api.getNote("p", "n-x")).toEqual({ markdown: "", has_sketch: false });
   });
   it("sends the selection mode with the rects", async () => {
     const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
