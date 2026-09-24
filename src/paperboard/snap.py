@@ -101,7 +101,7 @@ def quote_under(page: pymupdf.Page, page_index: PageIndex, exact: str, rect: Rec
     )
 
 
-def _chunk_anchor(pdf: pymupdf.Document, index: list[PageIndex], rects: list[PageRect], pieces: list[str]) -> ChunkAnchor:
+def chunk_anchor(pdf: pymupdf.Document, index: list[PageIndex], rects: list[PageRect], pieces: list[str]) -> ChunkAnchor:
     """Each end is quoted from the text under its own rect, so the quote lies
     under that rect and R12's "unchanged" test can find it there. Quoting the
     first characters of the whole selection spilled past a heading-only first
@@ -126,7 +126,7 @@ def _run_highlight(pdf: pymupdf.Document, index: list[PageIndex], rects: list[Pa
     return HighlightAnchor(rects=lines or rects, quote=quote, position=global_position(index, first.page, head_at))
 
 
-def _line_highlight(pdf: pymupdf.Document, index: list[PageIndex], lines: list[PageRect]) -> HighlightAnchor | None:
+def line_highlight(pdf: pymupdf.Document, index: list[PageIndex], lines: list[PageRect]) -> HighlightAnchor | None:
     """The highlight of exactly the words on the browser's own line rects, one
     rect per printed line, so a selection that starts or ends mid-line leaves the
     rest of that line unpainted (D1, addendum section 6). Each line is quoted
@@ -161,10 +161,10 @@ def _select_text(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRec
     index = build_index(doc)
     # A snap that took the whole region highlights the whole region; otherwise the
     # browser's own lines, when it sent them, decide the first and last line.
-    highlight = _line_highlight(pdf, index, lines) if lines and not took else None
+    highlight = line_highlight(pdf, index, lines) if lines and not took else None
     return Selection(text="\n".join(pieces), rects=rects, region_label=label,
                      highlight=highlight or _run_highlight(pdf, index, rects, pieces),
-                     chunk=_chunk_anchor(pdf, index, rects, pieces), blocks=chunk_blocks(doc, pdf, rects))
+                     chunk=chunk_anchor(pdf, index, rects, pieces), blocks=chunk_blocks(doc, pdf, rects))
 
 
 def _caption_of(doc: SourceDocument, region: LayoutRegion) -> PageRect | None:
@@ -203,7 +203,7 @@ def _select_area(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRec
     quote, at = quote_under(pdf[target.page], index[target.page], text.strip()[:QUOTE_CHARS], target.rect)
     highlight = HighlightAnchor(rects=[target], quote=quote, position=global_position(index, target.page, at))
     return Selection(text=text, rects=[target], region_label=label, highlight=highlight,
-                     chunk=_chunk_anchor(pdf, index, [target], [text]),
+                     chunk=chunk_anchor(pdf, index, [target], [text]),
                      blocks=[ClipBlock(kind="clip", page=target.page, rect=target.rect, label=label)])
 
 
