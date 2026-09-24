@@ -49,3 +49,43 @@ def test_a_split_mode_must_be_split_or_cut(client, resnet_id):
 def test_the_chunk_routes_need_the_app_header(store_root, resnet_id):
     bare = TestClient(create_app(store_root), base_url=LOCAL)
     assert bare.post(f"/api/papers/{resnet_id}/chunks/join", json={"regions": []}).status_code == 403
+
+
+OUTSIDE = "Let us consider H(x) as an underlying mapping"
+
+
+def test_highlight_returns_an_anchor_and_writes_nothing(client, resnet_id, store_root):
+    region = _section(client, resnet_id, IDENTITY)["region"]
+    response = client.post(f"/api/papers/{resnet_id}/chunks/highlight", json={"region": region, "quote": {"exact": SHORTCUTS}})
+    assert response.status_code == 200
+    anchor = response.json()["highlight"]
+    assert len(anchor["rects"]) == 2 and anchor["quote"]["exact"].startswith("The shortcut")
+    assert not (store_root / "papers" / resnet_id / "board.json").exists()
+
+
+def test_words_not_in_the_chunk_are_quote_not_found(client, resnet_id):
+    region = _section(client, resnet_id, IDENTITY)["region"]
+    for route, body in (("highlight", {"region": region, "quote": {"exact": OUTSIDE}}),
+                        ("split", {"region": region, "at": {"exact": OUTSIDE}, "mode": "cut"})):
+        response = client.post(f"/api/papers/{resnet_id}/chunks/{route}", json=body)
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "quote_not_found"
+
+
+def test_cut_then_join_round_trips_through_the_routes(client, resnet_id):
+    whole = _section(client, resnet_id, IDENTITY)
+    cut = client.post(f"/api/papers/{resnet_id}/chunks/split", json={"region": whole["region"], "at": {"exact": SHORTCUTS}, "mode": "cut"})
+    pieces = cut.json()["nodes"]
+    assert len(pieces) == 3 and all("id" not in p and "position" not in p for p in pieces)
+    joined = client.post(f"/api/papers/{resnet_id}/chunks/join", json={"regions": [p["data"]["region"] for p in pieces]})
+    assert joined.status_code == 200
+    assert joined.json()["order"] == [0, 1, 2]
+    assert joined.json()["node"]["data"]["region"]["rects"] == whole["region"]["rects"]
+
+
+def test_pieces_that_are_not_neighbours_are_not_contiguous(client, resnet_id):
+    whole = _section(client, resnet_id, IDENTITY)
+    pieces = client.post(f"/api/papers/{resnet_id}/chunks/split", json={"region": whole["region"], "at": {"exact": SHORTCUTS}, "mode": "cut"}).json()["nodes"]
+    response = client.post(f"/api/papers/{resnet_id}/chunks/join", json={"regions": [pieces[0]["data"]["region"], pieces[2]["data"]["region"]]})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "not_contiguous"
