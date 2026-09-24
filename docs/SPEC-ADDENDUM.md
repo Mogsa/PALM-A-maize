@@ -1317,7 +1317,8 @@ empty slots out if the exported file were meant to be shared with someone else.
 
 ### 6.2 What needs no route
 
-Three schema 2 features are client-only and store nothing new.
+Three schema 2 features are client-only and store nothing new, and so are D24 and D25
+(below).
 
 - **Paper links** (D10). react-pdf's annotation layer is on. An internal link scrolls the
   paper view to its destination; an external link opens in a new tab. The links belong
@@ -1333,6 +1334,33 @@ Three schema 2 features are client-only and store nothing new.
   creates an empty note with `origin: "ai"`, connected to the mark, for the answer to be
   pasted into.
 
+- **Citation cards** (D24). Hovering or focusing an internal link (the annotation
+  layer's `section.linkAnnotation[data-internal-link]`) resolves its destination as pdf.js
+  follows it: the annotation's `dest`, a named destination looked up with
+  `getDestination`, the page reference turned into an index with `getPageIndex`. The
+  destination's top becomes a y from the page's top, as D10 does (section 2). The words
+  are read by the existing `POST /text` with `snap: false` and `mode: "text"`, from a
+  band `CARD_LINES` (5) lines of `CARD_LINE_PT` (12 pt) deep, starting at that y, across
+  the destination's column: the layout region the band crosses nearest the destination's
+  left, within `COLUMN_REACH_PT` (24 pt), else the half of the page that holds it. The
+  text is cut to its first reference by `firstEntry`, one function: it stops at a line
+  that starts `[n]`, at a surname and comma after a line ending in a full stop, at a
+  blank line, or at a page number on its own line; a line-end hyphen joins the next line
+  with no space. The card is fixed over the paper, labelled "In this paper", with **Go
+  there**, which follows the link. It opens `CARD_OPEN_DELAY_MS` after the mouse arrives,
+  closes `CARD_CLOSE_DELAY_MS` after it leaves both link and card, and on Escape or a
+  scroll. The words are cached in memory per destination for the session; nothing is
+  stored.
+- **Likely definitions in Find** (D25). Each hit's sentence is cut from `page_text` at
+  `.`, `!` or `?` followed by space and a capital, a quote or a bracket, so "Fig. 2" and
+  "i.e. the" do not end one, within `SENTENCE_MAX_CHARS` (300) either side. Named rules
+  score it, `DEFINITION_RULES` in `definition.ts`: strong cues (2) are "we define", "is
+  defined as", "denoted by", "let … be", "we call", "called", "refer to … as", an
+  abbreviation in brackets after the term, the term itself in brackets, and a colon after
+  it; weak cues (1) are being the first occurrence and an "i.e." in the sentence. A hit
+  scoring `LIKELY_DEFINITION_SCORE` (2) or more is badged and listed first, highest score
+  first; the rest keep the paper's order. The badge's tooltip names the rules met. A pick
+  jumps as before.
 - **A note from a line**, section 4.10. A note made by letting go of a line is written
   like any new note, on first save.
 - **Notes in Markdown with maths** (D22), section 4.4. Rendered in the browser from the
@@ -1676,3 +1704,35 @@ Withdrawn before it was built: links only, not full Markdown, first proposed for
 revision. D22 replaced it.
 - Three stateless chunk routes returning what the client adds, not a route that writes the
   board (section 6).
+
+**The semantic reader, tier 1, decided by the owner, 24 September 2026.** Two decisions,
+D24 and D25, the same numbering as SPEC.md section 12. No route, no schema change, no
+new dependency: both are client-only and show only the paper's own text (section 6.2).
+
+- **D24, citation cards.** Hovering or focusing an internal link shows the words at its
+  destination, read by `POST /text` and trimmed to one reference (section 6.2). Reverses
+  SPEC.md section 9's "citation peek" and D10's decline of it.
+- **D25, likely definitions in Find.** Named rules on each hit's sentence; likely
+  definitions first, badged; the rest in paper order (section 6.2). Automatic linking of
+  terms stays out (SPEC.md section 9).
+
+The **[CHOICE]**s these added, for red-penning:
+
+- The column is the layout region nearest the destination's left that the band crosses,
+  not the region containing the destination point: hyperref puts a reference's
+  destination a little above its first line, in the gap or in the previous entry's region
+  (measured: ResNet's `cite.LeCun1989` lands at y 573.3, inside entry [21]'s region,
+  which ends at 574.3), and a destination's left can sit just outside an indented entry
+  (x 50.1 against [9]'s 54.1). You would prefer containment if a paper's destinations
+  land inside their targets.
+- `firstEntry` trims by the look of the next line, not by layout regions, though ResNet's
+  regions are one per entry: the rule works whatever the extractor made of the list.
+- A line-end hyphen is kept ("hand-written", but also "convolu-tional"): the card shows
+  the paper's text, and dropping it would join real compounds ("Deeply-supervised").
+- The card opens after a short delay and closes on scroll; hovering another link hides
+  the first card at once.
+- Being first, alone, is not a likely definition, nor is an "i.e." alone: otherwise the
+  first hit of every search would carry the badge.
+- The colon rule also matches a title in the bibliography ("Batch normalization:
+  Accelerating ..."); kept, since it asks for one more rule to exclude, and the entry is
+  still the paper's own words about the term.
