@@ -310,8 +310,9 @@ def create_app(root: Path) -> FastAPI:
                     notes[n.id] = store.read_note(paper_id, n.id)
                 except NoteNotFound:
                     notes[n.id] = ""
+        tag_names = {t.id: t.name for t in store.read_tags().tags}
         with opened(paper_id) as pdf:
-            markdown = export_markdown(doc, board, notes, pdf, body.tags, body.order)
+            markdown = export_markdown(doc, board, notes, pdf, body.tags, body.order, tag_names)
         path = store.paper_dir(paper_id) / "export.md"
         atomic_write(path, markdown.encode("utf-8"))
         return {"path": str(path), "markdown": markdown}

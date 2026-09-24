@@ -485,6 +485,18 @@ def test_a_clip_renders_at_216_dpi_by_default(client, resnet_id):
     assert response.json()["clip_size"]["width"] == pytest.approx((280 - 60 + 8) * 216 / 72, abs=3)
 
 
+# -- D6: export names tags ------------------------------------------------------
+
+
+def test_export_writes_a_highlights_tags_by_their_current_names(client, resnet_id):
+    test_board_put_get_and_version_conflict(client, resnet_id)   # h-1 carries t-question
+    tags = client.get("/api/tags").json()
+    tags["tags"] = [{**t, "name": "open question"} if t["id"] == "t-question" else t for t in tags["tags"]]
+    client.put("/api/tags", json=tags)
+    markdown = client.post(f"/api/papers/{resnet_id}/export", json={"tags": []}).json()["markdown"]
+    assert "*p. 3 · open question*" in markdown
+
+
 # -- D9: re-upload replaces -------------------------------------------------------
 
 
