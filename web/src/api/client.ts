@@ -78,8 +78,10 @@ export const api = {
   },
   putNote: (id: string, nodeId: string, markdown: string) => send<void>("PUT", `${paper(id)}/notes/${nodeId}`, { markdown }),
 
-  postText: (id: string, rects: PageRect[], snap: boolean, mode: SelectionMode = "text") =>
-    send<Selection>("POST", `${paper(id)}/text`, { rects, snap, mode }),
+  /** `lines`, a text selection's rects one per printed line, is what the highlight paints (contract 1); an older
+   *  server ignores it. */
+  postText: (id: string, rects: PageRect[], snap: boolean, mode: SelectionMode = "text", lines?: PageRect[]) =>
+    send<Selection>("POST", `${paper(id)}/text`, { rects, snap, mode, ...(lines ? { lines } : {}) }),
 
   /** Renders and stores a figure's clip. */
   putClip: (id: string, nodeId: string, target: PageRect, dpi = CLIP_DPI) =>

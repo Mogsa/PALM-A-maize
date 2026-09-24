@@ -15,6 +15,8 @@ const ATTENTION_PDF = process.env.PAPERBOARD_ATTENTION ?? `${process.cwd()}/../t
 const UPLOAD_TIMEOUT_MS = 240_000;
 /** A whole-word highlight may start a little before the drag point, never at the line's own start. */
 const WORD_SLACK_PX = 4;
+/** A selection starts and ends on the character boundary nearest the mouse. */
+const CHAR_SLACK_PX = 12;
 /** Attention's §3.2.1, which holds equation (1) on page 4 (index 3). */
 const SCALED_DOT_PRODUCT = "Scaled Dot-Product Attention";
 const EQUATION_PAGE = 3;
@@ -258,8 +260,10 @@ test("the paper's own link to section 3.2 scrolls the paper to §3.2", async ({ 
 type Box = { left: number; right: number; top: number; bottom: number };
 
 /** An exact (Alt) drag from the middle of a wide line in the lower left column of ResNet's page 3 to the middle of one
- *  in the upper right column. Returns the lines dragged from and to, the page's middle, and the new mark's lines. */
-async function twoColumnHighlight(page: Page): Promise<{ a: Box; b: Box; mid: number; lines: Box[] }> {
+ *  in the upper right column. Returns the lines dragged from and to, the page's middle, the new mark's lines, and the
+ *  `lines` the client sent with the selection (contract 1), all in CSS pixels. */
+async function twoColumnHighlight(page: Page): Promise<{ a: Box; b: Box; mid: number; lines: Box[]; sent: Box[] }> {
+  const pageWidthPt: number = (await sourceOf(page.request, resnet)).pages[2].width;
   await seed(page, resnet);
   const pageEl = page.locator('.react-pdf__Page[data-page-number="3"]');
   await expect(pageEl.locator(".react-pdf__Page__textContent span").first()).toBeAttached();
@@ -284,12 +288,16 @@ async function twoColumnHighlight(page: Page): Promise<{ a: Box; b: Box; mid: nu
   await page.mouse.move((b.left + b.right) / 2, (b.top + b.bottom) / 2, { steps: 12 });
   await page.mouse.up();
   await page.keyboard.up("Alt");
+  const posted = page.waitForRequest((r) => r.url().endsWith("/text") && r.method() === "POST");
   await page.getByRole("button", { name: "Highlight", exact: true }).click();
+  const scale = canvas.width / pageWidthPt;
+  const sent: Box[] = ((await posted).postDataJSON().lines ?? []).map(({ rect: [x0, y0, x1, y1] }: { rect: number[] }) =>
+    ({ left: canvas.x + x0 * scale, top: canvas.y + y0 * scale, right: canvas.x + x1 * scale, bottom: canvas.y + y1 * scale }));
   await expect.poll(async () => (await markIds(page)).length).toBe(before.length + 1);
   const id = (await markIds(page)).find((m) => !before.includes(m))!;
   const lines = await page.locator(`.overlay .mark[data-highlight-id="${id}"]`).evaluateAll((els) =>
     els.map((el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; }));
-  return { a, b, mid, lines };
+  return { a, b, mid, lines, sent };
 }
 
 test("a highlight across two columns paints the lines selected, one by one, and none outside them (D1)", async ({ page }) => {
@@ -304,7 +312,22 @@ test("a highlight across two columns paints the lines selected, one by one, and 
   for (const line of right) expect(line.bottom).toBeLessThan(b.bottom + WORD_SLACK_PX);    // nothing below the last
 });
 
-// Product bug (D1): the client sends each column run as one hull rect, so a selection starting or ending mid-line paints that whole line.
+test("a text selection is sent with its own lines, from where the drag starts to where it ends (contract 1)", async ({ page }) => {
+  const { a, b, mid, sent } = await twoColumnHighlight(page);
+  const left = sent.filter((l) => l.right < mid);
+  const right = sent.filter((l) => l.left > mid);
+  expect(left.length).toBeGreaterThan(1);
+  expect(right.length).toBeGreaterThan(0);
+  expect(sent.length).toBe(left.length + right.length);   // no line over the gutter
+  for (const line of sent) expect(line.bottom - line.top).toBeLessThan(2 * (a.bottom - a.top));   // one printed line each
+  const first = left.reduce((x, y) => (y.top < x.top ? y : x));
+  const last = right.reduce((x, y) => (y.top > x.top ? y : x));
+  expect(Math.abs(first.left - (a.left + a.right) / 2)).toBeLessThan(CHAR_SLACK_PX);   // starts at the drag, not the line's start
+  expect(Math.abs(last.right - (b.left + b.right) / 2)).toBeLessThan(CHAR_SLACK_PX);   // ends at the drop, not the line's end
+});
+
+// Waits on the server (contract 1): the client sends the selection's own lines (the test above); once POST /text builds
+// the highlight from them, it paints only what they cover. Until then it paints the whole first and last lines.
 test.fixme("a highlight across two columns leaves the unselected ends of its first and last lines unpainted", async ({ page }) => {
   const { a, b, mid, lines } = await twoColumnHighlight(page);
   const first = lines.filter((l) => l.right < mid).reduce((x, y) => (y.top < x.top ? y : x));

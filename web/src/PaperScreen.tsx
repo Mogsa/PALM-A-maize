@@ -15,8 +15,11 @@ import { samePaperScroll } from "./paper/scroll";
 import { useConnect } from "./paper/useConnect";
 import { useBoard } from "./state/BoardProvider";
 
-/** A selection waiting for a choice: dragged text, a Shift-drag rectangle ("area"), or a clicked heading (`section`). */
-type Pending = { rects: PageRect[]; at: DOMRect; exact: boolean; text: string; preview: string; mode: SelectionMode; section?: Section };
+/** A selection waiting for a choice: dragged text, a Shift-drag rectangle ("area"), or a clicked heading (`section`).
+ *  `lines` is dragged text's own lines (contract 1). */
+type Pending = {
+  rects: PageRect[]; lines?: PageRect[]; at: DOMRect; exact: boolean; text: string; preview: string; mode: SelectionMode; section?: Section;
+};
 type OpenMark = { id: string; at: DOMRect };
 
 export const SELECTION_FAILED_MESSAGE = "Could not read that selection from the paper. Nothing was added.";
@@ -48,7 +51,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const selection = await api.postText(paperId, pending.rects, !pending.exact, pending.mode);
+      const selection = await api.postText(paperId, pending.rects, !pending.exact, pending.mode, pending.lines);
       if (kind === "highlight") dispatch({ type: "addHighlight", highlight: { id: newId("h"), tags: [], anchor: selection.highlight } });
       else dispatch({ type: "addNode", node: await makeCut(paperId, source, state.board, selection, { mode: pending.mode, sectionId: pending.section?.id }) });
     } catch (failure) {
@@ -70,11 +73,11 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
       setPending({ rects: hit.heading.extent, at: hit.at, exact: true, text: "", preview: sectionLabel(hit.heading), mode: "text", section: hit.heading });
     }
   };
-  const onSelect = (rects: PageRect[], at: DOMRect, exact: boolean, mode: SelectionMode) => {
+  const onSelect = (rects: PageRect[], at: DOMRect, exact: boolean, mode: SelectionMode, lines?: PageRect[]) => {
     setError(null);
     setOpenMark(null);
     const text = window.getSelection()?.toString() ?? "";
-    setPending({ rects, at, exact, mode, text, preview: previewText(text) });
+    setPending({ rects, lines, at, exact, mode, text, preview: previewText(text) });
   };
   const onJump = (target: JumpTarget) => ("paper" in target ? setJump({ ...target.paper }) : onOpenOnBoard(target.board));
   const onScrollSettled = (scroll: PaperScroll | null) => {

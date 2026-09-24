@@ -42,7 +42,15 @@ describe("api, schema 2 routes", () => {
     await api.postText("p", rects, true);
     expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/text", body: { rects, snap: true, mode: "text" } });
     await api.postText("p", rects, false, "area");
-    expect(lastCall(fn).body).toMatchObject({ snap: false, mode: "area" });
+    expect(lastCall(fn).body).toEqual({ rects, snap: false, mode: "area" });   // no lines: an area has none
+  });
+
+  it("postText sends a text selection's lines beside its rects (contract 1)", async () => {
+    const fn = mockFetch(200, {});
+    const rects = [{ page: 2, rect: [1, 2, 30, 40] as [number, number, number, number] }];
+    const lines = [{ page: 2, rect: [10, 2, 30, 12] as [number, number, number, number] }, { page: 2, rect: [1, 14, 20, 24] as [number, number, number, number] }];
+    await api.postText("p", rects, false, "text", lines);
+    expect(lastCall(fn).body).toEqual({ rects, snap: false, mode: "text", lines });
   });
 
   it("renderUrl builds the stateless render query, at CLIP_DPI unless given", () => {

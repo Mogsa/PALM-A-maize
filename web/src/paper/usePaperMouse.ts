@@ -9,7 +9,7 @@ import { pageFrames, readSelection } from "./selection";
 export const OWN_CLICK_TARGETS = "a, button, input, textarea, select, .margin, .annotationLayer, .popover";
 
 type Handlers = {
-  onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode) => void;
+  onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode, lines?: PageRect[]) => void;
   onClickPaper: (hit: PaperHit) => void;
 };
 
@@ -46,9 +46,9 @@ export function usePaperMouse(container: RefObject<HTMLElement | null>, source: 
   };
   const onMouseUp = (event: React.MouseEvent) => {
     if (!container.current || rectangle.band) return;   // the rectangle's own mouse-up handles it
-    const rects = readSelection(container.current, source);
-    const anchor = rects && selectionAnchor();
-    if (rects) { if (anchor) onSelect(rects, anchor, event.altKey, "text"); }
+    const selection = readSelection(container.current, source);
+    const anchor = selection && selectionAnchor();
+    if (selection) { if (anchor) onSelect(selection.rects, anchor, event.altKey, "text", selection.lines); }
     else clickAt(event);
   };
   return { onMouseDown, onMouseUp, band: rectangle.band };
