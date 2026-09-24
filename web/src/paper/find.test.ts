@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Source } from "../model/types";
-import { findInPaper, markMatches } from "./find";
+import { findInPaper, markMatches, nthOnPage } from "./find";
 
 const source = {
   page_text: [
@@ -19,6 +19,10 @@ describe("find in paper (D13)", () => {
     expect(hits.map((h) => [h.page, h.match, h.section?.id])).toEqual([[0, "residual learning", "sec-1"], [0, "Residual learning", "sec-2"]]);
     expect(hits[0].before).toBe("Deep");
     expect(hits[0].after).toBe("eases training. Residual learning");
+  });
+  it("knows which of its page's hits a hit is, so a pick goes to that one", () => {
+    const hits = findInPaper("residual learning", source);
+    expect(hits.map((h) => nthOnPage(hits, h))).toEqual([0, 1]);
   });
   it("finds nothing for an empty query", () => {
     expect(findInPaper("   ", source)).toEqual([]);

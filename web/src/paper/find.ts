@@ -49,7 +49,13 @@ export function findInPaper(query: string, source: Source): FindHit[] {
   return hits;
 }
 
-const escapeHtml = (text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+/** Which of its page's hits this is, counting from 0: the text layer marks every match on the page, so a pick
+ *  scrolls to the nth mark rather than the first. */
+export function nthOnPage(hits: FindHit[], hit: FindHit): number {
+  return hits.filter((h) => h.page === hit.page && h.start < hit.start).length;
+}
+
+const escapeHtml =(text: string) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** A text-layer string with the query wrapped in <mark>. react-pdf inserts it as HTML, so the paper's text is escaped. */

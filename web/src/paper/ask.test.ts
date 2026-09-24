@@ -6,6 +6,12 @@ describe("Ask elsewhere (D14)", () => {
     const page = "We stack layers. The residual\nfunction is learned instead. Then we test.";
     expect(sentenceAround(page, "residual function")).toBe("The residual function is learned instead.");
   });
+  it("takes the sentence of the marked occurrence, not the first, using the quote's prefix and suffix", () => {
+    const page = "We use attention. We define\nattention here. Then more.";
+    const quote = { exact: "attention", prefix: "We define\n", suffix: " here. Th" };
+    expect(sentenceAround(page, quote.exact, quote)).toBe("We define attention here.");
+    expect(sentenceAround(page, quote.exact, { prefix: "not on this page ", suffix: " here. Th" })).toBe("We define attention here.");
+  });
   it("falls back to the words themselves when they are not in the page text", () => {
     expect(sentenceAround("Nothing here.", "missing words")).toBe("missing words");
   });

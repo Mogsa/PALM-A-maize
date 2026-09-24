@@ -16,7 +16,8 @@ export function NoteEditor({ noteId, origin }: { noteId: string; origin: NoteOri
   return (
     <div className={`note-editor ${origin}`}>
       {origin === "ai" && <span className="ai-label">AI</span>}
-      <textarea value={draft ?? text ?? ""} placeholder={origin === "ai" ? AI_PLACEHOLDER : READER_PLACEHOLDER}
+      {/* Read-only until the saved text is here: typing over a note not yet loaded (or that failed to load) would replace it. */}
+      <textarea value={draft ?? text ?? ""} readOnly={text === undefined} placeholder={origin === "ai" ? AI_PLACEHOLDER : READER_PLACEHOLDER}
                 aria-label={origin === "ai" ? "AI answer" : "Your note"} onChange={(e) => setDraft(e.target.value)} onBlur={commit} />
       {error && <p className="note-error" role="alert">{error}</p>}
     </div>

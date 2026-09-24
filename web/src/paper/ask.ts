@@ -17,11 +17,26 @@ export const GOAL_LINE = " I am reading it to: {goal}";
 
 const SENTENCE_END = /[.!?](?=\s|$)/;
 
+const flatten = (text: string) => text.replace(/\s+/g, " ");
+
+/** Where the marked words start in the flattened page. A term often recurs on its page, so the quote's own prefix and
+ *  suffix (addendum 5.1) pick the occurrence that was marked; either alone is tried when the pair runs off the page. */
+function markedAt(flat: string, needle: string, context?: { prefix: string; suffix: string }): number {
+  const prefix = context ? flatten(context.prefix) : "";
+  const suffix = context ? flatten(context.suffix) : "";
+  for (const [before, after] of [[prefix, suffix], [prefix, ""], ["", suffix]]) {
+    if (!before && !after) continue;
+    const found = flat.indexOf(`${before}${needle}${after}`);
+    if (found !== -1) return found + before.length;
+  }
+  return flat.indexOf(needle);
+}
+
 /** The sentence holding `quote` in the page text, matched with whitespace flattened (addendum 5.2's spirit). */
-export function sentenceAround(pageText: string, quote: string): string {
-  const flat = pageText.replace(/\s+/g, " ");
-  const needle = quote.replace(/\s+/g, " ").trim();
-  const at = needle ? flat.indexOf(needle) : -1;
+export function sentenceAround(pageText: string, quote: string, context?: { prefix: string; suffix: string }): string {
+  const flat = flatten(pageText);
+  const needle = flatten(quote).trim();
+  const at = needle ? markedAt(flat, needle, context) : -1;
   if (at === -1) return needle;
   const before = flat.slice(0, at);
   const start = Math.max(before.lastIndexOf(". "), before.lastIndexOf("? "), before.lastIndexOf("! "));

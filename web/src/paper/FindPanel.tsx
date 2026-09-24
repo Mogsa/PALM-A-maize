@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { sectionRef } from "../model/sections";
 import type { PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
-import { FIND_MAX_HITS, findInPaper, type FindHit } from "./find";
+import { FIND_MAX_HITS, findInPaper, nthOnPage, type FindHit } from "./find";
 import type { FindMark } from "./useFindMark";
 
 export const FIND_QUERY_MAX = 80;
@@ -14,13 +14,13 @@ export function useFind(jumpTo: (at: PageRect) => void) {
   return {
     query, findMark,
     open: (text: string) => setQuery(text.replace(/\s+/g, " ").trim().slice(0, FIND_QUERY_MAX)),
-    pick: (hit: FindHit) => { setFindMark({ page: hit.page, query: hit.match }); jumpTo({ page: hit.page, rect: [0, 0, 0, 0] }); },
+    pick: (hit: FindHit, nth: number) => { setFindMark({ page: hit.page, query: hit.match, nth }); jumpTo({ page: hit.page, rect: [0, 0, 0, 0] }); },
     close: () => { setQuery(null); setFindMark(null); },
   };
 }
 
 /** Every place the words appear (D13), with page, section and a few words either side. */
-export function FindPanel({ query, onPick, onClose }: { query: string; onPick: (hit: FindHit) => void; onClose: () => void }) {
+export function FindPanel({ query, onPick, onClose }: { query: string; onPick: (hit: FindHit, nth: number) => void; onClose: () => void }) {
   const { source } = useBoard();
   const hits = useMemo(() => findInPaper(query, source), [query, source]);
   const count = hits.length === FIND_MAX_HITS ? `${FIND_MAX_HITS}+` : String(hits.length);
@@ -31,7 +31,7 @@ export function FindPanel({ query, onPick, onClose }: { query: string; onPick: (
       <ul>
         {hits.map((hit) => (
           <li key={`${hit.page}-${hit.start}`}>
-            <button type="button" onClick={() => onPick(hit)}>
+            <button type="button" onClick={() => onPick(hit, nthOnPage(hits, hit))}>
               <span className="where">p{hit.page + 1}{hit.section ? ` · ${sectionRef(hit.section)}` : ""}</span>
               …{hit.before} <mark>{hit.match}</mark> {hit.after}…
             </button>

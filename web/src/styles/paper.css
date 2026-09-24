@@ -37,7 +37,7 @@
 .popover .close:hover { background: var(--surface-muted); color: var(--ink); }
 
 /* the popover a click on a mark opens */
-.mark-popover { width: 320px; display: flex; flex-direction: column; gap: 6px; max-height: 70vh; overflow: auto; }
+.mark-popover { width: 320px; display: flex; flex-direction: column; gap: 6px; max-height: calc(100vh - 16px); overflow: auto; }
 .mark-popover .tag-picker { padding: 4px 2px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 
 .mark-popover .popover-actions { flex-wrap: wrap; }
@@ -77,6 +77,7 @@
 .find-panel li button:hover { background: var(--surface-muted); }
 .find-panel .where { display: block; font-family: var(--font-ui); font-size: var(--text-ui-small); color: var(--ink-muted); }
 .find-panel mark, .react-pdf__Page__textContent mark.find-hit { background: var(--hl); color: inherit; }
+.react-pdf__Page__textContent mark.find-hit.current { outline: 2px solid var(--hl-solid); outline-offset: 1px; }
 
 /* the rectangle a Shift-drag draws */
 .rubber-band { position: fixed; z-index: 9; pointer-events: none; border: 1px dashed var(--cut-edge); background: var(--cut-tint); }

@@ -18,7 +18,7 @@ export function AskElsewhere({ highlight }: { highlight: Highlight }) {
     const at = highlight.anchor.rects[0];
     const pageText = source.page_text.find((p) => p.page === at.page)?.text ?? "";
     const prompt = buildAskPrompt({
-      marked: highlight.anchor.quote.exact, sentence: sentenceAround(pageText, highlight.anchor.quote.exact),
+      marked: highlight.anchor.quote.exact, sentence: sentenceAround(pageText, highlight.anchor.quote.exact, highlight.anchor.quote),
       section: sectionAt(source, at)?.text ?? "", goal: state.board.goal,
     });
     const note = newNote({ ...spotForNoteOn(state.board, highlight.id), origin: "ai" });
