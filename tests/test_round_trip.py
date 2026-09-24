@@ -16,30 +16,11 @@ from paperboard.words import line_rects_under
 PAD_POINTS = 6.0
 REPEATED_PHRASE = "shortcut connections"
 
-# Cases excluded by name, each measured (final-fix-report.md). In every one the
-# text PyMuPDF's `get_text(clip=)` returns for a rect -- which is what a
-# selection quotes -- holds glyphs whose boxes lie mostly outside that rect,
-# because the clip keeps characters whose boxes merely intersect it. The stored
-# quote then is not "text under the rect" by R12's own midpoint rule, so no
-# unchanged rule can recognise it; the fix belongs in how a selection takes
-# its quote, not in anchoring.
-CLIP_TAKES_GLYPHS_OUTSIDE_THE_RECT = {
-    # Tall math-accent glyph boxes (the hat of m-hat is a "b" 36 pt tall) push
-    # the end quote's box below the section's last rect.
-    "sections": {("adam", "2.1 ADAM’S UPDATE RULE"), ("adam", "7.2 TEMPORAL AVERAGING")},
-    # Attention: the clip drops the hyphen of "Multi-Head", so the quote is not
-    # verbatim and fuzzy matching finds the body text's "Multi-Head Attention".
-    # ResNet: the rect's bottom edge clips the tops of the caption's glyphs, so
-    # the end quote is caption fragments ("T i i I N t Thi").
-    "figures": {("attention", "Figure 2"), ("resnet", "Figure 4"), ("resnet", "Figure 6")},
-    # (paper, page, region rect rounded): the 6 pt pad catches descenders of
-    # the title ("gy g q" before "Microsoft Research"), axis labels of the
-    # figure above a caption, a glyph of the paragraph above, and fragments of
-    # an algorithm box's neighbouring lines.
-    "padded": {("resnet", 0, (249, 170, 343, 178)), ("resnet", 0, (309, 306, 545, 347)),
-               ("resnet", 2, (309, 396, 545, 453)),
-               ("adam", 8, (105, 121, 490, 259)), ("adam", 8, (115, 305, 154, 312))},
-}
+# No case is excluded. Ten were (final-fix-report.md): a selection quoted glyphs
+# whose boxes lay mostly outside its rect, or a math accent's 36 pt character
+# box pushed a quote's box out of the rect it came from. The whole-word rule
+# (words.text_under) and ink boxes for a matched quote (anchoring._recover_rect)
+# removed all ten.
 
 
 @pytest.fixture(scope="module")
@@ -81,9 +62,7 @@ def _highlight_round_trip(paper, rect: PageRect) -> str | None:
 def test_every_section_selected_by_its_extent_stays_anchored(papers, name):
     paper = papers[name]
     doc = paper[0]
-    excluded = {title for paper_name, title in CLIP_TAKES_GLYPHS_OUTSIDE_THE_RECT["sections"] if paper_name == name}
-    failures = {s.title: why for s in doc.sections if s.extent and s.title not in excluded
-                if (why := _chunk_round_trip(paper, s.extent))}
+    failures = {s.title: why for s in doc.sections if s.extent if (why := _chunk_round_trip(paper, s.extent))}
     assert failures == {}
 
 
@@ -91,9 +70,7 @@ def test_every_section_selected_by_its_extent_stays_anchored(papers, name):
 def test_every_figure_selected_by_its_rect_stays_anchored(papers, name):
     paper = papers[name]
     doc = paper[0]
-    excluded = {label for paper_name, label in CLIP_TAKES_GLYPHS_OUTSIDE_THE_RECT["figures"] if paper_name == name}
-    failures = {f.label: why for f in doc.figures if f.label not in excluded
-                if (why := _chunk_round_trip(paper, [f.rect]))}
+    failures = {f.label: why for f in doc.figures if (why := _chunk_round_trip(paper, [f.rect]))}
     assert failures == {}
 
 
@@ -104,8 +81,6 @@ def test_a_rough_drag_padded_around_a_paragraph_stays_anchored(papers, name):
     failures = {}
     for region in (r for r in doc.regions if r.label == "text"):
         key = (name, region.page, tuple(round(v) for v in region.rect))
-        if key in CLIP_TAKES_GLYPHS_OUTSIDE_THE_RECT["padded"]:
-            continue
         x0, y0, x1, y1 = region.rect
         padded = PageRect(page=region.page, rect=(x0 - PAD_POINTS, y0 - PAD_POINTS, x1 + PAD_POINTS, y1 + PAD_POINTS))
         if why := _highlight_round_trip(paper, padded):
