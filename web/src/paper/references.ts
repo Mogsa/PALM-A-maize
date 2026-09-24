@@ -84,7 +84,7 @@ export type WordsCard = { text: string; clip: PageRect | null; go: PageRect };
 
 /** A section's heading and its first CARD_LINES lines, up to its first paragraph's end. */
 const sectionWords = (section: Section) =>
-  `${section.title}\n${firstEntry(section.text.split("\n").slice(0, CARD_LINES).join("\n"))}`;
+  `${section.title}\n\n${firstEntry(section.text.split("\n").slice(0, CARD_LINES).join("\n"))}`;
 
 /** The card for a matched reference. An equation's candidate formulas are read, in order, by `read` (the existing
  *  `POST /text`) until one carries its number; null when none does. */

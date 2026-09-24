@@ -106,7 +106,7 @@ describe("referenceCard (D26): what the card shows for a matched reference", () 
   it("shows a section's heading and first lines, joined as Tier 1 joins a reference", async () => {
     const s = { ...resnet.sections[1], text: "We adopt residual learning to every few stacked layers.\nA building block is shown in Fig. 2. Formally, in this paper\nwe consider a building block defined as:\n\ny = F(x, {Wi}) + x." };
     expect(await referenceCard({ kind: "section", section: s }, noRead)).toEqual({
-      text: "3.1. Residual Learning\nWe adopt residual learning to every few stacked layers. A building block is shown in Fig. 2. Formally, in this paper we consider a building block defined as:",
+      text: "3.1. Residual Learning\n\nWe adopt residual learning to every few stacked layers. A building block is shown in Fig. 2. Formally, in this paper we consider a building block defined as:",
       clip: null, go: s.heading_rect,
     });
   });
