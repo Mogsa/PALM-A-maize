@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized,
-  type EdgeChange, type Node, type OnBeforeDelete, type OnConnect, type OnNodeDrag,
+  type EdgeChange, type Node, type OnBeforeDelete, type OnConnect, type OnConnectEnd, type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { hiddenNodeIds } from "../model/filter";
@@ -15,6 +15,7 @@ import { useBoard } from "../state/BoardProvider";
 import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
 import { BoardTools } from "./BoardTools";
+import { noteAtDrop, onEmptyBoard } from "./dropNote";
 import { readCardSelection, type CardSelection } from "./cardSelection";
 import { EdgePopover } from "./EdgePopover";
 import { groupAround } from "./grouping";
@@ -149,6 +150,15 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   const onConnect: OnConnect = useCallback(({ source, sourceHandle, target, targetHandle }) => {
     dispatch({ type: "add", edges: [newEdge(endOf(source, sourceHandle), endOf(target, targetHandle))] });
   }, [dispatch]);
+  /** A line let go of on empty board makes a note there, connected (addendum 4.10): one undo step, then the note opens. */
+  const onConnectEnd: OnConnectEnd = useCallback((event, connection) => {
+    if (connection.isValid || !connection.fromNode) return;
+    const { clientX, clientY } = "changedTouches" in event ? event.changedTouches[0] : event;
+    if (!onEmptyBoard(document.elementFromPoint(clientX, clientY))) return;
+    const { note, edge } = noteAtDrop(connection.fromNode.id, connection.fromHandle?.id, screenToFlowPosition({ x: clientX, y: clientY }));
+    dispatch({ type: "add", nodes: [note], edges: [edge] });
+    setEditing(note.id);
+  }, [dispatch, screenToFlowPosition]);
   const onEdgesChange = useCallback((changes: EdgeChange<FlowEdge>[]) => setSelectedEdges((current) => applySelection(current, changes)), []);
 
   // React Flow offers the selection plus every descendant and every touching edge. The reader chose only the selected
@@ -171,7 +181,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       <ReactFlow<BoardNode, FlowEdge>
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
         onNodesChange={(changes) => dispatch({ type: "nodes", changes })}
-        onEdgesChange={onEdgesChange} onConnect={onConnect}
+        onEdgesChange={onEdgesChange} onConnect={onConnect} onConnectEnd={onConnectEnd}
         onEdgeClick={(event, edge) => setEdgeMenu({ id: edge.id, at: new DOMRect(event.clientX, event.clientY, 0, 0) })}
         onPaneClick={() => { closeEdgeMenu(); closeTextMenu(); }}
         onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onBeforeDelete={onBeforeDelete}
