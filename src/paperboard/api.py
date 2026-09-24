@@ -241,12 +241,9 @@ def create_app(root: Path) -> FastAPI:
 
     @app.post("/api/papers/{paper_id}/text", response_model=Selection)
     def post_text(paper_id: str, body: TextRequest):
-        # mode "area": stub -- the forgiving-rectangle rule of addendum 5.3 (one
-        # snapped rect, a single clip block) is a later task; until then an area
-        # selection is read as text.
         doc = store.read_source(paper_id)
         with opened(paper_id) as pdf:
-            return select(doc, pdf, body.rects, body.snap)
+            return select(doc, pdf, body.rects, body.snap, body.mode)
 
     @app.put("/api/papers/{paper_id}/clips/{node_id}")
     def put_clip(paper_id: str, node_id: str, body: ClipRequest):
@@ -327,7 +324,9 @@ def create_app(root: Path) -> FastAPI:
 
     @app.post("/api/papers/{paper_id}/split")
     def post_split(paper_id: str):
-        return {"nodes": split(store.read_source(paper_id), store.read_board(paper_id))}
+        doc, board = store.read_source(paper_id), store.read_board(paper_id)
+        with opened(paper_id) as pdf:
+            return {"nodes": split(doc, board, pdf)}
 
     # -- tags ---------------------------------------------------------------
 
