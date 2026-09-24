@@ -15,10 +15,21 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
 from paperboard.blocks import chunk_blocks
-from paperboard.board_model import Board, ChunkNode, FigureNode, NoteNode, TagFile, TemplateFile
+from paperboard.board_model import (
+    Board,
+    ChunkAnchor,
+    ChunkNode,
+    FigureNode,
+    NoteNode,
+    QuoteSelector,
+    TagFile,
+    TemplateFile,
+)
+from paperboard.chunk_text import QuoteNotFound, highlight_in_chunk
 from paperboard.clips import DEFAULT_DPI, render_clip, render_etag
 from paperboard.export import ExportOrder, export_markdown
 from paperboard.extract import extract
+from paperboard.recut import NotContiguous, RecutMode, join, recut
 from paperboard.sketch import SketchBody, SketchFile, sketch_svg
 from paperboard.snap import Selection, select
 from paperboard.source_model import PageRect
@@ -86,6 +97,21 @@ class ClipRequest(PageRect):
 class ExportRequest(BaseModel):
     tags: list[str] = []
     order: ExportOrder = "paper"
+
+
+class ChunkHighlightRequest(BaseModel):
+    region: ChunkAnchor
+    quote: QuoteSelector
+
+
+class RecutRequest(BaseModel):
+    region: ChunkAnchor
+    at: QuoteSelector
+    mode: RecutMode
+
+
+class JoinRequest(BaseModel):
+    regions: list[ChunkAnchor] = Field(min_length=2)
 
 
 def _error(status: int, code: str, message: str, **extra) -> JSONResponse:
@@ -181,6 +207,14 @@ def create_app(root: Path) -> FastAPI:
     @app.exception_handler(ValidationError)
     async def _corrupt(_: Request, exc: ValidationError):
         return _error(500, "corrupt_data", f"{exc.title}: {exc.errors()[0].get('msg', 'invalid data')}")
+
+    @app.exception_handler(QuoteNotFound)
+    async def _quote_missing(_: Request, exc: QuoteNotFound):
+        return _error(422, "quote_not_found", str(exc))
+
+    @app.exception_handler(NotContiguous)
+    async def _not_neighbours(_: Request, exc: NotContiguous):
+        return _error(422, "not_contiguous", str(exc))
 
     @app.exception_handler(ValueError)
     async def _value(_: Request, exc: ValueError):
@@ -377,6 +411,27 @@ def create_app(root: Path) -> FastAPI:
         doc, board = store.read_source(paper_id), store.read_board(paper_id)
         with opened(paper_id) as pdf:
             return {"nodes": split(doc, board, pdf)}
+
+    # -- chunks on the board (addendum 4.10) --------------------------------
+
+    @app.post("/api/papers/{paper_id}/chunks/highlight")
+    def post_chunk_highlight(paper_id: str, body: ChunkHighlightRequest):
+        doc = store.read_source(paper_id)
+        with opened(paper_id) as pdf:
+            return {"highlight": highlight_in_chunk(doc, pdf, body.region, body.quote).model_dump(mode="json")}
+
+    @app.post("/api/papers/{paper_id}/chunks/split")
+    def post_chunk_split(paper_id: str, body: RecutRequest):
+        doc = store.read_source(paper_id)
+        with opened(paper_id) as pdf:
+            return {"nodes": recut(doc, pdf, body.region, body.at, body.mode)}
+
+    @app.post("/api/papers/{paper_id}/chunks/join")
+    def post_chunk_join(paper_id: str, body: JoinRequest):
+        doc = store.read_source(paper_id)
+        with opened(paper_id) as pdf:
+            node, order = join(doc, pdf, body.regions)
+        return {"node": node, "order": order}
 
     # -- tags ---------------------------------------------------------------
 

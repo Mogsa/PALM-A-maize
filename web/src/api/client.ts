@@ -1,6 +1,6 @@
 import type {
-  Board, ExportOrder, ExportResult, NoteFile, PageRect, PaperSummary, Question, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload,
-  Source, SplitDraft, TagFile, TemplateFile,
+  Board, ChunkAnchor, ExportOrder, ExportResult, HighlightAnchor, JoinResult, NoteFile, PageRect, PaperSummary, Piece, Question, QuoteSelector,
+  RecutMode, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload, Source, SplitDraft, TagFile, TemplateFile,
 } from "../model/types";
 
 /** One method per route of SPEC-ADDENDUM.md section 6. */
@@ -103,6 +103,21 @@ export const api = {
 
   getQuestions: (id: string) => call<Question[]>(`${paper(id)}/questions`),
   split: (id: string) => send<{ nodes: SplitDraft[] }>("POST", `${paper(id)}/split`),
+  /** Words selected on a card, found inside the chunk's region (addendum 4.10). Words not there throw `quote_not_found`. */
+  highlightInChunk: async (id: string, region: ChunkAnchor, quote: QuoteSelector): Promise<HighlightAnchor> =>
+    (await send<{ highlight: HighlightAnchor }>("POST", `${paper(id)}/chunks/highlight`, { region, quote })).highlight,
+  /** Split here or Cut out: the chunk's pieces in paper order; fewer than two means nothing to divide. */
+  recut: async (id: string, region: ChunkAnchor, at: QuoteSelector, mode: RecutMode): Promise<Piece[]> =>
+    (await send<{ nodes: Piece[] }>("POST", `${paper(id)}/chunks/split`, { region, at, mode })).nodes,
+  /** Join: the joined piece and the paper order of `regions`, or null when they are not neighbours in the paper. */
+  async join(id: string, regions: ChunkAnchor[]): Promise<JoinResult | null> {
+    try {
+      return await send<JoinResult>("POST", `${paper(id)}/chunks/join`, { regions });
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "not_contiguous") return null;
+      throw error;
+    }
+  },
   postExport: (id: string, tags: string[], order: ExportOrder = "paper") =>
     send<ExportResult>("POST", `${paper(id)}/export`, { tags, order }),
 
