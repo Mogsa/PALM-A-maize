@@ -203,6 +203,7 @@ def test_questions_lists_unanswered_marks_and_pieces(client, resnet_id):
     board = client.get(f"/api/papers/{resnet_id}/board").json()
     board["edges"] = [{"id": "e-1", "from": NOTE, "to": "h-1", "data": {"tags": []}}]
     _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/{NOTE}", json={"markdown": "Because the identity is easy.\n"})
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
 
 
@@ -239,6 +240,7 @@ def test_a_question_tagged_note_is_a_question_until_a_note_answers_it(client, re
     board = client.get(f"/api/papers/{resnet_id}/board").json()
     board["edges"] = [{"id": "e-1", "from": REPLY, "to": ASK}]
     _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/{REPLY}", json={"markdown": "It does not, if the layers are residual.\n"})
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
 
 
@@ -440,6 +442,21 @@ def test_a_schema_1_board_on_disk_is_served_as_schema_2(client, resnet_id, store
     assert "note" not in got["highlights"][0]
     _put(client, resnet_id, got)
     assert (store_root / "papers" / resnet_id / "board.v1.json").exists()
+
+
+@pytest.mark.parametrize("markdown", [None, "", "  \n\n\t"], ids=["no file", "empty", "whitespace"])
+def test_an_empty_note_of_the_readers_does_not_answer_a_question(client, resnet_id, markdown):
+    """A note made to answer and never written in is not an answer (addendum section 6)."""
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [{"id": node_id, "type": "note", "position": {"x": 0, "y": 0},
+                       "data": {"tags": tags, "collapsed": False, "note": f"notes/{node_id}.md"}}
+                      for node_id, tags in ((ASK, ["t-question"]), (REPLY, []))]
+    board["edges"] = [{"id": "e-1", "from": REPLY, "to": ASK}]
+    _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/{ASK}", json={"markdown": "Why does depth hurt?\n"})
+    if markdown is not None:
+        client.put(f"/api/papers/{resnet_id}/notes/{REPLY}", json={"markdown": markdown})
+    assert [q["id"] for q in client.get(f"/api/papers/{resnet_id}/questions").json()] == [ASK]
 
 
 def test_only_a_note_the_reader_wrote_answers_a_question(client, resnet_id):

@@ -286,14 +286,15 @@ def create_app(root: Path) -> FastAPI:
     @app.get("/api/papers/{paper_id}/questions")
     def questions(paper_id: str):
         board = resolved_board(paper_id)   # after re-anchoring, as GET /board (addendum 6)
-        nodes = {n.id: n for n in board.nodes}
         # Answered: connected, in either direction, to a note the reader wrote
-        # (D14). An AI's note never answers a question for you.
+        # (D14) and wrote something in. An AI's note never answers a question for
+        # you, and nor does a note made to answer and left empty.
+        answers = {n.id for n in board.nodes
+                   if isinstance(n, NoteNode) and n.data.origin == "reader" and note_markdown(paper_id, n.id).strip()}
         answered: set[str] = set()
         for edge in board.edges:
             for end, other in ((edge.from_, edge.to), (edge.to, edge.from_)):
-                note = nodes.get(other)
-                if isinstance(note, NoteNode) and note.data.origin == "reader":
+                if other in answers:
                     answered.add(end)
         out = []
         for h in board.highlights:
@@ -304,14 +305,18 @@ def create_app(root: Path) -> FastAPI:
                 out.append({"id": n.id, "kind": n.type, "text": question_text(paper_id, n)})
         return out
 
+    def note_markdown(paper_id: str, node_id: str) -> str:
+        """A note's body, or empty when its file was never written."""
+        try:
+            return store.read_note(paper_id, node_id)
+        except NoteNotFound:
+            return ""
+
     def question_text(paper_id: str, node) -> str:
         if isinstance(node, (ChunkNode, FigureNode)):
             return node.data.region.start.exact
         if isinstance(node, NoteNode):
-            try:
-                markdown = store.read_note(paper_id, node.id).strip()
-            except NoteNotFound:
-                return ""
+            markdown = note_markdown(paper_id, node.id).strip()
             return markdown.splitlines()[0] if markdown else ""
         return node.data.name or ""
 
@@ -319,13 +324,7 @@ def create_app(root: Path) -> FastAPI:
     def export(paper_id: str, body: ExportRequest):
         doc = store.read_source(paper_id)
         board = resolved_board(paper_id)
-        notes = {}
-        for n in board.nodes:
-            if isinstance(n, NoteNode):
-                try:
-                    notes[n.id] = store.read_note(paper_id, n.id)
-                except NoteNotFound:
-                    notes[n.id] = ""
+        notes = {n.id: note_markdown(paper_id, n.id) for n in board.nodes if isinstance(n, NoteNode)}
         tag_names = {t.id: t.name for t in store.read_tags().tags}
         with opened(paper_id) as pdf:
             markdown = export_markdown(doc, board, notes, pdf, body.tags, body.order, tag_names)
