@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { NoteOrigin } from "../model/types";
 import { NoteMarkdown } from "../notes/NoteMarkdown";
+import { NoteSketch, SketchButton } from "../notes/NoteSketch";
 import { useNote } from "../state/BoardProvider";
 
 export const READER_PLACEHOLDER = "In your own words…";
@@ -22,6 +23,7 @@ export function NoteEditor({ noteId, origin }: { noteId: string; origin: NoteOri
   return (
     <div className={`note-editor ${origin}`}>
       {origin === "ai" && <span className="ai-label">AI</span>}
+      <NoteSketch noteId={noteId} />
       {editing || !text
         // Read-only until the saved text is here: typing over a note not yet loaded (or that failed to load) would replace it.
         ? <textarea ref={field} value={text ?? ""} readOnly={text === undefined} placeholder={origin === "ai" ? AI_PLACEHOLDER : READER_PLACEHOLDER}
@@ -32,6 +34,7 @@ export function NoteEditor({ noteId, origin }: { noteId: string; origin: NoteOri
             <button className="quiet note-edit" aria-label="Edit note" onClick={() => setEditing(true)}>Edit</button>
           </div>}
       {error && <p className="note-error" role="alert">{error}</p>}
+      <SketchButton noteId={noteId} />
     </div>
   );
 }

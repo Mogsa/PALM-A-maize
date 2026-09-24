@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import { firstLine } from "../../model/notes";
 import { NoteMarkdown } from "../../notes/NoteMarkdown";
+import { NoteSketch, SketchButton } from "../../notes/NoteSketch";
 import type { NoteNode as NoteNodeType } from "../../model/types";
 import { useBoard, useNote } from "../../state/BoardProvider";
 import { useBoardActions } from "../BoardActions";
@@ -39,7 +40,9 @@ export function NoteNode({ id, data, selected, width, height }: NodeProps<NoteNo
         <span className={`badge note-badge ${origin}`}>{ai ? "AI" : "note"}</span>
         <span className="title">{firstLine(text ?? "") || (ai ? "AI answer" : "Note")}</span>
         <NodeTags id={id} tags={data.tags} />
+        <SketchButton noteId={id} className="nodrag" />
       </div>
+      {!data.collapsed && <NoteSketch noteId={id} />}
       {/* Read-only until the saved text is here, and no field at all when it could not be read: typing over a note
           not yet loaded would replace it (M3). */}
       {loadFailed

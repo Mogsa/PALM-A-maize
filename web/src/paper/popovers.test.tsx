@@ -3,14 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyBoard, type Board, type Highlight } from "../model/types";
 
 const dispatch = vi.fn();
-const note = { text: undefined as string | undefined, error: null as string | null, loadFailed: false, edit: vi.fn(), commit: vi.fn(async () => undefined), retry: vi.fn() };
+const note = { text: undefined as string | undefined, error: null as string | null, loadFailed: false, edit: vi.fn(), commit: vi.fn(async () => undefined), retry: vi.fn(),
+  hasSketch: false, sketchVersion: 0, sketchSaved: vi.fn() };
 let board: Board;
 vi.mock("../state/BoardProvider", () => ({
   useBoard: () => ({ state: { board }, dispatch, paperId: "p", source: { sections: [], figures: [], page_text: [], pages: [] } }),
   useNote: () => note,
 }));
 vi.mock("../tags/TagPicker", () => ({ TagPicker: () => <input type="text" aria-label="New tag" /> }));
-vi.mock("../api/client", () => ({ api: { postText: vi.fn() } }));
+vi.mock("../api/client", async (actual) => ({ api: { ...(await actual<typeof import("../api/client")>()).api, postText: vi.fn() } }));
 import { MarkPopover } from "./MarkPopover";
 import { NoteEditor } from "./NoteEditor";
 import { useConnect } from "./useConnect";
@@ -20,7 +21,10 @@ const mark = (id: string): Highlight => ({ id, tags: [], anchor: { rects: [{ pag
 const at = new DOMRect(100, 450, 0, 0);
 const size = { innerWidth: window.innerWidth, innerHeight: window.innerHeight };
 
-beforeEach(() => { board = { ...emptyBoard("p"), highlights: [mark("h-1"), mark("h-2")] }; note.text = undefined; });
+beforeEach(() => {
+  board = { ...emptyBoard("p"), highlights: [mark("h-1"), mark("h-2")] };
+  Object.assign(note, { text: undefined, hasSketch: false, sketchVersion: 0 });
+});
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); Object.assign(window, size); });
 
 describe("MarkPopover", () => {
@@ -75,6 +79,13 @@ describe("NoteEditor", () => {
     fireEvent.blur(field);
     expect(note.commit).toHaveBeenCalledTimes(1);
     expect(queryByRole("textbox")).toBeNull();
+  });
+  it("shows the note's sketch above its text, and Sketch opens the drawing surface (D23)", () => {
+    Object.assign(note, { text: "words", hasSketch: true, sketchVersion: 2 });
+    const { getByRole } = render(<NoteEditor noteId="n-1" origin="reader" />);
+    expect(getByRole("img", { name: "Sketch" }).getAttribute("src")).toBe("/api/papers/p/notes/n-1/sketch.svg?v=2");
+    fireEvent.click(getByRole("button", { name: "Sketch" }));
+    expect(getByRole("dialog", { name: "Sketch" })).not.toBeNull();
   });
   it("Escape leaves the field, not the popover", () => {
     note.text = "words";

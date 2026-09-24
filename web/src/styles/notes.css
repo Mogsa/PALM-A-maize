@@ -1,5 +1,6 @@
-/* a note's text rendered: Markdown with maths (D22) */
-.note-markdown { overflow-wrap: anywhere; }
+/* a note's text rendered: Markdown with maths (D22). Its own line breaks are Markdown's, not the card body's pre-line. */
+.note-markdown { overflow-wrap: anywhere; white-space: normal; }
+.note-markdown pre { white-space: pre; }
 .note-markdown > :first-child { margin-top: 0; }
 .note-markdown > :last-child { margin-bottom: 0; }
 .note-markdown p, .note-markdown ul, .note-markdown ol, .note-markdown pre { margin: 0 0 0.5em; }
@@ -14,4 +15,25 @@
 /* a note in the mark popover, rendered until clicked */
 .note-rendered { position: relative; padding: 6px 30px 6px 8px; border: 1px solid var(--border); border-left: 3px solid var(--hl-solid); border-radius: var(--radius-small); font-family: var(--font-read); font-size: 13px; line-height: 1.45; cursor: text; }
 .note-editor.ai .note-rendered { border-left-color: var(--ai); background: var(--ai-tint); }
+.note-editor .sketch-action { align-self: flex-start; padding: 0; color: var(--ink-muted); font-size: var(--text-ui-small); }
+.note-editor .sketch-action:hover { color: var(--cut); }
+/* a note's sketch (D23): drawn on white, scaled to the note's width */
+.note-sketch { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; background: var(--surface); pointer-events: none; }
+.node.note .note-sketch { border-bottom: 1px solid var(--border); }
+.note-editor .note-sketch { border: 1px solid var(--border); border-radius: var(--radius-small); }
+.node-head .sketch-action { flex: none; padding: 0 2px; color: var(--ink-faint); font-size: 11px; }
+.node-head .sketch-action:hover { color: var(--cut); }
+
+/* the drawing surface, over everything, out of reach of the board's pan and drag */
+.sketch-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(20, 24, 31, 0.28); }
+.sketch-editor { display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 32px); padding: 10px; background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-raised); outline: none; }
+.sketch-tools { display: flex; gap: 6px; }
+.sketch-tools button { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); font: inherit; cursor: pointer; }
+.sketch-tools button.active { border-color: var(--cut); background: var(--cut-tint); color: var(--cut); }
+.sketch-tools button.primary { margin-left: auto; border-color: var(--cut); background: var(--cut); color: var(--surface); }
+.sketch-tools button:disabled { opacity: 0.45; cursor: default; }
+.sketch-surface { display: block; max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); fill: var(--ink); touch-action: none; cursor: crosshair; }
+.sketch-surface.eraser { cursor: cell; }
+.sketch-status { margin: 0; color: var(--ink-muted); font-size: var(--text-ui-small); }
+
 .note-rendered .note-edit { position: absolute; top: 4px; right: 4px; padding: 0 4px; color: var(--ink-muted); font-family: var(--font-ui); font-size: var(--text-ui-small); }

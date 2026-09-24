@@ -5,9 +5,9 @@ import { emptyBoard, type NoteNode as NoteNodeType } from "../../model/types";
 
 const note = {
   text: undefined as string | undefined, error: null as string | null, loadFailed: false,
-  edit: vi.fn(), commit: vi.fn(async () => undefined), retry: vi.fn(),
+  edit: vi.fn(), commit: vi.fn(async () => undefined), retry: vi.fn(), hasSketch: false, sketchVersion: 0, sketchSaved: vi.fn(),
 };
-vi.mock("../../state/BoardProvider", () => ({ useBoard: () => ({ state: { board: emptyBoard("p") } }), useNote: () => note }));
+vi.mock("../../state/BoardProvider", () => ({ useBoard: () => ({ state: { board: emptyBoard("p") }, paperId: "p" }), useNote: () => note }));
 const actions = { editing: "n-1" as string | null, setEditing: vi.fn() };
 vi.mock("../BoardActions", () => ({ useBoardActions: () => actions }));
 vi.mock("@xyflow/react", () => ({ Handle: () => null, NodeResizer: () => null, Position: { Left: "left", Right: "right" } }));
@@ -18,7 +18,7 @@ import { NoteNode } from "./NoteNode";
 const props = { id: "n-1", data: { tags: [], collapsed: false, note: "notes/n-1.md" }, selected: false, width: 240, height: 120 } as unknown as NodeProps<NoteNodeType>;
 
 beforeEach(() => {
-  Object.assign(note, { text: undefined, error: null, loadFailed: false });
+  Object.assign(note, { text: undefined, error: null, loadFailed: false, hasSketch: false, sketchVersion: 0 });
   actions.editing = "n-1";
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -65,5 +65,29 @@ describe("NoteNode shows its text rendered (D22)", () => {
     fireEvent.keyDown(getByRole("textbox", { name: "Note" }), { key: "Escape" });
     expect(note.commit).toHaveBeenCalledTimes(1);
     expect(actions.setEditing).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("NoteNode, sketch (D23)", () => {
+  it("shows the note's sketch above its text, fetched again after each save", () => {
+    Object.assign(note, { text: "words", hasSketch: true, sketchVersion: 3 });
+    actions.editing = null;
+    const { getByRole, container } = render(<NoteNode {...props} />);
+    const image = getByRole("img", { name: "Sketch" });
+    expect(image.getAttribute("src")).toBe("/api/papers/p/notes/n-1/sketch.svg?v=3");
+    expect(image.compareDocumentPosition(container.querySelector(".note-body")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+  it("a note without a sketch shows no image", () => {
+    Object.assign(note, { text: "words" });
+    actions.editing = null;
+    const { queryByRole } = render(<NoteNode {...props} />);
+    expect(queryByRole("img", { name: "Sketch" })).toBeNull();
+  });
+  it("Sketch opens the drawing surface", () => {
+    Object.assign(note, { text: "words" });
+    actions.editing = null;
+    const { getByRole } = render(<NoteNode {...props} />);
+    fireEvent.click(getByRole("button", { name: "Sketch" }));
+    expect(getByRole("dialog", { name: "Sketch" })).not.toBeNull();
   });
 });
