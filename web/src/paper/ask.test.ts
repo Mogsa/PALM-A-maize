@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ASK_PROMPT, buildAskPrompt, sentenceAround } from "./ask";
+import { ASK_PROMPT, buildAskPrompt, buildJargonPrompt, JARGON_PROMPT, sentenceAround } from "./ask";
 
 describe("Ask elsewhere (D14)", () => {
   it("finds the sentence around the marked words, ignoring line breaks", () => {
@@ -33,5 +33,17 @@ describe("Ask elsewhere (D14)", () => {
   });
   it("is one named constant with the four slots", () => {
     for (const slot of ["{marked}", "{sentence}", "{section}", "{goal}"]) expect(ASK_PROMPT).toContain(slot);
+  });
+});
+
+describe("Look up elsewhere, for a term (D27)", () => {
+  it("is the owner's jargon prompt, word for word", () => {
+    expect(JARGON_PROMPT).toBe("Explain the term '{term}' as used in this sentence: '{sentence}'. Assume I am a student new to this field. "
+      + "Keep it short, and give a source I can check.");
+  });
+  it("fills the term and its sentence, flattening the term's line breaks and keeping a $ as written", () => {
+    expect(buildJargonPrompt({ term: "residual\nmapping", sentence: "Costs $5 {sentence}." })).toBe(
+      "Explain the term 'residual mapping' as used in this sentence: 'Costs $5 {sentence}.'. Assume I am a student new to this field. "
+      + "Keep it short, and give a source I can check.");
   });
 });

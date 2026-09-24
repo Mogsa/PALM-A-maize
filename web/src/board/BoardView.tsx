@@ -11,6 +11,8 @@ import { newNote } from "../model/notes";
 import { fitsInside, isDescendant, reparent, type Box } from "../model/reparent";
 import { parentsFirst } from "../model/serialize";
 import type { BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/types";
+import { ContextCard } from "../paper/ContextCard";
+import { useHoverCard } from "../paper/useHoverCard";
 import { useBoard } from "../state/BoardProvider";
 import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
@@ -27,6 +29,7 @@ import { NoteNode } from "./nodes/NoteNode";
 import { SelectionBar } from "./SelectionBar";
 import { TextPopover } from "./TextPopover";
 import { tidyPositions } from "./tidy";
+import { useBoardCards } from "./useBoardCards";
 
 const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group: GroupNode };
 
@@ -37,8 +40,10 @@ type Props = { onOpenInPaper: (rect: PageRect) => void; active?: boolean; focusN
 const DELETE_KEYS = ["Backspace", "Delete"];
 
 function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Props) {
-  const { state, dispatch } = useBoard();
+  const { state, dispatch, source, paperId } = useBoard();
   const { byId } = useTags();
+  const hover = useHoverCard();
+  const cards = useBoardCards(source, paperId, state.board.highlights, hover);
   const { getInternalNode, getNodes, fitView, getZoom, screenToFlowPosition } = useReactFlow<BoardNode>();
   const boardRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -178,7 +183,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
 
   return (
     <BoardActionsProvider value={actions}>
-    <div className="board" ref={boardRef} onMouseUp={onBoardMouseUp}>
+    <div className="board" ref={boardRef} onMouseUp={onBoardMouseUp} {...cards}>
       <BoardTools onAddGroup={addGroup} onAddNote={addNote} onTidy={tidy} />
       <SelectionBar selected={selectedNodes} onGroup={group} />
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
@@ -190,7 +195,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
         onPaneClick={() => { closeEdgeMenu(); closeTextMenu(); }}
         onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onBeforeDelete={onBeforeDelete}
         defaultViewport={state.board.viewport}
-        onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
+        onMoveStart={() => hover.hide()} onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
         minZoom={0.2} fitView={false} deleteKeyCode={active ? DELETE_KEYS : null}
       >
         <Background />
@@ -198,6 +203,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       </ReactFlow>
       {edgeMenu && <EdgePopover edgeId={edgeMenu.id} at={edgeMenu.at} onClose={closeEdgeMenu} />}
       {textMenu && <TextPopover selection={textMenu} onClose={closeTextMenu} />}
+      {hover.card && <ContextCard card={hover.card} hover={hover} onGo={onOpenInPaper} onOpenNote={focusOn} />}
     </div>
     </BoardActionsProvider>
   );

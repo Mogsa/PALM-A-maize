@@ -211,11 +211,12 @@ def test_empty_board_has_sane_defaults():
     assert board.viewport.zoom == 1
 
 
-def test_presets_are_the_ten_from_the_spec():
+def test_presets_are_the_eleven_from_the_spec():
     assert [t.name for t in PRESET_TAGS] == [
         "problem", "claim", "method", "evidence", "assumption",
-        "pass 1", "pass 2", "supports", "contradicts", "question",
+        "pass 1", "pass 2", "supports", "contradicts", "question", "term",
     ]
+    assert PRESET_TAGS[-1].id == "t-term"   # the client finds a term mark by this id (D27)
     assert TagFile(tags=PRESET_TAGS).tags[0].colour.startswith("#")
 
 

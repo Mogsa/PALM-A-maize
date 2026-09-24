@@ -96,6 +96,9 @@ input.group-name { font: inherit; font-weight: 600; font-size: 12px; outline: no
 /* live text on the board (addendum 4.10): a chunk's text is selectable, and a drag on it selects rather than moves */
 .node-body .block-text { user-select: text; cursor: text; }
 .text-popover { width: 320px; }
+/* a reference the paper can show (D26): a quiet underline; hovering or focusing it opens the context card */
+.node-body .ref { text-decoration: underline dotted var(--ink-faint); text-underline-offset: 2px; }
+.node-body .ref:hover, .node-body .ref:focus-visible { text-decoration-color: var(--cut); outline: none; }
 .popover-note { margin: 8px 4px 0; font-size: var(--text-ui-small); color: var(--ink-muted); }
 .selection-bar { position: absolute; z-index: 5; top: 60px; left: 12px; display: flex; gap: 6px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); }
 .selection-bar button { padding: 5px 10px; border: 0; border-radius: var(--radius-small); background: transparent; font-weight: 500; }

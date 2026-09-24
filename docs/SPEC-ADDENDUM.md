@@ -519,13 +519,14 @@ Global, one file, outside `papers/`.
     { "id": "t-pass2",       "name": "pass 2",      "colour": "#475569" },
     { "id": "t-supports",    "name": "supports",    "colour": "#15803D" },
     { "id": "t-contradicts", "name": "contradicts", "colour": "#B91C1C" },
-    { "id": "t-question",    "name": "question",    "colour": "#7C3AED" }
+    { "id": "t-question",    "name": "question",    "colour": "#7C3AED" },
+    { "id": "t-term",        "name": "term",        "colour": "#0F766E" }
   ]
 }
 ```
 
-Ten presets, matching SPEC.md section 5.2 exactly. Nodes and edges reference tags by `id`,
-so renaming a tag does not touch any board. Deleting a tag leaves dangling ids, which
+Eleven presets, matching SPEC.md section 5.2 exactly; `term` was added by D27. Nodes and
+edges reference tags by `id`, so renaming a tag does not touch any board. Deleting a tag leaves dangling ids, which
 every reader filters out silently — that is cheaper and less alarming than rewriting every
 board on a delete.
 
@@ -1317,8 +1318,8 @@ empty slots out if the exported file were meant to be shared with someone else.
 
 ### 6.2 What needs no route
 
-Three schema 2 features are client-only and store nothing new, and so are D24 and D25
-(below).
+Three schema 2 features are client-only and store nothing new, and so are D24 to D28
+(below). D27 adds one preset tag and nothing else to the server.
 
 - **Paper links** (D10). react-pdf's annotation layer is on. An internal link scrolls the
   paper view to its destination; an external link opens in a new tab. The links belong
@@ -1361,6 +1362,32 @@ Three schema 2 features are client-only and store nothing new, and so are D24 an
   scoring `LIKELY_DEFINITION_SCORE` (2) or more is badged and listed first, highest score
   first; the rest keep the paper's order. The badge's tooltip names the rules met. A pick
   jumps as before.
+- **References and clips** (D26). A link whose destination's first `CLIP_REACH_PT` (24
+  pt) cross a figure's or table's rect or caption rect, or a formula region, within
+  `COLUMN_REACH_PT`, shows the region by `GET /render` (a figure with `caption` as its
+  words); any other destination is read as D24 reads it. On a board card each plain run
+  of a chunk's reflowed text is searched by `REFERENCE_PATTERNS` in `references.ts`:
+  "Figure 2"/"Fig. 2", "Table 1", "Eq. (3)"/"Eqn.(3)", "Equation 3", "Section 4"/"Sec.
+  4.1"/"§4", and a citation marker of numbers and commas, each number its own reference.
+  A figure or table matches `source.figures` by label, a section `source.sections` by
+  number, a citation the last line of `page_text` that starts with its marker and a
+  capital, trimmed by `firstEntry`; an equation's candidates are the formula regions on
+  the pages whose text prints "(n)", read in order by `POST /text` until one's words
+  carry "(n)". A match is a focusable span, `.ref[data-ref-kind][data-ref-key]`; the card
+  is D24's, with its delays, and every read is cached for the session.
+- **Terms** (D27). A mark is a term when it carries `t-term`, or a tag of the reader's
+  own named "term". Its card lists, in order: the first reader-origin note connected to
+  it, rendered; the first hit of Find for its words when D25 ranks it likely, with its
+  sentence and page; and Look up elsewhere, which copies `JARGON_PROMPT` (two slots,
+  `{term}` and `{sentence}`, the sentence as Ask elsewhere cuts it) and makes the AI note
+  D14 makes. On the paper, marks take no pointer events, so the mouse is hit-tested
+  against term marks as a click is. The Glossary sorts term marks by their words,
+  ignoring case, and shows the first line of each one's reader note (`firstLine`, 120
+  characters) with `NoteMarkdown`.
+- **Peek** (D28). A band `PEEK_LINES` (3) lines of `CARD_LINE_PT` deep above the first
+  rect of a chunk's region or a mark's lines, and one below the last, each across its
+  column by D24's column rule and clipped to the page, is read by `POST /text` and shown
+  reflowed. Local state only.
 - **A note from a line**, section 4.10. A note made by letting go of a line is written
   like any new note, on first save.
 - **Notes in Markdown with maths** (D22), section 4.4. Rendered in the browser from the
@@ -1735,4 +1762,39 @@ The **[CHOICE]**s these added, for red-penning:
   first hit of every search would carry the badge.
 - The colon rule also matches a title in the bibliography ("Batch normalization:
   Accelerating ..."); kept, since it asks for one more rule to exclude, and the entry is
-  still the paper's own words about the term.
+  still the paper's own words about the term. A title in capitals is excluded since D27
+  (below), which shows the first likely definition on its own.
+
+**Context on demand, decided by the owner, 24 September 2026.** Three decisions, D26 to
+D28, the same numbering as SPEC.md section 12. No route, no schema change, no new
+dependency; one preset tag (section 4.3). Everything shown is the paper's own text or the
+reader's own note, except the AI note Look up elsewhere makes, which is marked (section
+6.2).
+
+- **D26, references in place.** A paper link to a figure, table or formula shows its
+  clip; a board card's references, found by named patterns, open the same card.
+- **D27, definitions in place.** The preset `term`; its card, the reader's definition
+  first; Look up elsewhere with `JARGON_PROMPT`; the Glossary panel.
+- **D28, peek before and after.** A chunk card's or a mark's neighbouring lines, shown in
+  place and never stored.
+
+The **[CHOICE]**s these added, for red-penning:
+
+- An unmatched reference stays plain text, so a figure the extractor missed (ResNet's
+  Figure 2) is not underlined at all. You would underline every pattern if a card that
+  says "not found" were more useful than no hint.
+- A citation's entry is the last line in the paper that starts with its marker and a
+  capital, not the entry inside a References section: Attention's list has no heading the
+  extractor found. Author-year citations ("Duchi et al., 2011", all of Adam's) are not
+  detected.
+- An equation's formula is found by reading its candidate regions, a few `POST /text`
+  calls on the first hover, rather than by a new field in `source.json`.
+- A term is recognised by the preset's id, however renamed, or by a tag named "term",
+  so a `tags.json` written before D27, which has no preset, works once the reader makes
+  a tag of that name. The server does not add the preset to an existing file: presets can
+  be deleted, and a file cannot say whether it never had it.
+- The term card's Go there, like a Find pick without the panel, goes to the definition's
+  page, not its line: `page_text` has no positions.
+- A peek does not cross a page or column break: at a page's edge it shows what fits.
+  Its band is three line heights, so a heading with space around it can take one of them.
+- An open peek takes the first Escape in a mark's popover; the second closes the popover.

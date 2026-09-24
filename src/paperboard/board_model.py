@@ -275,6 +275,7 @@ PRESET_TAGS = [
     Tag(id="t-supports", name="supports", colour="#15803D"),
     Tag(id="t-contradicts", name="contradicts", colour="#B91C1C"),
     Tag(id="t-question", name="question", colour="#7C3AED"),
+    Tag(id="t-term", name="term", colour="#0F766E"),
 ]
 
 

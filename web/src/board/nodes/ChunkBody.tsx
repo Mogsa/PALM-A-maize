@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { api, CLIP_DPI } from "../../api/client";
+import type { Source } from "../../model/types";
+import { splitReferences, type ReferencePart } from "../../paper/references";
 import { useBoard } from "../../state/BoardProvider";
 import type { PaintedBlock } from "../marks";
 
@@ -6,20 +9,41 @@ import type { PaintedBlock } from "../marks";
 export const CLIP_PAD_PT = 4;
 export const clipPx = (pt: number) => Math.round(((pt + 2 * CLIP_PAD_PT) * CLIP_DPI) / 72);
 
+type Run = { text: string; highlightId: string | null; parts: ReferencePart[] };
+
+/** Each plain run cut at the references the paper can show (D26); a mark's words are left whole. */
+function withReferences(painted: PaintedBlock[], source: Source): { block: PaintedBlock["block"]; runs: Run[] }[] {
+  return painted.map(({ block, runs }) => ({
+    block, runs: runs.map((run) => ({ ...run, parts: run.highlightId ? [] : splitReferences(run.text, source) })),
+  }));
+}
+
+function Plain({ parts }: { parts: ReferencePart[] }) {
+  return (
+    <span>
+      {parts.map((part, k) => (part.ref
+        ? <span key={k} className="ref" tabIndex={0} data-ref-kind={part.ref.kind} data-ref-key={part.ref.key}>{part.text}</span>
+        : part.text))}
+    </span>
+  );
+}
+
 /** A chunk as the page has it (D2): text as text with the marks painted, formulas, figures and tables as images of the
- *  paper as printed. Width and height are given so a loading image reserves its space and the card does not jump. */
+ *  paper as printed. Width and height are given so a loading image reserves its space and the card does not jump.
+ *  A reference the paper can show is underlined, and hovering it shows the paper's own words there (D26). */
 export function ChunkBody({ painted, dimmed }: { painted: PaintedBlock[]; dimmed: (highlightId: string) => boolean }) {
-  const { paperId } = useBoard();
+  const { paperId, source } = useBoard();
+  const blocks = useMemo(() => withReferences(painted, source), [painted, source]);
   return (
     <>
-      {painted.map(({ block, runs }, i) => (block.kind === "clip"
+      {blocks.map(({ block, runs }, i) => (block.kind === "clip"
         ? <img key={i} className="block-clip" src={api.renderUrl(paperId, { page: block.page, rect: block.rect })}
                width={clipPx(block.rect[2] - block.rect[0])} height={clipPx(block.rect[3] - block.rect[1])}
                alt={block.label ?? "part of the paper"} loading="lazy" draggable={false} />
         : <p key={i} className="block-text nodrag">
             {runs.map((run, j) => (run.highlightId
               ? <mark key={j} data-highlight-id={run.highlightId} className={dimmed(run.highlightId) ? "dim" : undefined}>{run.text}</mark>
-              : <span key={j}>{run.text}</span>))}
+              : <Plain key={j} parts={run.parts} />))}
           </p>))}
     </>
   );

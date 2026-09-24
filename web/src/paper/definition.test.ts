@@ -42,6 +42,17 @@ describe("definitionScore (D25): named rules on the sentence around a hit", () =
     expect(definitionScore(at("The step (i.e., [option A]) is used.", true)).score).toBeGreaterThanOrEqual(LIKELY_DEFINITION_SCORE);
   });
 
+  it("catches a term named again after it: X, sometimes called Y (D27)", () => {
+    expect(definitionScore(at("[Adam], sometimes called adaptive moment estimation, is simple.")).rules).toContain("called");
+    expect(definitionScore(at("The [shortcut], also known as a skip connection, adds x.")).rules).toContain("called");
+    expect(definitionScore(at("The [shortcut] we called it earlier is used.")).rules).not.toContain("called");
+  });
+
+  it("does not take a title in capitals after a colon for a definition (D27)", () => {
+    expect(definitionScore(at("[ADAM]: A METHOD FOR STOCHASTIC OPTIMIZATION")).rules).not.toContain("colon follows");
+    expect(definitionScore(at("[Adam]: a method for stochastic optimization.")).rules).toContain("colon follows");
+  });
+
   it("a parenthesis that is not an abbreviation is not one", () => {
     expect(definitionScore(at("We use [residual nets] (see Fig. 2) here.")).rules).not.toContain("abbreviation follows");
   });

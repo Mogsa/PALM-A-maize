@@ -71,7 +71,18 @@
 /* a citation card (D24): the words at a link's destination, the paper's own */
 .citation-card { width: 340px; display: flex; flex-direction: column; gap: 6px; }
 .citation-label { font-size: var(--text-ui-small); font-weight: 600; color: var(--ink-muted); margin: 0 4px; }
-.citation-text { margin: 0 4px; font-family: var(--font-read); font-size: 12.5px; line-height: 1.45; color: var(--ink); max-height: 9em; overflow: auto; }
+.citation-text { margin: 0 4px; font-family: var(--font-read); font-size: 12.5px; line-height: 1.45; color: var(--ink); max-height: 9em; overflow: auto; white-space: pre-line; }
+/* peek before/after (D28): the paper's own lines around a piece or a mark, dimmed, in place */
+.peek { margin: 0 4px 6px; font-family: var(--font-read); font-size: 12.5px; line-height: 1.45; color: var(--ink-faint); white-space: pre-line; }
+.peek.after { margin: 6px 4px 0; }
+.peek-toggle { font-size: var(--text-ui-small); color: var(--ink-muted); white-space: nowrap; }
+/* a term's card (D27): the reader's definition, the paper's, then Look up elsewhere */
+.term-part { display: flex; flex-direction: column; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.term-part .note-markdown { margin: 0 4px; font-size: var(--text-ui); max-height: 9em; overflow: auto; }
+.term-part > .quiet { align-self: flex-start; font-size: var(--text-ui-small); }
+.citation-label .where { font-weight: 400; margin-left: 6px; }
+/* what a link or reference points at, when it is a figure, table or formula (D26): the paper as printed */
+.citation-clip { display: block; max-width: 100%; max-height: 200px; object-fit: contain; margin: 0 auto; background: #fff; }
 
 /* find in paper */
 .find-panel { position: fixed; top: calc(var(--topbar-height) + 56px); right: 16px; z-index: 8; width: 300px; max-height: 60vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-raised); }
