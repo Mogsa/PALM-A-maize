@@ -76,3 +76,10 @@ button { cursor: pointer; }
 .question-list li button { width: 100%; padding: 6px 0; border: 0; background: none; text-align: left; font-family: var(--font-read); font-size: 13px; }
 .question-list li button:hover { color: var(--cut); }
 .question-list .kind { margin-right: 6px; font-family: var(--font-ui); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
+
+/* export (side panel) */
+.export-dialog { display: flex; flex-direction: column; gap: 8px; }
+.export-dialog .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-ui-small); color: var(--ink-muted); }
+.export-dialog select, .export-dialog button { padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); background: var(--surface); }
+.export-result code { font-family: var(--font-mono); font-size: var(--text-ui-small); word-break: break-all; }
+.export-result pre { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-family: var(--font-read); font-size: 12.5px; line-height: var(--leading-read); background: var(--surface-muted); padding: 8px; border-radius: var(--radius-small); }

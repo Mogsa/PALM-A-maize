@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api/client";
 import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
+import { ExportDialog } from "./panels/ExportDialog";
 import { QuestionList } from "./panels/QuestionList";
 import { useUndoKeys } from "./panels/undoKeys";
 import { PaperScreen } from "./PaperScreen";
@@ -35,6 +36,7 @@ function PanelButton({ panel, open, label, onToggle }: { panel: Panel; open: Pan
 function SidePanel({ panel, onQuestion }: { panel: Panel; onQuestion: (question: Question) => void }) {
   switch (panel) {
     case "questions": return <QuestionList onPick={onQuestion} />;
+    case "export": return <ExportDialog />;
     case "tags": return <TagManager />;
     default: return null;
   }
@@ -72,6 +74,7 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
         </div>
         <div className="panel-buttons">
           <PanelButton panel="questions" open={panel} label="Questions" onToggle={toggle} />
+          <PanelButton panel="export" open={panel} label="Export" onToggle={toggle} />
           <PanelButton panel="tags" open={panel} label="Tags" onToggle={toggle} />
         </div>
         <Notice />
