@@ -55,3 +55,16 @@ export function readCardSelection(root: HTMLElement): CardSelection | null {
   const at = typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : last.getBoundingClientRect();
   return { nodeId: card.dataset.id!, quote, at };
 }
+
+/** What a mouseup on the board does to the text popover: inside a popover it leaves it as it is (undefined);
+ *  anywhere else the popover follows the selection, and closes (null) when no words on a card are selected. */
+export function textMenuAfterMouseUp(root: HTMLElement, target: EventTarget | null): CardSelection | null | undefined {
+  if (target instanceof Element && target.closest(".popover")) return undefined;
+  return readCardSelection(root);
+}
+
+/** Clear the selection when it is words on a card inside `root`, so a dismissed popover does not come back on the
+ *  next mouseup. A selection anywhere else, such as on the paper, is left alone. */
+export function clearCardSelection(root: HTMLElement | null): void {
+  if (root && readCardSelection(root)) window.getSelection()?.removeAllRanges();
+}

@@ -16,7 +16,7 @@ import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
 import { BoardTools } from "./BoardTools";
 import { noteAtDrop, onEmptyBoard } from "./dropNote";
-import { readCardSelection, type CardSelection } from "./cardSelection";
+import { clearCardSelection, textMenuAfterMouseUp, type CardSelection } from "./cardSelection";
 import { EdgePopover } from "./EdgePopover";
 import { groupAround } from "./grouping";
 import { applySelection, endOf, flowEdges, type FlowEdge } from "./handles";
@@ -116,12 +116,16 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
     dispatch({ type: "addNode", node });
   };
 
-  /** Words selected on a card offer Highlight, Split here and Cut out (D20, D21). */
-  const onBoardMouseUp = () => {
-    const read = readCardSelection(boardRef.current!);
-    if (read) setTextMenu(read);
+  /** Words selected on a card offer Highlight, Split here and Cut out (D20, D21). The popover follows the selection:
+   *  it closes when the words are no longer selected, and closing it clears them so it does not come back. */
+  const onBoardMouseUp = (event: React.MouseEvent) => {
+    const next = textMenuAfterMouseUp(boardRef.current!, event.target);
+    if (next !== undefined) setTextMenu(next);
   };
-  const closeTextMenu = useCallback(() => setTextMenu(null), []);
+  const closeTextMenu = useCallback(() => {
+    clearCardSelection(boardRef.current);
+    setTextMenu(null);
+  }, []);
 
   /** Group, one gesture (addendum 4.10): a new group just around the selected pieces, one undo step. */
   const group = (ids: string[]) => {

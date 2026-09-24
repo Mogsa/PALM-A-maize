@@ -18,7 +18,8 @@ const FAILED_MESSAGE = "That did not work. Nothing was changed.";
 export function TextPopover({ selection, onClose }: { selection: CardSelection; onClose: () => void }) {
   const { state, dispatch, paperId } = useBoard();
   const [busy, setBusy] = useState(false);
-  const [said, setSaid] = useState<string | null>(null);
+  // What was said belongs to the selection it was said about; a new selection starts with nothing said.
+  const [said, setSaid] = useState<{ about: CardSelection; text: string } | null>(null);
   const chunk = state.board.nodes.find((n): n is ChunkNode => n.id === selection.nodeId && n.type === "chunk");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -32,11 +33,11 @@ export function TextPopover({ selection, onClose }: { selection: CardSelection; 
     setBusy(true);
     try {
       const problem = await act();
-      if (problem) setSaid(problem);
+      if (problem) setSaid({ about: selection, text: problem });
       else { window.getSelection()?.removeAllRanges(); onClose(); }
     } catch (failure) {
       console.error("board text action failed", failure);
-      setSaid((failure as { code?: string }).code === "quote_not_found" ? NOT_FOUND_MESSAGE : FAILED_MESSAGE);
+      setSaid({ about: selection, text: (failure as { code?: string }).code === "quote_not_found" ? NOT_FOUND_MESSAGE : FAILED_MESSAGE });
     } finally {
       setBusy(false);
     }
@@ -67,7 +68,7 @@ export function TextPopover({ selection, onClose }: { selection: CardSelection; 
         </button>
         <button className="quiet close" aria-label="Dismiss" onClick={onClose}>×</button>
       </div>
-      {said && <p className="popover-note" role="status">{said}</p>}
+      {said?.about === selection && <p className="popover-note" role="status">{said.text}</p>}
     </div>
   );
 }

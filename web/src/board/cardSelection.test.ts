@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { QUOTE_CONTEXT, quoteAround, readCardSelection } from "./cardSelection";
+import { clearCardSelection, QUOTE_CONTEXT, quoteAround, readCardSelection, textMenuAfterMouseUp } from "./cardSelection";
 
 const texts = ["We adopt residual learning to every few stacked layers.", "Here x and y are the input and output vectors."];
 
@@ -57,5 +57,43 @@ describe("readCardSelection", () => {
   it("is null when nothing is selected", () => {
     document.body.innerHTML = `<div id="board">${card("n-1")}</div>`;
     expect(readCardSelection(document.getElementById("board")!)).toBeNull();
+  });
+});
+
+describe("the text popover follows the selection (review finding 1)", () => {
+  afterEach(() => { document.body.innerHTML = ""; window.getSelection()?.removeAllRanges(); });
+
+  const board = `<div id="board"><div class="react-flow__node" data-id="n-1"><div class="node-body">
+    <p class="block-text"><span>We adopt residual learning.</span></p></div></div>
+    <div class="popover text-popover"><button id="in-popover">Highlight</button></div><div id="head"></div></div>
+    <p id="outside">Paper text.</p>`;
+  const selectIn = (id: string) => {
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector(id)!);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+  };
+
+  it("a mouseup inside a popover leaves it as it is", () => {
+    document.body.innerHTML = board;
+    expect(textMenuAfterMouseUp(document.getElementById("board")!, document.getElementById("in-popover"))).toBeUndefined();
+  });
+  it("a mouseup elsewhere opens it on the words selected, and closes it when none are", () => {
+    document.body.innerHTML = board;
+    const root = document.getElementById("board")!;
+    selectIn(".block-text span");
+    expect(textMenuAfterMouseUp(root, document.getElementById("head"))?.nodeId).toBe("n-1");
+    window.getSelection()!.removeAllRanges();
+    expect(textMenuAfterMouseUp(root, document.getElementById("head"))).toBeNull();
+  });
+  it("closing it clears a selection on a card, so it does not come back, and leaves any other selection", () => {
+    document.body.innerHTML = board;
+    const root = document.getElementById("board")!;
+    selectIn(".block-text span");
+    clearCardSelection(root);
+    expect(window.getSelection()!.isCollapsed).toBe(true);
+    selectIn("#outside");
+    clearCardSelection(root);
+    expect(window.getSelection()!.toString()).toBe("Paper text.");
   });
 });

@@ -49,6 +49,15 @@ describe("TextPopover (D20, D21)", () => {
     expect(dispatch).not.toHaveBeenCalled();
   });
 
+  it("does not carry what it said about one selection over to the next (review finding 2)", async () => {
+    vi.mocked(api.highlightInChunk).mockRejectedValue(Object.assign(new Error("x"), { code: "quote_not_found" }));
+    const { getByRole, findByRole, queryByRole, rerender } = render(<TextPopover selection={selection} onClose={vi.fn()} />);
+    fireEvent.click(getByRole("button", { name: "Highlight" }));
+    await findByRole("status");
+    rerender(<TextPopover selection={{ ...selection, quote: q("stacked layers") }} onClose={vi.fn()} />);
+    expect(queryByRole("status")).toBeNull();
+  });
+
   it("says the words were not found when the server cannot find them in the chunk", async () => {
     vi.mocked(api.highlightInChunk).mockRejectedValue(Object.assign(new Error("x"), { code: "quote_not_found" }));
     const { getByRole, findByRole } = render(<TextPopover selection={selection} onClose={vi.fn()} />);
