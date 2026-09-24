@@ -270,7 +270,7 @@ def create_app(root: Path) -> FastAPI:
 
     @app.get("/api/papers/{paper_id}/questions")
     def questions(paper_id: str):
-        board = store.read_board(paper_id)
+        board = resolved_board(paper_id)   # after re-anchoring, as GET /board (addendum 6)
         nodes = {n.id: n for n in board.nodes}
         # Answered: connected, in either direction, to a note the reader wrote
         # (D14). An AI's note never answers a question for you.
@@ -294,9 +294,10 @@ def create_app(root: Path) -> FastAPI:
             return node.data.region.start.exact
         if isinstance(node, NoteNode):
             try:
-                return store.read_note(paper_id, node.id).strip()
+                markdown = store.read_note(paper_id, node.id).strip()
             except NoteNotFound:
                 return ""
+            return markdown.splitlines()[0] if markdown else ""
         return node.data.name or ""
 
     @app.post("/api/papers/{paper_id}/export")

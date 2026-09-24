@@ -552,3 +552,16 @@ def test_a_failed_re_upload_leaves_the_paper_as_it_was(client, resnet_id, store_
     assert response.status_code == 500
     assert response.json()["error"] == {"code": "extraction_failed", "message": "RuntimeError: layout model crashed"}
     assert _paper_files(store_root, resnet_id) == before
+
+
+# -- D12, D14: the question list --------------------------------------------------
+
+
+def test_a_question_note_is_listed_by_its_first_line(client, resnet_id):
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [{"id": ASK, "type": "note", "position": {"x": 0, "y": 0},
+                       "data": {"tags": ["t-question"], "collapsed": False, "note": f"notes/{ASK}.md"}}]
+    _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/{ASK}", json={"markdown": "\nWhy does depth hurt?\nMore on that.\n"})
+    assert client.get(f"/api/papers/{resnet_id}/questions").json() == [
+        {"id": ASK, "kind": "note", "text": "Why does depth hurt?"}]
