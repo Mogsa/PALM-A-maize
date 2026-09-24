@@ -77,6 +77,42 @@ test("an equation reference shows the formula carrying its number, and a citatio
   await expect(card).not.toContainText("[30]");
 });
 
+/** The paper's own internal link at a point given in page space (points from the page's top-left). */
+async function linkAt(page: Page, pageNo: number, x: number, y: number) {
+  const index = await page.evaluate(({ pageNo, x, y }) => {
+    const pageEl = document.querySelector(`.react-pdf__Page[data-page-number="${pageNo}"]`)!;
+    const frame = pageEl.getBoundingClientRect();
+    const scale = frame.width / 612;
+    const links = Array.from(pageEl.querySelectorAll(".annotationLayer section.linkAnnotation[data-internal-link]"));
+    const distance = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return Math.hypot((r.left - frame.left) / scale - x, (r.top - frame.top) / scale - y);
+    };
+    return links.reduce((best, el, i) => (distance(el) < distance(links[best]) ? i : best), 0);
+  }, { pageNo, x, y });
+  return page.locator(`.react-pdf__Page[data-page-number="${pageNo}"] .annotationLayer section.linkAnnotation[data-internal-link]`).nth(index);
+}
+
+test("in the paper view, a link to a figure or an equation shows its clip (D26)", async ({ page, request }) => {
+  await save(request, {}, "paper");
+  await open(page);
+  await expect(page.locator('.react-pdf__Page[data-page-number="3"] .annotationLayer section.linkAnnotation').first()).toBeAttached();
+  const card = page.getByRole("dialog", { name: "In this paper" });
+  // p1: "... presented in Fig. 4." links to figure.4 on p5.
+  const figure = await linkAt(page, 1, 427.2, 337.5);
+  await figure.scrollIntoViewIfNeeded();
+  await figure.hover();
+  await expect(card).toContainText("Figure 4. Training on ImageNet.");
+  await expect(card.getByRole("img")).toHaveAttribute("src", /\/render\?page=4&x0=80&y0=247&x1=515&y1=394&/);
+  await page.mouse.move(5, 500);
+  await expect(card).toHaveCount(0);
+  // p3: "Eqn.(1)" links to equation.3.1, the formula region on the same page.
+  const equation = await linkAt(page, 3, 452.2, 122.2);
+  await equation.scrollIntoViewIfNeeded();
+  await equation.hover();
+  await expect(card.getByRole("img")).toHaveAttribute("src", /\/render\?page=2&x0=123&y0=626&x1=287&y1=637&/);
+});
+
 /** §3.1 on the board with "underlying mapping" marked as a term, and the reader's definition connected to it. */
 async function seedTerm(request: APIRequestContext) {
   const data = await sectionData(request, "3.1. Residual Learning");
