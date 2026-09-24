@@ -33,7 +33,8 @@ export function NoteNode({ id, data, selected, width, height }: NodeProps<NoteNo
   const origin = data.origin ?? "reader";
   const ai = origin === "ai";
   return (
-    <div className={`node note ${origin}`}>
+    // A note the reader sized keeps that box, and its sketch shrinks to fit it; any other note grows to show its sketch.
+    <div className={`node note ${origin}${data.user_sized && !data.collapsed ? " sized" : ""}`}>
       <NodeResizer isVisible={selected && !data.collapsed} minWidth={160} minHeight={60} />
       <div className="node-head">
         <CollapseToggle id={id} collapsed={data.collapsed} />

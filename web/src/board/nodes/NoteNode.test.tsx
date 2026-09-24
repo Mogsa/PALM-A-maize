@@ -77,6 +77,15 @@ describe("NoteNode, sketch (D23)", () => {
     expect(image.getAttribute("src")).toBe("/api/papers/p/notes/n-1/sketch.svg?v=3");
     expect(image.compareDocumentPosition(container.querySelector(".note-body")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+  it("a note the reader sized keeps its box, and its sketch fits inside it; any other note grows to show it", () => {
+    Object.assign(note, { text: "words", hasSketch: true, sketchVersion: 1 });
+    actions.editing = null;
+    const sized = { ...props, data: { ...props.data, user_sized: true } } as NodeProps<NoteNodeType>;
+    const { container, rerender } = render(<NoteNode {...sized} />);
+    expect(container.querySelector(".node.note")!.classList.contains("sized")).toBe(true);
+    rerender(<NoteNode {...props} />);
+    expect(container.querySelector(".node.note")!.classList.contains("sized")).toBe(false);
+  });
   it("a note without a sketch shows no image", () => {
     Object.assign(note, { text: "words" });
     actions.editing = null;

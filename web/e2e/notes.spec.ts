@@ -24,10 +24,10 @@ test.afterEach(async ({request}) => {
 });
 
 /** Saves a board holding one note with this text, and opens the board view. */
-async function seedNote(page: Page, markdown: string): Promise<string> {
+async function seedNote(page: Page, markdown: string, shape: object = note): Promise<string> {
   const id = await paperId(page);
   const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
-  board.nodes = [note]; board.edges = []; board.highlights = [];
+  board.nodes = [shape]; board.edges = []; board.highlights = [];
   board.viewport = { x: 0, y: 0, zoom: 1 }; board.active_tags = []; board.view = 'paper'; delete board.paper_scroll;
   expect((await page.request.put(`/api/papers/${id}/board`, {data: board, headers: {'If-Match': String(board.version), ...WRITE}})).ok()).toBeTruthy();
   expect((await page.request.put(`/api/papers/${id}/notes/${NOTE}`, {data: { markdown }, headers: WRITE})).ok()).toBeTruthy();
@@ -87,4 +87,16 @@ test('two strokes drawn on a note are there after a reload, and in the export', 
 
   const exported = await (await page.request.post(`/api/papers/${id}/export`, {data: { tags: [] }, headers: WRITE})).json();
   expect(exported.markdown).toContain(`![sketch](notes/${NOTE}.svg)\n\nA drawing of the block.`);
+});
+
+test('a note the reader sized keeps its size, and its sketch fits inside it', async ({page}) => {
+  const id = await paperId(page);
+  const sketch = { width: 600, height: 400, strokes: [{ points: [[10, 10, 0.5], [590, 390, 0.5]], size: 4 }], paths: ['M10 10 L590 390 L588 392 Z'] };
+  expect((await page.request.put(`/api/papers/${id}/notes/${NOTE}/sketch`, {data: sketch, headers: WRITE})).ok()).toBeTruthy();
+  await seedNote(page, 'Sized.', { ...note, width: 280, height: 150, data: { ...note.data, user_sized: true } });
+  const image = card(page).getByRole('img', {name: 'Sketch'});
+  await expect(image).toBeVisible();
+  const box = (await card(page).boundingBox())!;
+  expect(box.height).toBeCloseTo(150, -1);
+  expect((await image.boundingBox())!.y + (await image.boundingBox())!.height).toBeLessThanOrEqual(box.y + box.height);
 });
