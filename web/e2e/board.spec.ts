@@ -237,3 +237,26 @@ test('a figure and a note collapse and expand like a chunk', async ({page}) => {
     await expect.poll(async () => (await outer.boundingBox())!.height).toBeGreaterThan(200);
   }
 });
+
+test('New note and a slot\'s question each open a note ready for typing', async ({page}) => {
+  const slot = { id: 'n-slot', type: 'group', position: { x: 40, y: 400 }, width: 400, height: 300,
+    data: { tags: [], name: 'Main point', prompt: 'What is the one thing?' } };
+  const id = await seedBoard(page, { nodes: [slot] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await page.getByRole('button', {name: 'New note'}).click();
+  await expect(page.locator('textarea.note-text')).toBeFocused();
+  await page.keyboard.type('In my own words');
+  await page.locator('.react-flow__pane').click({ position: { x: 1200, y: 900 } });
+  await page.locator('.slot-prompt').click();
+  const answer = page.locator('textarea.note-text');
+  await expect(answer).toBeFocused();
+  await expect(answer).toHaveAttribute('placeholder', 'What is the one thing?');
+  await page.keyboard.type('The answer');
+  await page.locator('.react-flow__pane').click({ position: { x: 1200, y: 900 } });
+  await expect(page.locator('.slot-prompt')).toHaveCount(0);
+  await expect(page.locator('.notice')).toHaveText(/Saved/);
+  const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
+  const notes = board.nodes.filter((n: { type: string }) => n.type === 'note');
+  const texts = await Promise.all(notes.map(async (n: { id: string }) => (await (await page.request.get(`/api/papers/${id}/notes/${n.id}`)).json()).markdown));
+  expect(texts.sort()).toEqual(['In my own words', 'The answer']);
+});

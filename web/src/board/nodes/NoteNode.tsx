@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import { firstLine } from "../../model/notes";
 import type { NoteNode as NoteNodeType } from "../../model/types";
@@ -13,11 +13,16 @@ export const NOTE_PLACEHOLDER = "Write in your own words";
 
 /** A note in the reader's own words, or an AI's answer marked as such (D14). The text lives in notes/<id>.md;
  *  the text area keeps its own undo (addendum 4.7). */
-export function NoteNode({ id, data, selected }: NodeProps<NoteNodeType>) {
+export function NoteNode({ id, data, selected, width, height }: NodeProps<NoteNodeType>) {
   const { state } = useBoard();
   const { editing, setEditing } = useBoardActions();
   const { text, error, save } = useNote(id);
   const [draft, setDraft] = useState<string | null>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  // React Flow keeps a node hidden until it is measured, and a hidden field cannot take focus: a note just made
+  // (New note, a slot's question) is focused once it shows, not on mount.
+  const shown = Boolean(width && height);
+  useEffect(() => { if (editing === id && shown) textRef.current?.focus(); }, [editing, id, shown]);
   const prompt = slotPrompt(state.board.nodes, state.board.nodes.find((n) => n.id === id)?.parentId);
   const finish = () => {
     if (draft !== null && draft !== text) void save(draft);
@@ -36,7 +41,7 @@ export function NoteNode({ id, data, selected }: NodeProps<NoteNodeType>) {
         <NodeTags id={id} tags={data.tags} />
       </div>
       {!data.collapsed && (editing === id
-        ? <textarea className="note-text nodrag nowheel" autoFocus value={draft ?? text ?? ""} aria-label="Note"
+        ? <textarea ref={textRef} className="note-text nodrag nowheel" value={draft ?? text ?? ""} aria-label="Note"
                     placeholder={prompt ?? NOTE_PLACEHOLDER} onChange={(e) => setDraft(e.target.value)} onBlur={finish} />
         : <div className="node-body note-body" onDoubleClick={() => setEditing(id)} title="Double-click to write">
             {text || <span className="hint">{prompt ?? NOTE_PLACEHOLDER}</span>}
