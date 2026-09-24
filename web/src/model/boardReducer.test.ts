@@ -192,6 +192,18 @@ describe("undo and redo (addendum 4.7)", () => {
     expect(run(s, { type: "undo" }).board.nodes[0].width).toBeUndefined();
   });
 
+  it("a resize from the left or top edge is one step too, though each frame also moves the node", () => {
+    const frame = (x: number) => ({ type: "nodes" as const, changes: [
+      { type: "position" as const, id: "n-1", position: { x, y: 0 } },
+      { type: "dimensions" as const, id: "n-1", resizing: true, setAttributes: true, dimensions: { width: 300 - x, height: 90 } },
+    ] });
+    const start = opened({ nodes: [aNote("n-1")] });
+    const s = run(start, frame(-5), frame(-10), frame(-15),
+      { type: "nodes", changes: [{ type: "dimensions", id: "n-1", resizing: false, dimensions: { width: 315, height: 90 } }] });
+    expect(s.history.past).toHaveLength(1);
+    expect(run(s, { type: "undo" }).board.nodes[0].position).toEqual({ x: 0, y: 0 });
+  });
+
   it("selecting and measuring are neither saved nor recorded", () => {
     const start = opened({ nodes: [aNote("n-1")] });
     const s = run(start,
@@ -274,6 +286,14 @@ describe("add, remove, tags", () => {
     const cut = run(start, { type: "remove", nodeIds: ["n-c"] }).board;
     expect(cut.highlights).toHaveLength(1);
     expect(cut.edges).toHaveLength(1);   // the edge ends on the highlight, not on the chunk that held it (D12)
+  });
+
+  it("a node removed by React Flow's delete key takes its edges with it, so the next save is valid", () => {
+    const start = opened({ nodes: [aNote("n-1"), aNote("n-2"), aNote("n-3")], highlights: [aMark("h-1")],
+      edges: [anEdge("e-1", "h-1", "n-1"), anEdge("e-2", "n-2", "n-1"), anEdge("e-3", "n-2", "n-3")] });
+    const s = run(start, { type: "nodes", changes: [{ type: "remove", id: "n-1" }] });
+    expect(s.board.edges.map((e) => e.id)).toEqual(["e-3"]);
+    expect(run(s, { type: "undo" }).board.edges).toHaveLength(3);
   });
 
   it("removes selected edges by id", () => {

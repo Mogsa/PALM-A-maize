@@ -20,7 +20,7 @@ vi.mock("../api/client", () => ({
 
 import { StrictMode } from "react";
 import { api } from "../api/client";
-import { BoardProvider, FIRST_OPEN_FAILED_MESSAGE, useBoard } from "./BoardProvider";
+import { BoardProvider, FIRST_OPEN_FAILED_MESSAGE, FLUSH_FAILED_MESSAGE, useBoard } from "./BoardProvider";
 import { SAVE_FAILED_MESSAGE } from "./persistence";
 
 const q = { exact: "x", prefix: "", suffix: "" };
@@ -138,6 +138,18 @@ describe("BoardProvider, flush and split", () => {
     finish();
     await flushing;
     expect(flushed).toBe(true);
+  });
+  it("flush rejects when the board could not be saved, and split then asks the server nothing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(api.putBoard).mockRejectedValue(new TypeError("Failed to fetch"));
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    act(() => ctx!.dispatch({ type: "addHighlight", highlight }));
+    await act(async () => { await expect(ctx!.flush()).rejects.toThrow(FLUSH_FAILED_MESSAGE); });
+    await act(async () => { await expect(ctx!.split()).rejects.toThrow(FLUSH_FAILED_MESSAGE); });
+    expect(api.split).not.toHaveBeenCalled();
+    vi.mocked(api.putBoard).mockReset();
+    vi.mocked(api.putBoard).mockResolvedValue({ version: 2 });
   });
   it("split adds what is missing to a new tray as one undo step and says how many", async () => {
     vi.mocked(api.split).mockResolvedValueOnce({ nodes: [draft] });

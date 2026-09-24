@@ -10,12 +10,15 @@ import { CLIP_FAILED_MESSAGE, planFirstOpen, planSplit, storeFigureClips } from 
 export const FIRST_OPEN_FAILED_MESSAGE = "Could not lay out this paper's sections. Use Split on the board to try again.";
 export const NOTE_LOAD_FAILED_MESSAGE = "Could not load this note.";
 export const NOTE_SAVE_FAILED_MESSAGE = "Could not save this note. Your text is kept here; edit it again to retry.";
+/** Export and Split read what the server has saved; when a change could not be saved first, they must not run. */
+export const FLUSH_FAILED_MESSAGE = "Some changes could not be saved yet, so this was not done. Try again once saving works.";
 
 /** `words` is the paper's vocabulary, for reflowing its text (board/marks). */
 type Ctx = {
   state: BoardState; dispatch: React.Dispatch<BoardAction>; source: Source; words: ReadonlySet<string>; notice: string | null; paperId: string;
   notes: NoteStore;
-  /** Saves any pending board change and waits for note writes: what export and split need first (SPEC 6). */
+  /** Saves any pending board change and waits for note writes: what export and split need first (SPEC 6).
+   *  Rejects with FLUSH_FAILED_MESSAGE when the board or a note is still not saved. */
   flush: () => Promise<void>;
   /** Split (D16): what the board is missing goes into the tray as one undo step. Resolves to the pieces added. */
   split: () => Promise<number>;
@@ -108,7 +111,13 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
 
   const flush = useCallback(async () => {
     await persistence.current?.flush();
-    await notes.settled();
+    if (persistence.current?.hasUnsaved()) throw new Error(FLUSH_FAILED_MESSAGE);
+    try {
+      await notes.settled();
+    } catch (cause) {
+      console.error(FLUSH_FAILED_MESSAGE, cause);
+      throw new Error(FLUSH_FAILED_MESSAGE);
+    }
   }, [notes]);
 
   const split = useCallback(async () => {

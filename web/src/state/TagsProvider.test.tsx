@@ -32,6 +32,24 @@ describe("TagsProvider", () => {
     await act(async () => { await ctx!.remove("t-claim"); });
     expect(ctx!.error).toBe(TAGS_FAILED_MESSAGE);
   });
+  it("after a failed load, a write reads the tags first and never replaces the file with only its own", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(api.getTags).mockRejectedValueOnce(new Error("down"));
+    render(<TagsProvider><Probe /></TagsProvider>);
+    await waitFor(() => expect(ctx!.error).toBe(TAGS_FAILED_MESSAGE));
+    let added: Tag | null = null;
+    await act(async () => { added = await ctx!.add("pass 3"); });
+    expect(api.putTags).toHaveBeenLastCalledWith({ schema: 1, tags: [claim, added] });
+  });
+  it("refuses a write while the tags cannot be read at all", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(api.getTags).mockRejectedValueOnce(new Error("down")).mockRejectedValueOnce(new Error("still down"));
+    render(<TagsProvider><Probe /></TagsProvider>);
+    await waitFor(() => expect(ctx!.error).toBe(TAGS_FAILED_MESSAGE));
+    await act(async () => { await expect(ctx!.add("pass 3")).rejects.toThrow(); });
+    expect(api.putTags).not.toHaveBeenCalled();
+    expect(ctx!.tags).toEqual([]);
+  });
   it("chips ignore a tag id nobody defines any more (addendum 4.3)", async () => {
     const { container } = render(<TagsProvider><TagChips ids={["t-claim", "t-deleted"]} /></TagsProvider>);
     await waitFor(() => expect(container.querySelectorAll(".chip")).toHaveLength(1));

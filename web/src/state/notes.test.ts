@@ -26,6 +26,21 @@ describe("the note store", () => {
     await store.settled();
     expect(put).toHaveBeenNthCalledWith(2, "n-1", "b");
   });
+  it("a load that lands after a save keeps the saved text", async () => {
+    let answer: (text: string) => void = () => undefined;
+    const get = vi.fn(() => new Promise<string>((resolve) => { answer = resolve; }));
+    const store = createNoteStore({ get, put: vi.fn(async () => undefined) });
+    const loading = store.load("n-1");
+    await store.save("n-1", "typed");
+    answer("old");
+    expect(await loading).toBe("typed");
+    expect(store.peek("n-1")).toBe("typed");
+  });
+  it("settled rejects while a note's last write has failed", async () => {
+    const store = createNoteStore({ get: vi.fn(), put: vi.fn().mockRejectedValueOnce(new Error("down")) });
+    await expect(store.save("n-1", "a")).rejects.toThrow("down");
+    await expect(store.settled()).rejects.toThrow();
+  });
   it("a failed load can be tried again", async () => {
     const get = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue("ok");
     const store = createNoteStore({ get, put: vi.fn() });

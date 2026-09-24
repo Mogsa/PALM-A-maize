@@ -18,11 +18,23 @@ export function TagsProvider({ children }: { children: React.ReactNode }) {
   const [tags, setTags] = useState<Tag[]>([]);
   const [error, setError] = useState<string | null>(null);
   const current = useRef<Tag[]>([]);
+  const loaded = useRef(false);
   const fail = useCallback((cause: unknown) => { console.error(TAGS_FAILED_MESSAGE, cause); setError(TAGS_FAILED_MESSAGE); }, []);
-  useEffect(() => {
-    api.getTags().then((file) => { current.current = file.tags; setTags(file.tags); }, fail);
-  }, [fail]);
-  const write = useCallback(async (next: Tag[]) => {
+  const load = useCallback(async () => {
+    const file = await api.getTags();
+    loaded.current = true;
+    current.current = file.tags;
+    setTags(file.tags);
+    setError(null);
+  }, []);
+  useEffect(() => { load().catch(fail); }, [load, fail]);
+  /** `PUT /api/tags` replaces the whole file (addendum 6), so a write is built on the tags as read, never on a list
+   *  that failed to load: that would delete every tag on every board. Rejects when the tags cannot be read. */
+  const write = useCallback(async (change: (tags: Tag[]) => Tag[]) => {
+    if (!loaded.current) {
+      try { await load(); } catch (cause) { fail(cause); throw new Error(TAGS_FAILED_MESSAGE); }
+    }
+    const next = change(current.current);
     current.current = next;
     setTags(next);
     try {
@@ -31,14 +43,14 @@ export function TagsProvider({ children }: { children: React.ReactNode }) {
       setTags(file.tags);
       setError(null);
     } catch (cause) { fail(cause); }
-  }, [fail]);
+  }, [fail, load]);
   const add = useCallback(async (name: string) => {
     const tag: Tag = { id: newId("t"), name, colour: NEW_TAG_COLOUR };
-    await write([...current.current, tag]);
+    await write((tags) => [...tags, tag]);
     return tag;
   }, [write]);
-  const update = useCallback((tag: Tag) => write(current.current.map((t) => (t.id === tag.id ? tag : t))), [write]);
-  const remove = useCallback((id: string) => write(current.current.filter((t) => t.id !== id)), [write]);
+  const update = useCallback((tag: Tag) => write((tags) => tags.map((t) => (t.id === tag.id ? tag : t))), [write]);
+  const remove = useCallback((id: string) => write((tags) => tags.filter((t) => t.id !== id)), [write]);
   const value = useMemo(() => ({ tags, byId: new Map(tags.map((t) => [t.id, t])), error, add, update, remove }), [tags, error, add, update, remove]);
   return <TagsContext.Provider value={value}>{children}</TagsContext.Provider>;
 }

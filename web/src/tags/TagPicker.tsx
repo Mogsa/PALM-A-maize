@@ -10,7 +10,12 @@ export function TagPicker({ value, onChange }: { value: string[]; onChange: (ids
   const create = async () => {
     const name = draft.trim();
     if (!name) return;
-    const tag = await add(name);
+    let tag;
+    try {
+      tag = await add(name);
+    } catch {
+      return;   // the tags could not be read; the provider already shows why
+    }
     onChange([...value, tag.id]);
     setDraft("");
   };

@@ -69,12 +69,20 @@ function next(state: BoardState, board: Board): BoardState {
   return { ...state, board, dirty: true, revision: state.revision + 1 };
 }
 
+/** Edges with an end on a node React Flow removed go with it (addendum 4.7), whatever path the delete took. */
+function dropEdgesOfRemoved(board: Board, changes: NodeChange<BoardNode>[]): Board {
+  const removed = new Set(changes.flatMap((c) => (c.type === "remove" ? [c.id] : [])));
+  if (!removed.size) return board;
+  return { ...board, edges: board.edges.filter((e) => !removed.has(e.from) && !removed.has(e.to)) };
+}
+
+/** A gesture frame (a drag, or a resize, which from the left or top edge also moves the node) starts a pending
+ *  step and saves nothing; the frame that ends the gesture saves and records it as one step. */
 function applyNodes(state: BoardState, changes: NodeChange<BoardNode>[]): BoardState {
-  const board = { ...state.board, nodes: markUserSized(applyNodeChanges(changes, state.board.nodes) as BoardNode[], changes) };
-  if (!changes.some(dirtiesNodes)) {
-    const history = changes.some(isGestureStep) ? begin(state.history, snapshot(state.board)) : state.history;
-    return { ...state, board, history };
-  }
+  const nodes = markUserSized(applyNodeChanges(changes, state.board.nodes) as BoardNode[], changes);
+  const board = dropEdgesOfRemoved({ ...state.board, nodes }, changes);
+  if (changes.some(isGestureStep)) return { ...state, board, history: begin(state.history, snapshot(state.board)) };
+  if (!changes.some(dirtiesNodes)) return { ...state, board };
   return { ...next(state, board), history: record(state.history, state.history.pending ?? snapshot(state.board)) };
 }
 
