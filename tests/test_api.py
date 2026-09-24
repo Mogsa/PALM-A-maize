@@ -483,3 +483,60 @@ def test_a_clip_renders_at_216_dpi_by_default(client, resnet_id):
     response = client.put(f"/api/papers/{resnet_id}/clips/{FIG}", json={"page": 2, "rect": [60, 100, 280, 130]})
     assert response.status_code == 200, response.text
     assert response.json()["clip_size"]["width"] == pytest.approx((280 - 60 + 8) * 216 / 72, abs=3)
+
+
+# -- D9: re-upload replaces -------------------------------------------------------
+
+
+def _upload(client, pdf_bytes):
+    return client.post("/api/papers", files={"file": ("paper.pdf", pdf_bytes, "application/pdf")})
+
+
+def _paper_files(store_root, paper_id):
+    folder = store_root / "papers" / paper_id
+    return {name: (folder / name).read_bytes() for name in ("paper.pdf", "source.json", "board.json")}
+
+
+def test_re_uploading_a_paper_replaces_it_and_reports_what_changed(client, resnet_id, store_root, monkeypatch, extracted):
+    import paperboard.store as store_module
+
+    test_board_put_get_and_version_conflict(client, resnet_id)   # h-1 on page 2
+    before = _paper_files(store_root, resnet_id)
+    doc = extracted["resnet"]
+    pages = [p.model_copy(update={"text": ""}) if p.page == 2 else p for p in doc.page_text]
+    monkeypatch.setattr(store_module, "extract", lambda _path: doc.model_copy(update={"page_text": pages}))
+    revised = FIXTURES["resnet"].read_bytes() + b"\n% revised\n"
+
+    response = _upload(client, revised)
+    assert response.status_code == 200, response.text
+    assert response.json() == {"paper_id": resnet_id, "changed": ["h-1"], "states": {"h-1": "orphaned"}}
+    after = _paper_files(store_root, resnet_id)
+    assert after["paper.pdf"] == revised
+    assert after["source.json"] != before["source.json"]
+    assert after["board.json"] == before["board.json"]   # the board is kept, never written
+
+
+def test_re_uploading_the_same_paper_changes_nothing(client, resnet_id, monkeypatch, extracted):
+    import paperboard.store as store_module
+
+    test_board_put_get_and_version_conflict(client, resnet_id)
+    monkeypatch.setattr(store_module, "extract", lambda _path: extracted["resnet"])
+    response = _upload(client, FIXTURES["resnet"].read_bytes())
+    assert response.status_code == 200, response.text
+    assert response.json() == {"paper_id": resnet_id, "changed": [], "states": {"h-1": "anchored"}}
+
+
+def test_a_failed_re_upload_leaves_the_paper_as_it_was(client, resnet_id, store_root, monkeypatch):
+    import paperboard.store as store_module
+
+    test_board_put_get_and_version_conflict(client, resnet_id)
+    before = _paper_files(store_root, resnet_id)
+
+    def fail(_path):
+        raise RuntimeError("layout model crashed")
+
+    monkeypatch.setattr(store_module, "extract", fail)
+    response = _upload(client, FIXTURES["resnet"].read_bytes() + b"\n% revised\n")
+    assert response.status_code == 500
+    assert response.json()["error"] == {"code": "extraction_failed", "message": "RuntimeError: layout model crashed"}
+    assert _paper_files(store_root, resnet_id) == before

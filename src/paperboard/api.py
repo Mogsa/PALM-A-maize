@@ -1,6 +1,7 @@
 """Routes and nothing else. Every rule lives in the module it belongs to; this
 file turns HTTP into calls and exceptions into the one error shape."""
 
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Annotated, Literal
@@ -168,13 +169,30 @@ def create_app(root: Path) -> FastAPI:
     def list_papers():
         return [p.model_dump() for p in store.list_papers()]
 
+    def reanchored(paper_id: str, replace: Callable[[], None]) -> dict:
+        """Run `replace`, which swaps the paper's source (and perhaps its PDF),
+        and report every anchor whose state or geometry it changed. The board
+        itself is never written (addendum section 7)."""
+        before = _anchors(resolved_board(paper_id))
+        replace()
+        after = _anchors(resolved_board(paper_id))
+        changed = [anchor_id for anchor_id, anchor in after.items() if before.get(anchor_id) != anchor]
+        return {"changed": changed, "states": {anchor_id: anchor[0] for anchor_id, anchor in after.items()}}
+
     @app.post("/api/papers", status_code=201)
     async def add_paper(file: UploadFile = File(...)):  # noqa: B008 (FastAPI's own idiom)
+        """A new paper is 201. An existing id is a re-upload (D9): replaced only
+        once extraction has succeeded, then re-anchored as for POST /extract."""
+        pdf_bytes = await file.read()
         try:
-            doc = store.add_paper(await file.read())
+            doc = store.extract_pdf(pdf_bytes)
         except Exception as exc:  # noqa: BLE001 -- turned into a 500, not swallowed
             return _error(500, "extraction_failed", f"{type(exc).__name__}: {exc}")
-        return {"paper_id": doc.paper_id}
+        if not store.has_paper(doc.paper_id):
+            store.install_paper(doc, pdf_bytes)
+            return {"paper_id": doc.paper_id}
+        report = reanchored(doc.paper_id, lambda: store.install_paper(doc, pdf_bytes))
+        return JSONResponse({"paper_id": doc.paper_id, **report}, status_code=200)
 
     @app.get("/api/papers/{paper_id}/source")
     def get_source(paper_id: str):
@@ -186,11 +204,7 @@ def create_app(root: Path) -> FastAPI:
             doc = extract(store.pdf_path(paper_id))
         except Exception as exc:  # noqa: BLE001 -- turned into a 500, not swallowed
             return _error(500, "extraction_failed", f"{type(exc).__name__}: {exc}")
-        before = _anchors(resolved_board(paper_id))
-        store.write_source(paper_id, doc)
-        after = _anchors(resolved_board(paper_id))
-        changed = [anchor_id for anchor_id, anchor in after.items() if before.get(anchor_id) != anchor]
-        return {"changed": changed, "states": {anchor_id: anchor[0] for anchor_id, anchor in after.items()}}
+        return reanchored(paper_id, lambda: store.write_source(paper_id, doc))
 
     @app.get("/api/papers/{paper_id}/pdf")
     def get_pdf(paper_id: str):
