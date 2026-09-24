@@ -455,7 +455,32 @@ def test_the_tag_filter_applies_in_template_order(resnet):
     board.highlights[1].tags = ["t-question"]
     md = export_markdown(doc, board, TEMPLATE_NOTES, pdf, tags=["t-question"], order="template")
     assert "## Limits" in md                          # a slot is always written ...
-    assert "It adds identity shortcuts." in md        # ... with the notes written under it
+    assert "It adds identity shortcuts." not in md    # ... but not its notes that carry no wanted tag
     assert "n-method" not in md and "n-intro" not in md
     assert "a mark in no chunk" in md
     assert "A loose thought." not in md
+
+
+def _tag(board, node_id, tag):
+    node = next(n for n in board.nodes if n.id == node_id)
+    node.data.tags = [tag]
+
+
+def test_a_slot_note_that_carries_a_wanted_tag_is_written_under_its_slot(resnet):
+    doc, pdf = resnet
+    board = _template_board(doc)
+    _tag(board, "n-answer", "t-question")
+    md = export_markdown(doc, board, TEMPLATE_NOTES, pdf, tags=["t-question"], order="template")
+    main = md[md.index("## Main point"):md.index("## How it works")]
+    assert "It adds identity shortcuts." in main
+    assert "A note in a plain group." not in md
+
+
+def test_every_note_in_a_slot_that_carries_a_wanted_tag_is_written(resnet):
+    """Section 6.1: a note is written when it is written under something that carries one."""
+    doc, pdf = resnet
+    board = _template_board(doc)
+    _tag(board, "n-main", "t-question")
+    md = export_markdown(doc, board, TEMPLATE_NOTES, pdf, tags=["t-question"], order="template")
+    main = md[md.index("## Main point"):md.index("## How it works")]
+    assert "It adds identity shortcuts." in main and "A note in a plain group." in main

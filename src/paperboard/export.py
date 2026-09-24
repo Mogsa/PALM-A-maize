@@ -224,13 +224,17 @@ class _Writer:
 
     def template_body(self) -> None:
         """D19: each slot in `nodes` order, with the notes and pieces whose
-        nearest slot it is, then everything in no slot in paper order."""
+        nearest slot it is, then everything in no slot in paper order. With a
+        filter, a slot's note is written when it or the slot carries a wanted tag
+        (section 6.1: "a note when it carries one or is written under something
+        that is"); the slot's heading and prompt are always written."""
         home = {n.id: _slot_of(n, self.by_id) for n in self.board.nodes}
         for slot in (n for n in self.board.nodes if _is_slot(n)):
             self.para(f"## {slot.data.name or ''}".rstrip())
             self.para(f"*{slot.data.prompt.strip()}*")
             for n in self.board.nodes:
-                if isinstance(n, NoteNode) and home[n.id] == slot.id:
+                if (isinstance(n, NoteNode) and home[n.id] == slot.id
+                        and (_wanted(self.tags, n.data.tags) or _wanted(self.tags, slot.data.tags))):
                     self.note(n.id)
             for piece in self.pieces:
                 if home[piece.id] == slot.id:
