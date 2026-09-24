@@ -7,7 +7,7 @@ from conftest import FIXTURES
 
 from paperboard.board_model import Board, ChunkData, ChunkNode, QuoteSelector
 from paperboard.chunk_text import QuoteNotFound
-from paperboard.recut import recut
+from paperboard.recut import NotContiguous, join, recut
 from paperboard.split import split
 
 SHORTCUTS = QuoteSelector(exact="The shortcut connections in Eqn.(1) introduce neither extra parameter nor computation complexity.")
@@ -71,3 +71,29 @@ def test_a_cut_of_words_outside_the_chunk_is_refused(resnet, sections):
     doc, pdf = resnet
     with pytest.raises(QuoteNotFound):
         recut(doc, pdf, sections["3.2"].region, QuoteSelector(exact="Let us consider H(x) as an underlying mapping"), "cut")
+
+
+def test_joining_the_pieces_of_a_cut_gives_back_the_original_exactly(resnet, sections):
+    doc, pdf = resnet
+    whole = sections["3.2"]
+    pieces = _pieces(recut(doc, pdf, whole.region, SHORTCUTS, "cut"))
+    joined, order = join(doc, pdf, [pieces[2].region, pieces[0].region, pieces[1].region])
+    assert order == [1, 2, 0]                                          # paper order of the regions sent
+    data = ChunkData.model_validate(joined["data"])
+    assert data.region.rects == whole.region.rects
+    assert data.blocks == whole.blocks
+
+
+def test_sections_that_follow_each_other_are_neighbours(resnet, sections):
+    doc, pdf = resnet
+    _, order = join(doc, pdf, [sections["3.2"].region, sections["3.1"].region])
+    assert order == [1, 0]
+
+
+def test_chunks_with_text_between_them_are_not_neighbours(resnet, sections):
+    doc, pdf = resnet
+    with pytest.raises(NotContiguous):
+        join(doc, pdf, [sections["3.1"].region, sections["3.3"].region])
+    pieces = _pieces(recut(doc, pdf, sections["3.2"].region, SHORTCUTS, "cut"))
+    with pytest.raises(NotContiguous):
+        join(doc, pdf, [pieces[0].region, pieces[2].region])
