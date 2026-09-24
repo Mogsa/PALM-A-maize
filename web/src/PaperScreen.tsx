@@ -4,6 +4,7 @@ import { newId } from "./model/ids";
 import { sectionLabel } from "./model/sections";
 import type { PageRect, Section, SelectionMode } from "./model/types";
 import { makeCut } from "./paper/cut";
+import { FindPanel, useFind } from "./paper/FindPanel";
 import type { PaperHit } from "./paper/hit";
 import type { JumpTarget } from "./paper/margin";
 import { MarkPopover } from "./paper/MarkPopover";
@@ -14,7 +15,7 @@ import { useConnect } from "./paper/useConnect";
 import { useBoard } from "./state/BoardProvider";
 
 /** A selection waiting for a choice: dragged text, a Shift-drag rectangle ("area"), or a clicked heading (`section`). */
-type Pending = { rects: PageRect[]; at: DOMRect; exact: boolean; preview: string; mode: SelectionMode; section?: Section };
+type Pending = { rects: PageRect[]; at: DOMRect; exact: boolean; text: string; preview: string; mode: SelectionMode; section?: Section };
 type OpenMark = { id: string; at: DOMRect };
 
 export const SELECTION_FAILED_MESSAGE = "Could not read that selection from the paper. Nothing was added.";
@@ -29,6 +30,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [jump, setJump] = useState<PageRect | null>(null);
   const connect = useConnect(setError);
+  const find = useFind(setJump);
 
   const choose = async (kind: "highlight" | "cut") => {
     if (!pending) return;
@@ -54,13 +56,14 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
     if (hit.mark) { setPending(null); setOpenMark({ id: hit.mark.id, at: hit.at }); return; }
     if (hit.heading) {
       setOpenMark(null);
-      setPending({ rects: hit.heading.extent, at: hit.at, exact: true, preview: sectionLabel(hit.heading), mode: "text", section: hit.heading });
+      setPending({ rects: hit.heading.extent, at: hit.at, exact: true, text: "", preview: sectionLabel(hit.heading), mode: "text", section: hit.heading });
     }
   };
   const onSelect = (rects: PageRect[], at: DOMRect, exact: boolean, mode: SelectionMode) => {
     setError(null);
     setOpenMark(null);
-    setPending({ rects, at, exact, mode, preview: previewText(window.getSelection()?.toString() ?? "") });
+    const text = window.getSelection()?.toString() ?? "";
+    setPending({ rects, at, exact, mode, text, preview: previewText(text) });
   };
   const onJump = (target: JumpTarget) => ("paper" in target ? setJump({ ...target.paper }) : onOpenOnBoard(target.board));
   const onJumpHandled = useCallback(() => { setJump(null); onFocusHandled(); }, [onFocusHandled]);
@@ -73,15 +76,17 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
     const piece = existingPiece(p.section);
     return <SelectionPopover at={p.at} preview={p.preview} busy={busy} canHighlight={!p.section}
                              onHighlight={() => choose("highlight")} onCut={() => choose("cut")} onDismiss={() => setPending(null)}
-                             onOpen={piece ? () => { setPending(null); onOpenOnBoard(piece.id); } : undefined} />;
+                             onOpen={piece ? () => { setPending(null); onOpenOnBoard(piece.id); } : undefined}
+                             onFind={p.text.trim() ? () => { find.open(p.text); setPending(null); } : undefined} />;
   };
 
   return (
     <>
       <PaperView paperId={paperId} source={source} board={state.board} focus={jump ?? focus} onFocusHandled={onJumpHandled}
                  onSelect={onSelect} onClickPaper={onClickPaper} onOutlineClick={onOpenOnBoard}
-                 connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} />
+                 connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark} />
       {pending && selectionPopover(pending)}
+      {find.query && <FindPanel query={find.query} onPick={find.pick} onClose={find.close} />}
       {markOpen && openMark && (
         <MarkPopover highlight={markOpen} at={openMark.at} onClose={() => setOpenMark(null)}
                      onConnect={() => { connect.start(openMark.id); setOpenMark(null); }} />

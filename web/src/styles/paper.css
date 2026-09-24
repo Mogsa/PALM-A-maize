@@ -65,6 +65,19 @@
 .paper.connecting { cursor: crosshair; }
 .connect-hint { position: fixed; top: calc(var(--topbar-height) + 12px); left: 50%; transform: translateX(-50%); margin: 0; padding: 6px 12px; z-index: 10; background: var(--surface); border: 1px solid var(--cut-edge); border-radius: var(--radius-pill); box-shadow: var(--shadow-raised); }
 
+/* the paper's own links sit over the text; our overlay stays under them */
+.page-wrap .annotationLayer .linkAnnotation > a:hover { background: var(--cut-tint); }
+
+/* find in paper */
+.find-panel { position: fixed; top: calc(var(--topbar-height) + 56px); right: 16px; z-index: 8; width: 300px; max-height: 60vh; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-raised); }
+.find-panel header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.find-panel header .close { margin-left: auto; }
+.find-panel ul { list-style: none; margin: 0; padding: 0; }
+.find-panel li button { width: 100%; padding: 6px 10px; border: 0; border-bottom: 1px solid var(--border); background: none; text-align: left; font-family: var(--font-read); font-size: 12.5px; }
+.find-panel li button:hover { background: var(--surface-muted); }
+.find-panel .where { display: block; font-family: var(--font-ui); font-size: var(--text-ui-small); color: var(--ink-muted); }
+.find-panel mark, .react-pdf__Page__textContent mark.find-hit { background: var(--hl); color: inherit; }
+
 /* the rectangle a Shift-drag draws */
 .rubber-band { position: fixed; z-index: 9; pointer-events: none; border: 1px dashed var(--cut-edge); background: var(--cut-tint); }
 
