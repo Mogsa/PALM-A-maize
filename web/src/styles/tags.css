@@ -1,0 +1,9 @@
+/* tags: chips on things, and the picker every popover and card uses */
+.chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.chip { font-size: var(--text-ui-small); line-height: 18px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); background: var(--surface); white-space: nowrap; }
+.tag-picker { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; font-size: var(--text-ui); background: var(--surface); }
+.tag-picker label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.tag-picker .new-tag { display: flex; gap: 6px; margin-top: 4px; }
+.tag-picker input[type="text"] { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--radius-small); }
+.tag-picker button { padding: 3px 10px; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); }
+.tag-error { margin: 4px 0 0; color: var(--lost); font-size: var(--text-ui-small); }

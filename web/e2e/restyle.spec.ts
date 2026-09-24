@@ -1,5 +1,16 @@
 import { expect, test, type Page } from "@playwright/test";
 
+/** Every test here starts from a saved, empty board: first open (D15) never runs, and no earlier spec's pieces remain. */
+test.beforeEach(async ({ request }) => {
+  const [paper] = await (await request.get("/api/papers")).json();
+  const path = `/api/papers/${paper.paper_id}/board`;
+  const board = await (await request.get(path)).json();
+  const empty = { ...board, nodes: [], edges: [], highlights: [], active_tags: [], view: "paper" };
+  delete empty.paper_scroll;
+  const saved = await request.put(path, { data: empty, headers: { "If-Match": String(board.version) } });
+  expect(saved.ok()).toBeTruthy();
+});
+
 async function selectSpans(page: Page, pageNo: number, from: number, to: number) {
   const spans = page.locator(`.react-pdf__Page[data-page-number="${pageNo}"] .react-pdf__Page__textContent span`);
   await expect(spans.nth(to)).toBeVisible();

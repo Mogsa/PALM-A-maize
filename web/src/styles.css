@@ -1,4 +1,5 @@
 @import "./styles/tokens.css";
+@import "./styles/tags.css";
 @import "./styles/shell.css";
 @import "./styles/paper.css";
 @import "./styles/board.css";
