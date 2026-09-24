@@ -40,6 +40,27 @@
 .mark-popover { width: 320px; display: flex; flex-direction: column; gap: 6px; max-height: 70vh; overflow: auto; }
 .mark-popover .tag-picker { padding: 4px 2px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 
+.mark-popover .popover-actions { flex-wrap: wrap; }
+
+/* margin: notes and jump chips beside a mark's first line */
+.overlay .margin { position: absolute; top: 0; left: 100%; width: 220px; margin-left: 14px; }
+.margin-note, .margin-chip { position: absolute; left: 0; max-width: 220px; pointer-events: auto; text-align: left; font: inherit; font-size: var(--text-ui-small); border-radius: var(--radius-small); padding: 3px 8px; cursor: pointer; }
+.margin-note { width: 220px; color: var(--ink-muted); background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--hl-solid); box-shadow: var(--shadow-card); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.margin-note.ai { border-left-color: var(--ai); background: var(--ai-tint); }
+.margin-chip { border: 1px solid var(--border-strong); background: var(--surface); color: var(--cut); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.margin-chip:hover, .margin-note:hover { border-color: var(--cut-edge); }
+.ai-label { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: var(--radius-pill); background: var(--ai); color: var(--surface); font-size: 10px; font-weight: 600; letter-spacing: 0.04em; }
+
+/* a note edited in the mark popover */
+.note-editor { display: flex; flex-direction: column; gap: 4px; }
+.note-editor textarea { min-height: 64px; resize: vertical; padding: 6px 8px; border: 1px solid var(--border); border-left: 3px solid var(--hl-solid); border-radius: var(--radius-small); font-family: var(--font-read); font-size: 13px; line-height: 1.45; }
+.note-editor.ai textarea { border-left-color: var(--ai); background: var(--ai-tint); }
+.note-error { margin: 0; color: var(--lost); font-size: var(--text-ui-small); }
+
+/* choosing the other end of a connection */
+.paper.connecting { cursor: crosshair; }
+.connect-hint { position: fixed; top: calc(var(--topbar-height) + 12px); left: 50%; transform: translateX(-50%); margin: 0; padding: 6px 12px; z-index: 10; background: var(--surface); border: 1px solid var(--cut-edge); border-radius: var(--radius-pill); box-shadow: var(--shadow-raised); }
+
 /* the rectangle a Shift-drag draws */
 .rubber-band { position: fixed; z-index: 9; pointer-events: none; border: 1px dashed var(--cut-edge); background: var(--cut-tint); }
 

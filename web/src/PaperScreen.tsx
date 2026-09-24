@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { api } from "./api/client";
 import { newId } from "./model/ids";
 import { sectionLabel } from "./model/sections";
 import type { PageRect, Section, SelectionMode } from "./model/types";
 import { makeCut } from "./paper/cut";
 import type { PaperHit } from "./paper/hit";
+import type { JumpTarget } from "./paper/margin";
 import { MarkPopover } from "./paper/MarkPopover";
 import { PaperView } from "./paper/PaperView";
 import { SelectionPopover } from "./paper/SelectionPopover";
 import { previewText } from "./paper/preview";
+import { useConnect } from "./paper/useConnect";
 import { useBoard } from "./state/BoardProvider";
 
 /** A selection waiting for a choice: dragged text, a Shift-drag rectangle ("area"), or a clicked heading (`section`). */
@@ -25,6 +27,8 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   const [openMark, setOpenMark] = useState<OpenMark | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [jump, setJump] = useState<PageRect | null>(null);
+  const connect = useConnect(setError);
 
   const choose = async (kind: "highlight" | "cut") => {
     if (!pending) return;
@@ -46,12 +50,21 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
 
   const onClickPaper = (hit: PaperHit) => {
     setError(null);
+    if (connect.connectingFrom) return connect.connectTo(hit);
     if (hit.mark) { setPending(null); setOpenMark({ id: hit.mark.id, at: hit.at }); return; }
     if (hit.heading) {
       setOpenMark(null);
       setPending({ rects: hit.heading.extent, at: hit.at, exact: true, preview: sectionLabel(hit.heading), mode: "text", section: hit.heading });
     }
   };
+  const onSelect = (rects: PageRect[], at: DOMRect, exact: boolean, mode: SelectionMode) => {
+    setError(null);
+    setOpenMark(null);
+    setPending({ rects, at, exact, mode, preview: previewText(window.getSelection()?.toString() ?? "") });
+  };
+  const onJump = (target: JumpTarget) => ("paper" in target ? setJump({ ...target.paper }) : onOpenOnBoard(target.board));
+  const onJumpHandled = useCallback(() => { setJump(null); onFocusHandled(); }, [onFocusHandled]);
+
   const existingPiece = (section: Section | undefined) =>
     section ? state.board.nodes.find((n) => n.type === "chunk" && n.data.source_id === section.id) : undefined;
   const markOpen = openMark && state.board.highlights.find((h) => h.id === openMark.id);
@@ -65,15 +78,17 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
 
   return (
     <>
-      <PaperView paperId={paperId} source={source} board={state.board} focus={focus} onFocusHandled={onFocusHandled}
-                 onSelect={(rects, at, exact, mode) => {
-                   setError(null);
-                   setOpenMark(null);
-                   setPending({ rects, at, exact, mode, preview: previewText(window.getSelection()?.toString() ?? "") });
-                 }}
-                 onClickPaper={onClickPaper} onOutlineClick={onOpenOnBoard} />
+      <PaperView paperId={paperId} source={source} board={state.board} focus={jump ?? focus} onFocusHandled={onJumpHandled}
+                 onSelect={onSelect} onClickPaper={onClickPaper} onOutlineClick={onOpenOnBoard}
+                 connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} />
       {pending && selectionPopover(pending)}
-      {markOpen && openMark && <MarkPopover highlight={markOpen} at={openMark.at} onClose={() => setOpenMark(null)} onConnect={() => setOpenMark(null)} />}
+      {markOpen && openMark && (
+        <MarkPopover highlight={markOpen} at={openMark.at} onClose={() => setOpenMark(null)}
+                     onConnect={() => { connect.start(openMark.id); setOpenMark(null); }} />
+      )}
+      {connect.connectingFrom && (
+        <p className="connect-hint" role="status">Click another mark or a section heading to connect. <button className="quiet" onClick={connect.cancel}>Cancel</button></p>
+      )}
       {error && <p className="selection-error" role="alert" onClick={() => setError(null)}>{error}</p>}
     </>
   );

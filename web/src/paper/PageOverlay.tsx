@@ -1,6 +1,11 @@
-import type { Board, ChunkNode, FigureNode, Rect } from "../model/types";
+import type { Board, ChunkNode, FigureNode, Rect, Source } from "../model/types";
+import { Margin } from "./PageMargin";
+import type { JumpTarget } from "./margin";
 
-type Props = { page: number; scale: number; board: Board; onOutlineClick: (nodeId: string) => void };
+type Props = {
+  page: number; scale: number; board: Board; source: Source;
+  onOutlineClick: (nodeId: string) => void; onJump: (target: JumpTarget) => void; onOpenNote: (noteId: string) => void;
+};
 
 const px = (rect: Rect, scale: number) => ({
   left: rect[0] * scale, top: rect[1] * scale, width: (rect[2] - rect[0]) * scale, height: (rect[3] - rect[1]) * scale,
@@ -11,7 +16,7 @@ const px = (rect: Rect, scale: number) => ({
  *  region -- still selects the text underneath (fix round 1, finding 2: an outline's whole box
  *  used to capture pointer events, so text inside a cut could never be selected). Only the
  *  small tab at an outline's top-left corner takes clicks, to open it. */
-export function PageOverlay({ page, scale, board, onOutlineClick }: Props) {
+export function PageOverlay({ page, scale, board, source, onOutlineClick, onJump, onOpenNote }: Props) {
   const chunks = board.nodes.filter((n): n is ChunkNode | FigureNode => n.type === "chunk" || n.type === "figure");
   return (
     <div className="overlay">
@@ -29,6 +34,7 @@ export function PageOverlay({ page, scale, board, onOutlineClick }: Props) {
         <div key={`${h.id}-${i}`} className={`mark ${h.anchor.state}`} style={px(r.rect, scale)} data-highlight-id={h.id}
              title={h.anchor.quote.exact.slice(0, 80)} />
       )))}
+      <Margin page={page} scale={scale} board={board} source={source} onJump={onJump} onOpenNote={onOpenNote} />
     </div>
   );
 }

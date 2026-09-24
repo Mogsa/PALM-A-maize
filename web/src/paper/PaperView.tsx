@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { XY } from "../model/reparent";
 import type { Board, PageRect, SelectionMode, Source } from "../model/types";
 import { headingAt, isClick, markAt, pagePoint, type PaperHit } from "./hit";
+import type { JumpTarget } from "./margin";
 import { PageOverlay } from "./PageOverlay";
 import { bandBox, useRectangleDrag } from "./rectangleDrag";
 import { pageFrames, readSelection } from "./selection";
@@ -24,6 +25,9 @@ type Props = {
   onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode) => void;
   onClickPaper: (hit: PaperHit) => void;
   onOutlineClick: (nodeId: string) => void;
+  connecting: boolean;                          // choosing the other end of a connection
+  onJump: (target: JumpTarget) => void;
+  onOpenNote: (noteId: string) => void;
 };
 
 /** The selection's anchor: its last rect with real extent. The spike measured zero-width `<br>` rects at the end
@@ -38,7 +42,8 @@ function selectionAnchor(): DOMRect | undefined {
 
 const bandStyle = (a: XY, b: XY) => { const r = bandBox(a, b); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
 
-export function PaperView({ paperId, source, board, focus, onFocusHandled, onSelect, onClickPaper, onOutlineClick }: Props) {
+export function PaperView(props: Props) {
+  const { paperId, source, board, focus, onFocusHandled, onSelect, onClickPaper, onOutlineClick, connecting, onJump, onOpenNote } = props;
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const down = useRef<XY | null>(null);
@@ -82,12 +87,13 @@ export function PaperView({ paperId, source, board, focus, onFocusHandled, onSel
   };
 
   return (
-    <div ref={container} className="paper" onMouseDown={onMouseDown} onMouseUp={onMouseUp}>
+    <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseDown={onMouseDown} onMouseUp={onMouseUp}>
       <Document file={api.pdfUrl(paperId)} onLoadSuccess={() => setReady(true)} loading={<div className="loading">Loading the paper</div>}>
         {source.pages.map((p) => (
           <div key={p.index} className="page-wrap">
             <Page pageIndex={p.index} width={PAGE_WIDTH_PX} renderAnnotationLayer={false} renderTextLayer />
-            <PageOverlay page={p.index} scale={PAGE_WIDTH_PX / p.width} board={board} onOutlineClick={onOutlineClick} />
+            <PageOverlay page={p.index} scale={PAGE_WIDTH_PX / p.width} board={board} source={source}
+                         onOutlineClick={onOutlineClick} onJump={onJump} onOpenNote={onOpenNote} />
           </div>
         ))}
       </Document>
