@@ -11,6 +11,7 @@ vi.mock("../state/BoardProvider", () => ({
   useNote: () => note,
 }));
 vi.mock("../tags/TagPicker", () => ({ TagPicker: () => <input type="text" aria-label="New tag" /> }));
+vi.mock("../state/TagsProvider", () => ({ useTags: () => ({ tags: [] }) }));
 vi.mock("../api/client", async (actual) => ({ api: { ...(await actual<typeof import("../api/client")>()).api, postText: vi.fn() } }));
 import { MarkPopover } from "./MarkPopover";
 import { NoteEditor } from "./NoteEditor";

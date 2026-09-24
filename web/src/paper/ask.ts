@@ -58,3 +58,14 @@ export function buildAskPrompt({ marked, sentence, section, goal }: { marked: st
   };
   return ASK_PROMPT.replace(SLOT, (_, slot: string) => values[slot]);
 }
+
+/** The prompt Look up elsewhere copies for a mark tagged term (D27): the owner's words, two slots. */
+export const JARGON_PROMPT = "Explain the term '{term}' as used in this sentence: '{sentence}'. Assume I am a student new to this field. "
+  + "Keep it short, and give a source I can check.";
+const JARGON_SLOT = /\{(term|sentence)\}/g;
+
+/** Filled in one pass, as buildAskPrompt is. */
+export function buildJargonPrompt({ term, sentence }: { term: string; sentence: string }): string {
+  const values: Record<string, string> = { term: term.replace(/\s+/g, " ").trim(), sentence };
+  return JARGON_PROMPT.replace(JARGON_SLOT, (_, slot: string) => values[slot]);
+}

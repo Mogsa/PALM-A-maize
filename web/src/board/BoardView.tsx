@@ -203,7 +203,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       </ReactFlow>
       {edgeMenu && <EdgePopover edgeId={edgeMenu.id} at={edgeMenu.at} onClose={closeEdgeMenu} />}
       {textMenu && <TextPopover selection={textMenu} onClose={closeTextMenu} />}
-      {hover.card && <ContextCard card={hover.card} hover={hover} onGo={onOpenInPaper} />}
+      {hover.card && <ContextCard card={hover.card} hover={hover} onGo={onOpenInPaper} onOpenNote={focusOn} />}
     </div>
     </BoardActionsProvider>
   );

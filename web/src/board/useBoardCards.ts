@@ -1,8 +1,9 @@
 import type { Highlight, Source } from "../model/types";
 import { referenceCard, resolveReference, type Reference } from "../paper/references";
-import { isTerm } from "../paper/term";
+import { isTerm, termTagIds } from "../paper/term";
 import type { HoverCard } from "../paper/useHoverCard";
 import { useWordsUnder } from "../paper/useWordsUnder";
+import { useTags } from "../state/TagsProvider";
 
 /** A reference ChunkBody found and the paper can show (D26). */
 export const REFERENCE = ".ref[data-ref-kind]";
@@ -14,6 +15,7 @@ const closest = (target: EventTarget | null, selector: string) => (target instan
  *  timing, as the paper view's links. Returns the board's handlers; the card is `hover`'s. */
 export function useBoardCards(source: Source, paperId: string, highlights: Highlight[], hover: HoverCard) {
   const read = useWordsUnder(paperId);
+  const terms = termTagIds(useTags().tags);
 
   const showReference = async (el: Element) => {
     const ref = { kind: el.getAttribute("data-ref-kind"), key: el.getAttribute("data-ref-key") } as Reference;
@@ -38,7 +40,7 @@ export function useBoardCards(source: Source, paperId: string, highlights: Highl
     const mark = closest(target, MARK);
     const id = mark?.getAttribute("data-highlight-id");
     const highlight = id ? highlights.find((h) => h.id === id) : undefined;
-    if (!mark || !highlight || !isTerm(highlight)) return null;
+    if (!mark || !highlight || !isTerm(highlight, terms)) return null;
     return { el: mark, show: () => hover.open(mark, mark.getBoundingClientRect(), { kind: "term", highlightId: highlight.id }) };
   };
 

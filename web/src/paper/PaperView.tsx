@@ -15,6 +15,7 @@ import { bandBox } from "./rectangleDrag";
 import { usePaperScroll } from "./scroll";
 import { useCitationCard } from "./useCitationCard";
 import { useHoverCard } from "./useHoverCard";
+import { useTermHover } from "./useTermHover";
 import { useFindMark, type FindMark } from "./useFindMark";
 import { usePaperMouse } from "./usePaperMouse";
 
@@ -51,6 +52,7 @@ export function PaperView(props: Props) {
   const pdf = useRef<LinkDocument | null>(null);
   const hover = useHoverCard();
   const citation = useCitationCard(pdf, source, paperId, hover);
+  const termHover = useTermHover(container, source, board, hover);
   const mouse = usePaperMouse(container, source, board, props);
   const findProps = useFindMark(container, findMark);
   const onScrollSave = usePaperScroll(container, { ready, source, pageWidthPx: PAGE_WIDTH_PX, paperScroll, onScrollSettled });
@@ -76,8 +78,8 @@ export function PaperView(props: Props) {
 
   return (
     <>
-      <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseDown={mouse.onMouseDown} onMouseUp={mouse.onMouseUp}
-           onScroll={onScroll} {...citation}>
+      <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseUp={mouse.onMouseUp}
+           onMouseDown={(e) => { hover.close(); mouse.onMouseDown(e); }} onScroll={onScroll} {...citation} {...termHover}>
         <Document file={api.pdfUrl(paperId)} onLoadSuccess={(doc) => { pdf.current = doc; setReady(true); }}
                   loading={<div className="loading">Loading the paper</div>}
                   onItemClick={followLink} externalLinkTarget="_blank" externalLinkRel="noopener noreferrer">
@@ -91,7 +93,7 @@ export function PaperView(props: Props) {
         </Document>
         {mouse.band && <div className="rubber-band" style={bandStyle(mouse.band.start, mouse.band.end)} />}
       </div>
-      {hover.card && <ContextCard card={hover.card} hover={hover} onGo={(at) => scrollToPoint(at.page, at.rect[1])} />}
+      {hover.card && <ContextCard card={hover.card} hover={hover} onGo={(at) => scrollToPoint(at.page, at.rect[1])} onOpenNote={onOpenNote} />}
     </>
   );
 }

@@ -12,6 +12,7 @@ vi.mock("./state/BoardProvider", () => ({
 }));
 vi.mock("./paper/PaperView", () => ({ PaperView: (props: { onClickPaper: (hit: PaperHit) => void }) => { clickPaper = props.onClickPaper; return null; } }));
 vi.mock("./tags/TagPicker", () => ({ TagPicker: () => null }));
+vi.mock("./state/TagsProvider", () => ({ useTags: () => ({ tags: [] }) }));
 vi.mock("./api/client", () => ({ api: {} }));
 import { PaperScreen } from "./PaperScreen";
 
