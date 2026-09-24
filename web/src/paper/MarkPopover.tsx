@@ -6,6 +6,7 @@ import type { Highlight } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
 import { isTextField } from "../state/keys";
 import { TagPicker } from "../tags/TagPicker";
+import { AskElsewhere } from "./AskElsewhere";
 import { NoteEditor } from "./NoteEditor";
 import { popoverPlace } from "./place";
 import { previewText } from "./preview";
@@ -45,6 +46,7 @@ export function MarkPopover({ highlight, at, onClose, onConnect }: Props) {
       <div className="popover-actions">
         <button className="action" onClick={onConnect} title="Then click another mark or a section heading">Connect</button>
         <button className="action" onClick={addNote}>Add note</button>
+        <AskElsewhere highlight={highlight} />
         <button className="action" onClick={remove} title="Delete">Remove</button>
         <button className="quiet close" aria-label="Dismiss" onClick={onClose}>×</button>
       </div>
