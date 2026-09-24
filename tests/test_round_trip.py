@@ -11,6 +11,7 @@ from conftest import FIXTURES
 from paperboard.anchoring import build_index, resolve_chunk, resolve_highlight
 from paperboard.snap import select
 from paperboard.source_model import PageRect
+from paperboard.words import line_rects_under
 
 PAD_POINTS = 6.0
 REPEATED_PHRASE = "shortcut connections"
@@ -64,8 +65,9 @@ def _highlight_round_trip(paper, rect: PageRect) -> str | None:
     doc, index, pdf = paper
     selection = select(doc, pdf, [rect], snap=False)
     problems = []
-    if selection.highlight.rects != [rect]:
-        problems.append("selection did not keep the drawn rect")
+    lines = [PageRect(page=rect.page, rect=line) for line in line_rects_under(pdf[rect.page], rect.rect)]
+    if selection.highlight.rects != lines:   # one rect per line of the words under the drag (D1)
+        problems.append("selection did not take the lines under the drawn rect")
     highlight = resolve_highlight(selection.highlight, index, pdf)
     if highlight.state != "anchored" or highlight.rects != selection.highlight.rects:
         problems.append(f"highlight {highlight.state} {[r.rect for r in highlight.rects]}")
