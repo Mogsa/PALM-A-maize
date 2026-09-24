@@ -1,36 +1,34 @@
 import { useEffect } from "react";
+import { popoverPlace } from "./place";
 
-type Props = { at: DOMRect; preview: string; busy: boolean; canHighlight: boolean; onHighlight: () => void; onCut: () => void; onDismiss: () => void };
-
-export const ONE_COLUMN_HINT = "A highlight covers one column on one page. Cut this, or highlight each column.";
+type Props = {
+  at: DOMRect; preview: string; busy: boolean; canHighlight: boolean;
+  onHighlight: () => void; onCut: () => void; onDismiss: () => void; onOpen?: () => void;
+};
 
 const POPOVER_WIDTH = 300;
 const POPOVER_HEIGHT = 92;   // preview line plus the action row, measured at the default zoom
 
-/** One selection, then a choice. No modes (SPEC.md section 4). A selection that crosses a column
- *  or a page is several rects. Schema 2's highlight anchor can hold them, but until highlights are
- *  anchored and painted per line (task 2A, D1) Highlight is offered for one rect only. */
-export function SelectionPopover({ at, preview, busy, canHighlight, onHighlight, onCut, onDismiss }: Props) {
+/** One selection, then a choice. No modes (SPEC.md section 4). A selection that crosses a column or a page is
+ *  several rects; a highlight holds them all and is painted line by line (D1). */
+export function SelectionPopover({ at, preview, busy, canHighlight, onHighlight, onCut, onDismiss, onOpen }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onDismiss(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onDismiss]);
-  // Keep the popover on screen: below the selection's last line, or above it when the
-  // selection ends near the bottom of the window, and never past the right edge.
-  const left = Math.max(8, Math.min(at.right + 8, window.innerWidth - POPOVER_WIDTH - 8));
-  const below = at.bottom + 6;
-  const top = below + POPOVER_HEIGHT <= window.innerHeight ? below : Math.max(8, at.top - POPOVER_HEIGHT - 6);
+  const { left, top } = popoverPlace(at, POPOVER_WIDTH, POPOVER_HEIGHT);
   return (
     <div className="popover" role="dialog" aria-label="Selection" style={{ left, top }} onMouseDown={(e) => e.stopPropagation()}>
       <div className="popover-preview" title={preview}>{preview}</div>
       <div className="popover-actions">
-        <button className="action highlight" disabled={busy || !canHighlight} title={canHighlight ? "Mark this on the paper" : ONE_COLUMN_HINT} onClick={onHighlight}>
+        <button className="action highlight" disabled={busy || !canHighlight} title="Mark this on the paper" onClick={onHighlight}>
           <span className="swatch" aria-hidden="true" />Highlight
         </button>
         <button className="action cut" disabled={busy} title="Cut this out as a piece on the board" onClick={onCut}>
           <span className="glyph" aria-hidden="true">✂</span>Cut
         </button>
+        {onOpen && <button className="action" onClick={onOpen} title="This section is already a piece">Open on board</button>}
         <button className="quiet close" aria-label="Dismiss" onClick={onDismiss}>×</button>
       </div>
     </div>
