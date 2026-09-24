@@ -1,5 +1,5 @@
 import { GAP, nextChunkPosition } from "../board/layout";
-import { highlightsIn } from "./geometry";
+import { chunkHolder } from "./edges";
 import { absoluteIn, type XY } from "./reparent";
 import type { Board, BoardNode } from "./types";
 
@@ -16,9 +16,10 @@ export function spotBeside(nodes: BoardNode[], id: string): Spot | null {
   return { position: { x: at.x + width + GAP, y: at.y } };
 }
 
-/** Where a note written on a mark lands on the board: beside the first chunk holding the mark, else under everything. */
+/** Where a note written on a mark lands on the board: beside the chunk that draws the mark (chunkHolder), else under
+ *  everything. */
 export function spotForNoteOn(board: Board, highlightId: string): Spot {
   const mark = board.highlights.find((h) => h.id === highlightId);
-  const holder = mark && board.nodes.find((n) => (n.type === "chunk" || n.type === "figure") && highlightsIn([mark], n.data.region).length > 0);
+  const holder = mark && chunkHolder(board.nodes)(mark);
   return (holder && spotBeside(board.nodes, holder.id)) || { position: nextChunkPosition(board.nodes) };
 }
