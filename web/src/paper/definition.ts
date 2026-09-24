@@ -22,6 +22,11 @@ const endsWith = (pattern: string) => new RegExp(`${pattern}${OPEN_QUOTE}`, "i")
 /** A short parenthesised token that looks like an abbreviation: a capital, then letters, digits or hyphens. */
 const ABBREVIATION = /^\s*\(\s*[A-Z][A-Za-z0-9-]{0,11}\s*\)/;
 
+/** "X, sometimes called Y": the term, then another name for it. */
+const NAMED_AGAIN = /^["”’']?\s*,\s*(?:(?:also|sometimes|often|commonly)\s+)?(?:called|termed|known\s+as)\b/i;
+
+/** "colon follows" also asks for a lower-case letter after the term, so a title in capitals ("ADAM: A METHOD FOR ...")
+ *  is not taken for a definition. */
 export const DEFINITION_RULES: Rule[] = [
   { name: "first occurrence", weight: WEAK_CUE, test: (c) => c.first },
   { name: "we define", weight: STRONG_CUE, test: (c) => /\bwe\s+define\b/i.test(c.before) },
@@ -30,11 +35,11 @@ export const DEFINITION_RULES: Rule[] = [
     test: (c) => endsWith("\\bdenoted?\\s+(by|as)").test(c.before) || /^\W*(is|are)?\s*denoted\s+(by|as)\b/i.test(c.after) },
   { name: "let … be", weight: STRONG_CUE, test: (c) => /\blet\b[^.]*$/i.test(c.before) && /^\W*be\b/i.test(c.after) },
   { name: "we call", weight: STRONG_CUE, test: (c) => /\bwe\s+call\b/i.test(c.before) },
-  { name: "called", weight: STRONG_CUE, test: (c) => endsWith("\\b(called|termed|known\\s+as)").test(c.before) },
+  { name: "called", weight: STRONG_CUE, test: (c) => endsWith("\\b(called|termed|known\\s+as)").test(c.before) || NAMED_AGAIN.test(c.after) },
   { name: "refer to … as", weight: STRONG_CUE, test: (c) => endsWith("\\brefer(red)?\\s+to\\b.*\\bas").test(c.before) },
   { name: "abbreviation follows", weight: STRONG_CUE, test: (c) => ABBREVIATION.test(c.after) },
   { name: "the abbreviation itself", weight: STRONG_CUE, test: (c) => /\(\s*$/.test(c.before) && /^\s*\)/.test(c.after) },
-  { name: "colon follows", weight: STRONG_CUE, test: (c) => /^["”’']?\s*:/.test(c.after) },
+  { name: "colon follows", weight: STRONG_CUE, test: (c) => /^["”’']?\s*:/.test(c.after) && /[a-z]/.test(c.after) },
   { name: "i.e.", weight: WEAK_CUE, test: (c) => /\bi\.\s?e\.|\bthat is,/i.test(`${c.before} ${c.after}`) },
 ];
 
