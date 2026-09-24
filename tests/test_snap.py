@@ -3,7 +3,7 @@ import pytest
 from conftest import FIXTURES
 
 from paperboard.anchoring import build_index, global_position
-from paperboard.geometry import contains_point, midpoint
+from paperboard.geometry import contains_point, midpoint, union
 from paperboard.snap import SNAP_THRESHOLD, select
 from paperboard.source_model import PageRect
 from paperboard.words import line_rects_under, text_under
@@ -190,3 +190,88 @@ def test_a_selection_carries_the_blocks_a_cut_of_it_would_show(resnet):
     result = select(doc, pdf, [PageRect(page=2, rect=region.rect)], snap=False)
     assert [(b.kind, b.page, b.rect) for b in result.blocks] == [("text", 2, region.rect)]
     assert result.blocks[0].text == text_under(pdf[2], region.rect)
+
+
+# -- the forgiving rectangle (D3, addendum 5.3) --------------------------------
+
+
+@pytest.fixture(scope="module")
+def adam(extracted):
+    pdf = pymupdf.open(FIXTURES["adam"])
+    yield extracted["adam"], pdf
+    pdf.close()
+
+
+def _covering(region, coverage: float, margin: float = 12.0) -> PageRect:
+    """A loose rectangle that covers the top `coverage` of a region's area and runs
+    `margin` points past it on the other three sides."""
+    x0, y0, x1, y1 = region.rect
+    return PageRect(page=region.page, rect=(x0 - margin, y0 - margin, x1 + margin, y0 + (y1 - y0) * coverage))
+
+
+def _figure_of(doc, region):
+    return next(f for f in doc.figures if f.rect.page == region.page and contains_point(f.rect.rect, *midpoint(region.rect)))
+
+
+def test_a_rectangle_over_most_of_a_picture_snaps_to_it_and_its_caption(resnet):
+    doc, pdf = resnet
+    picture = next(r for r in doc.regions if r.page == 3 and r.label == "picture")
+    caption = _figure_of(doc, picture).caption_rect
+    result = select(doc, pdf, [_covering(picture, 0.7)], snap=True, mode="area")
+    snapped = PageRect(page=3, rect=union(picture.rect, caption.rect))
+    assert result.rects == [snapped] and result.region_label == "picture"
+    assert result.highlight.rects == [snapped] and result.chunk.rects == [snapped]
+    assert [(b.kind, b.page, b.rect, b.label) for b in result.blocks] == [("clip", 3, snapped.rect, "picture")]
+    assert 0 < len(result.highlight.quote.exact) <= 256
+
+
+def test_a_rectangle_over_half_a_picture_stays_exact(resnet):
+    doc, pdf = resnet
+    picture = next(r for r in doc.regions if r.page == 3 and r.label == "picture")
+    drag = _covering(picture, 0.5)
+    result = select(doc, pdf, [drag], snap=True, mode="area")
+    assert result.rects == [drag] and result.highlight.rects == [drag]
+    assert result.region_label is None
+    assert [(b.kind, b.rect, b.label) for b in result.blocks] == [("clip", drag.rect, None)]
+
+
+def test_a_rectangle_over_most_of_a_formula_snaps_to_the_formula_alone(adam):
+    doc, pdf = adam
+    formula = next(r for r in doc.regions if r.page == 2 and r.label == "formula")
+    result = select(doc, pdf, [_covering(formula, 0.7, margin=3.0)], snap=True, mode="area")
+    assert result.rects == [PageRect(page=2, rect=formula.rect)]
+    assert [(b.kind, b.label) for b in result.blocks] == [("clip", "formula")]
+
+
+def test_a_rectangle_over_half_a_formula_stays_exact(adam):
+    doc, pdf = adam
+    formula = next(r for r in doc.regions if r.page == 2 and r.label == "formula")
+    drag = _covering(formula, 0.5, margin=3.0)
+    result = select(doc, pdf, [drag], snap=True, mode="area")
+    assert result.rects == [drag] and result.blocks[0].label is None
+
+
+def test_snap_false_keeps_the_exact_rectangle_over_a_whole_picture(resnet):
+    doc, pdf = resnet
+    picture = next(r for r in doc.regions if r.page == 3 and r.label == "picture")
+    drag = _covering(picture, 0.9)
+    result = select(doc, pdf, [drag], snap=False, mode="area")
+    assert result.rects == [drag] and result.region_label is None
+
+
+def test_a_rectangle_around_two_figures_snaps_to_the_smaller(resnet):
+    doc, pdf = resnet
+    table, picture = (next(r for r in doc.regions if r.page == 4 and r.label == label) for label in ("table", "picture"))
+    drag = PageRect(page=4, rect=union(table.rect, picture.rect))
+    result = select(doc, pdf, [drag], snap=True, mode="area")
+    smaller = min((table, picture), key=lambda r: (r.rect[2] - r.rect[0]) * (r.rect[3] - r.rect[1]))
+    caption = _figure_of(doc, smaller).caption_rect
+    assert result.rects == [PageRect(page=4, rect=union(smaller.rect, caption.rect))]
+    assert result.region_label == smaller.label
+
+
+def test_an_area_selection_is_exactly_one_rectangle(resnet):
+    doc, pdf = resnet
+    picture = next(r for r in doc.regions if r.page == 3 and r.label == "picture")
+    with pytest.raises(ValueError):
+        select(doc, pdf, [_covering(picture, 0.7), _covering(picture, 0.7)], snap=True, mode="area")
