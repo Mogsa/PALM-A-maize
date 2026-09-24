@@ -4,12 +4,13 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { api } from "../api/client";
 import type { XY } from "../model/reparent";
-import type { Board, PageRect, SelectionMode, Source } from "../model/types";
+import type { Board, PageRect, PaperScroll, SelectionMode, Source } from "../model/types";
 import type { PaperHit } from "./hit";
 import { destinationTop } from "./links";
 import type { JumpTarget } from "./margin";
 import { PageOverlay } from "./PageOverlay";
 import { bandBox } from "./rectangleDrag";
+import { usePaperScroll } from "./scroll";
 import { useFindMark, type FindMark } from "./useFindMark";
 import { usePaperMouse } from "./usePaperMouse";
 
@@ -32,16 +33,19 @@ type Props = {
   onJump: (target: JumpTarget) => void;
   onOpenNote: (noteId: string) => void;
   findMark: FindMark | null;                    // a find hit to mark in its page's text layer
+  paperScroll: PaperScroll | null | undefined;  // where the paper was left: restored once on load (D5)
+  onScrollSettled: (scroll: PaperScroll | null) => void;
 };
 
 const bandStyle = (a: XY, b: XY) => { const r = bandBox(a, b); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
 
 export function PaperView(props: Props) {
-  const { paperId, source, board, focus, onFocusHandled, onOutlineClick, connecting, onJump, onOpenNote, findMark } = props;
+  const { paperId, source, board, focus, onFocusHandled, onOutlineClick, connecting, onJump, onOpenNote, findMark, paperScroll, onScrollSettled } = props;
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const mouse = usePaperMouse(container, source, board, props);
   const findProps = useFindMark(container, findMark);
+  const onScroll = usePaperScroll(container, { ready, source, pageWidthPx: PAGE_WIDTH_PX, paperScroll, onScrollSettled });
 
   const scrollToPoint = useCallback((page: number, y: number) => {
     const el = container.current?.querySelector<HTMLElement>(`.react-pdf__Page[data-page-number="${page + 1}"]`);
@@ -62,11 +66,12 @@ export function PaperView(props: Props) {
     scrollToPoint(pageIndex, destinationTop(dest, source.pages[pageIndex].height) ?? 0), [scrollToPoint, source]);
 
   return (
-    <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseDown={mouse.onMouseDown} onMouseUp={mouse.onMouseUp}>
+    <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseDown={mouse.onMouseDown} onMouseUp={mouse.onMouseUp}
+         onScroll={onScroll}>
       <Document file={api.pdfUrl(paperId)} onLoadSuccess={() => setReady(true)} loading={<div className="loading">Loading the paper</div>}
                 onItemClick={followLink} externalLinkTarget="_blank" externalLinkRel="noopener noreferrer">
         {source.pages.map((p) => (
-          <div key={p.index} className="page-wrap">
+          <div key={p.index} className="page-wrap" style={{ height: p.height * (PAGE_WIDTH_PX / p.width) }}>
             <Page pageIndex={p.index} width={PAGE_WIDTH_PX} renderAnnotationLayer renderTextLayer {...findProps(p.index)} />
             <PageOverlay page={p.index} scale={PAGE_WIDTH_PX / p.width} board={board} source={source}
                          onOutlineClick={onOutlineClick} onJump={onJump} onOpenNote={onOpenNote} />

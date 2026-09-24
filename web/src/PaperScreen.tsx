@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { api } from "./api/client";
 import { newId } from "./model/ids";
 import { sectionLabel } from "./model/sections";
-import type { PageRect, Section, SelectionMode } from "./model/types";
+import type { PageRect, PaperScroll, Section, SelectionMode } from "./model/types";
 import { makeCut } from "./paper/cut";
 import { FindPanel, useFind } from "./paper/FindPanel";
 import type { PaperHit } from "./paper/hit";
@@ -11,6 +11,7 @@ import { MarkPopover } from "./paper/MarkPopover";
 import { PaperView } from "./paper/PaperView";
 import { SelectionPopover } from "./paper/SelectionPopover";
 import { previewText } from "./paper/preview";
+import { samePaperScroll } from "./paper/scroll";
 import { useConnect } from "./paper/useConnect";
 import { useBoard } from "./state/BoardProvider";
 
@@ -66,6 +67,9 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
     setPending({ rects, at, exact, mode, text, preview: previewText(text) });
   };
   const onJump = (target: JumpTarget) => ("paper" in target ? setJump({ ...target.paper }) : onOpenOnBoard(target.board));
+  const onScrollSettled = (scroll: PaperScroll | null) => {
+    if (!samePaperScroll(scroll, state.board.paper_scroll)) dispatch({ type: "setPaperScroll", scroll });
+  };
   const onJumpHandled = useCallback(() => { setJump(null); onFocusHandled(); }, [onFocusHandled]);
 
   const existingPiece = (section: Section | undefined) =>
@@ -84,7 +88,8 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
     <>
       <PaperView paperId={paperId} source={source} board={state.board} focus={jump ?? focus} onFocusHandled={onJumpHandled}
                  onSelect={onSelect} onClickPaper={onClickPaper} onOutlineClick={onOpenOnBoard}
-                 connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark} />
+                 connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark}
+                 paperScroll={state.board.paper_scroll} onScrollSettled={onScrollSettled} />
       {pending && selectionPopover(pending)}
       {find.query && <FindPanel query={find.query} onPick={find.pick} onClose={find.close} />}
       {markOpen && openMark && (

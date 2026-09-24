@@ -1,5 +1,5 @@
 /* the paper view: the PDF as printed, on a desk, with the reader's marks laid over it */
-.paper { overflow: auto; height: 100%; background: var(--bg-paper); padding: 24px 0 48px; }
+.paper { position: relative; overflow: auto; height: 100%; background: var(--bg-paper); padding: 24px 0 48px; }
 .page-wrap { position: relative; width: var(--page-width); margin: 0 auto 20px; background: var(--surface); box-shadow: var(--shadow-page); border-radius: 2px; }
 .page-wrap .react-pdf__Page__textContent ::selection { background: var(--cut-tint); }
 
