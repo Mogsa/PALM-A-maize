@@ -86,7 +86,7 @@ def _occurrence_under(page: pymupdf.Page, page_index: PageIndex, needle: str, re
     return first
 
 
-def _selector(page: pymupdf.Page, page_index: PageIndex, exact: str, rect: Rect) -> tuple[QuoteSelector, int]:
+def quote_under(page: pymupdf.Page, page_index: PageIndex, exact: str, rect: Rect) -> tuple[QuoteSelector, int]:
     """Prefix and suffix from the page's own text around the occurrence under
     `rect`, matched with whitespace stripped so line breaks do not defeat it."""
     needle, _ = strip_whitespace(exact)
@@ -109,8 +109,8 @@ def _chunk_anchor(pdf: pymupdf.Document, index: list[PageIndex], rects: list[Pag
     first characters of the whole selection spilled past a heading-only first
     rect into the next one (measured: Attention 3.1's extent)."""
     first, last = rects[0], rects[-1]
-    start, start_at = _selector(pdf[first.page], index[first.page], pieces[0].strip()[:END_CHARS], first.rect)
-    end, _ = _selector(pdf[last.page], index[last.page], pieces[-1].strip()[-END_CHARS:], last.rect)
+    start, start_at = quote_under(pdf[first.page], index[first.page], pieces[0].strip()[:END_CHARS], first.rect)
+    end, _ = quote_under(pdf[last.page], index[last.page], pieces[-1].strip()[-END_CHARS:], last.rect)
     return ChunkAnchor(rects=rects, start=start, end=end, position=global_position(index, first.page, start_at))
 
 
@@ -131,8 +131,8 @@ def _select_text(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRec
     # The highlight's quote is the whole selection. Its prefix and position come
     # from where its first run starts, its suffix from where its last run ends, so
     # a quote that crosses columns or pages is placed from both ends (D1).
-    head, head_at = _selector(pdf[first.page], index[first.page], pieces[0].strip(), first.rect)
-    tail, _ = _selector(pdf[last.page], index[last.page], pieces[-1].strip(), last.rect)
+    head, head_at = quote_under(pdf[first.page], index[first.page], pieces[0].strip(), first.rect)
+    tail, _ = quote_under(pdf[last.page], index[last.page], pieces[-1].strip(), last.rect)
     quote = QuoteSelector(exact=text.strip(), prefix=head.prefix, suffix=tail.suffix)
     lines = [PageRect(page=r.page, rect=line) for r in rects for line in line_rects_under(pdf[r.page], r.rect)]
     highlight = HighlightAnchor(rects=lines or rects, quote=quote, position=global_position(index, first.page, head_at))
@@ -173,7 +173,7 @@ def _select_area(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRec
     target, label = _snap_area(doc, rects[0]) if snap else (rects[0], None)
     text = text_under(pdf[target.page], target.rect)
     index = build_index(doc)
-    quote, at = _selector(pdf[target.page], index[target.page], text.strip()[:QUOTE_CHARS], target.rect)
+    quote, at = quote_under(pdf[target.page], index[target.page], text.strip()[:QUOTE_CHARS], target.rect)
     highlight = HighlightAnchor(rects=[target], quote=quote, position=global_position(index, target.page, at))
     return Selection(text=text, rects=[target], region_label=label, highlight=highlight,
                      chunk=_chunk_anchor(pdf, index, [target], [text]),
