@@ -15,7 +15,7 @@ from paperboard.blocks import chunk_blocks
 from paperboard.board_model import CONTEXT_CHARS, Block, ChunkAnchor, HighlightAnchor, QuoteSelector
 from paperboard.geometry import Rect, area, contains_point, intersection, midpoint, union
 from paperboard.source_model import PageRect, SourceDocument
-from paperboard.words import text_under
+from paperboard.words import line_rects_under, text_under
 
 SNAP_THRESHOLD = 0.6   # a rough drag covering this share of a region's characters takes the region
 END_CHARS = 64         # a chunk's start and end selectors quote this many characters
@@ -112,10 +112,13 @@ def select(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRect], sn
     position = global_position(index, first.page, start_at)
     chunk = ChunkAnchor(rects=rects, start=start, end=end, position=position)
 
-    # per-line: task 2A -- one rect per run, not per line, and the quote is
-    # looked up on the first run's page only, so a quote that crosses a page has
-    # no prefix, suffix or position.
-    quote, at = _selector(pdf[first.page], index[first.page], text.strip(), first.rect)
-    highlight = HighlightAnchor(rects=rects, quote=quote, position=global_position(index, first.page, at))
+    # The highlight's quote is the whole selection. Its prefix and position come
+    # from where its first run starts, its suffix from where its last run ends, so
+    # a quote that crosses columns or pages is placed from both ends (D1).
+    head, head_at = _selector(pdf[first.page], index[first.page], pieces[0].strip(), first.rect)
+    tail, _ = _selector(pdf[last.page], index[last.page], pieces[-1].strip(), last.rect)
+    quote = QuoteSelector(exact=text.strip(), prefix=head.prefix, suffix=tail.suffix)
+    lines = [PageRect(page=r.page, rect=line) for r in rects for line in line_rects_under(pdf[r.page], r.rect)]
+    highlight = HighlightAnchor(rects=lines or rects, quote=quote, position=global_position(index, first.page, head_at))
     return Selection(text=text, rects=rects, region_label=label, highlight=highlight, chunk=chunk,
                      blocks=chunk_blocks(doc, pdf, rects))

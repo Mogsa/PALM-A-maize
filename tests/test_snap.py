@@ -4,7 +4,9 @@ from conftest import FIXTURES
 
 from paperboard.snap import SNAP_THRESHOLD, select
 from paperboard.source_model import PageRect
-from paperboard.words import text_under
+from paperboard.anchoring import build_index, global_position
+from paperboard.geometry import contains_point, midpoint
+from paperboard.words import line_rects_under, text_under
 
 
 @pytest.fixture(scope="module")
@@ -65,7 +67,7 @@ def test_selection_carries_both_anchor_shapes(resnet):
     doc, pdf = resnet
     region = _first_text_region(doc, 2)
     result = select(doc, pdf, [_slice(region, 0.85)], snap=True)
-    assert result.highlight.rects == [PageRect(page=2, rect=region.rect)]
+    assert result.highlight.rects == [PageRect(page=2, rect=r) for r in line_rects_under(pdf[2], region.rect)]
     assert result.highlight.quote.exact == result.text.strip()
     assert len(result.highlight.quote.prefix) <= 32 and len(result.highlight.quote.suffix) <= 32
     assert result.chunk.rects == result.rects
@@ -78,9 +80,28 @@ def test_multi_page_selection_has_a_highlight_across_its_pages_and_does_not_snap
     a = _first_text_region(doc, 2)
     b = _first_text_region(doc, 3)
     result = select(doc, pdf, [_slice(a, 0.9), _slice(b, 0.9)], snap=True)
-    assert result.highlight.rects == result.rects
     assert [r.page for r in result.rects] == [2, 3]
     assert result.rects[0] == _slice(a, 0.9)
+    lines = [PageRect(page=r.page, rect=line) for r in result.rects for line in line_rects_under(pdf[r.page], r.rect)]
+    assert result.highlight.rects == lines
+
+
+def test_a_highlight_across_a_page_break_is_quoted_from_both_pages(resnet):
+    """Per-line (D1): the quote's prefix comes from the page it starts on, its suffix
+    from the page it ends on, and `position` points at its start on the first page."""
+    doc, pdf = resnet
+    a, b = _text_regions(doc, 2)[-1], _first_text_region(doc, 3)
+    result = select(doc, pdf, [_slice(a, 0.9), _slice(b, 0.9)], snap=False)
+    quote = result.highlight.quote
+    first_words = text_under(pdf[2], _slice(a, 0.9).rect).split()[:4]
+    last_words = text_under(pdf[3], _slice(b, 0.9).rect).split()[-4:]
+    assert quote.exact.split()[:4] == first_words and quote.exact.split()[-4:] == last_words
+    assert quote.prefix and quote.suffix
+    assert " ".join(doc.page_text[3].text.split()).count(" ".join(quote.suffix.split())) >= 1
+    index = build_index(doc)
+    at = result.highlight.position - global_position(index, 2, 0)
+    assert 0 <= at < len(doc.page_text[2].text)
+    assert "".join(doc.page_text[2].text[at:].split()).startswith("".join(first_words))
 
 
 def test_a_page_outside_the_document_is_rejected(resnet):
@@ -135,15 +156,32 @@ def test_snap_never_shrinks_a_drag_that_runs_into_the_next_paragraph(resnet):
     assert text_under(pdf[2], second.rect).split("\n")[0] in result.text
 
 
-def test_a_selection_of_several_runs_still_gives_a_highlight_one_rect_per_run(resnet):
-    """Schema 2: `highlight` is never null. One rect per run until highlights are
-    anchored per line (task 2A)."""
+def test_a_selection_across_columns_gives_a_highlight_one_rect_per_line(resnet):
+    """Schema 2: `highlight` is never null, and holds one rect per line of every run,
+    each inside its own column (D1)."""
     doc, pdf = resnet
-    left, right = _text_regions(doc, 2)[0], next(r for r in _text_regions(doc, 2) if r.rect[0] > 300)
+    left, right = _text_regions(doc, 2)[1], next(r for r in _text_regions(doc, 2) if r.rect[0] > 300)
     runs = [PageRect(page=2, rect=left.rect), PageRect(page=2, rect=right.rect)]
     result = select(doc, pdf, runs, snap=True)
-    assert result.highlight.rects == runs
-    assert result.highlight.quote.exact
+    lefts = line_rects_under(pdf[2], left.rect)
+    rights = line_rects_under(pdf[2], right.rect)
+    assert [r.rect for r in result.highlight.rects] == lefts + rights
+    assert all(contains_point(left.rect, *midpoint(r)) for r in lefts)
+    assert all(contains_point(right.rect, *midpoint(r)) for r in rights)
+    assert result.highlight.quote.exact and result.highlight.quote.prefix
+
+
+def test_a_highlight_paints_only_the_words_selected_on_its_first_line(resnet):
+    """A drag from halfway along a line: the first line rect starts where the words do."""
+    doc, pdf = resnet
+    region = _text_regions(doc, 2)[2]
+    x0, y0, x1, y1 = region.rect
+    half = (x0 + x1) / 2
+    first_line = line_rects_under(pdf[2], region.rect)[0]
+    drag = [PageRect(page=2, rect=(half, y0, x1, first_line[3])), PageRect(page=2, rect=(x0, first_line[3], x1, y1))]
+    rects = select(doc, pdf, drag, snap=False).highlight.rects
+    assert rects[0].rect[0] >= half - 30
+    assert rects[1].rect[0] == pytest.approx(x0, abs=2)
 
 
 def test_a_selection_carries_the_blocks_a_cut_of_it_would_show(resnet):

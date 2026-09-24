@@ -79,7 +79,8 @@ def test_text_returns_a_selection_with_anchors(client, resnet_id):
     assert response.status_code == 200, response.text
     selection = response.json()
     assert selection["rects"] == [{"page": 2, "rect": region["rect"]}]
-    assert selection["highlight"]["rects"] == selection["rects"]
+    lines = selection["highlight"]["rects"]   # one per line (D1)
+    assert len(lines) > 1 and all(line["page"] == 2 for line in lines)
     assert selection["highlight"]["quote"]["exact"]
     assert selection["chunk"]["start"]["exact"]
     assert [(b["kind"], b["page"]) for b in selection["blocks"]] == [("text", 2)]
