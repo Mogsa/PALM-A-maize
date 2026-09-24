@@ -4,6 +4,7 @@ import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
 import { ExportDialog } from "./panels/ExportDialog";
 import { QuestionList } from "./panels/QuestionList";
+import { TemplateEditor } from "./panels/TemplateEditor";
 import { useUndoKeys } from "./panels/undoKeys";
 import { PaperScreen } from "./PaperScreen";
 import { BoardProvider, useBoard } from "./state/BoardProvider";
@@ -32,13 +33,13 @@ function PanelButton({ panel, open, label, onToggle }: { panel: Panel; open: Pan
   return <button type="button" className="panel-button" aria-pressed={open === panel} onClick={() => onToggle(panel)}>{label}</button>;
 }
 
-/** The side panel's contents. 3C.2 to 3C.5 each add one case; until then a panel shows nothing. */
+/** The side panel's contents: one panel at a time, beside whichever view is open. */
 function SidePanel({ panel, onQuestion }: { panel: Panel; onQuestion: (question: Question) => void }) {
   switch (panel) {
     case "questions": return <QuestionList onPick={onQuestion} />;
     case "export": return <ExportDialog />;
     case "tags": return <TagManager />;
-    default: return null;
+    case "template": return <TemplateEditor />;
   }
 }
 
@@ -76,6 +77,7 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
           <PanelButton panel="questions" open={panel} label="Questions" onToggle={toggle} />
           <PanelButton panel="export" open={panel} label="Export" onToggle={toggle} />
           <PanelButton panel="tags" open={panel} label="Tags" onToggle={toggle} />
+          <PanelButton panel="template" open={panel} label="Template" onToggle={toggle} />
         </div>
         <Notice />
       </div>

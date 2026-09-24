@@ -83,3 +83,11 @@ button { cursor: pointer; }
 .export-dialog select, .export-dialog button { padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); background: var(--surface); }
 .export-result code { font-family: var(--font-mono); font-size: var(--text-ui-small); word-break: break-all; }
 .export-result pre { max-height: 50vh; overflow: auto; white-space: pre-wrap; font-family: var(--font-read); font-size: 12.5px; line-height: var(--leading-read); background: var(--surface-muted); padding: 8px; border-radius: var(--radius-small); }
+
+/* the template editor (side panel) */
+.template-editor ol { margin: 0 0 8px; padding-left: 18px; display: flex; flex-direction: column; gap: 10px; }
+.template-editor li { display: flex; flex-direction: column; gap: 4px; }
+.template-editor input, .template-editor textarea { padding: 4px 6px; border: 1px solid var(--border); border-radius: var(--radius-small); }
+.template-editor textarea { min-height: 44px; resize: vertical; font-family: var(--font-read); }
+.template-editor .row-tools { display: flex; gap: 4px; }
+.template-editor .row-tools button { padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); }
