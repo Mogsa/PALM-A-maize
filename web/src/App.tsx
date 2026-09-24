@@ -5,6 +5,8 @@ import type { PageRect, PaperSummary, View } from "./model/types";
 import { useUndoKeys } from "./panels/undoKeys";
 import { PaperScreen } from "./PaperScreen";
 import { BoardProvider, useBoard } from "./state/BoardProvider";
+import { FilterBar } from "./tags/FilterBar";
+import { TagManager } from "./tags/TagManager";
 import "./styles.css";
 
 export type Panel = "questions" | "export" | "tags" | "template";
@@ -31,6 +33,7 @@ function PanelButton({ panel, open, label, onToggle }: { panel: Panel; open: Pan
 /** The side panel's contents. 3C.2 to 3C.5 each add one case; until then a panel shows nothing. */
 function SidePanel({ panel }: { panel: Panel }) {
   switch (panel) {
+    case "tags": return <TagManager />;
     default: return null;
   }
 }
@@ -59,12 +62,15 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
           <button aria-pressed={view === "paper"} onClick={() => show("paper")}>Paper</button>
           <button aria-pressed={view === "board"} onClick={() => show("board")}>Board</button>
         </div>
-        <div className="panel-buttons">{/* 3C.2 to 3C.5 add a PanelButton each, calling toggle */}</div>
+        <div className="panel-buttons">
+          <PanelButton panel="tags" open={panel} label="Tags" onToggle={toggle} />
+        </div>
         <Notice />
       </div>
       <div className="subbar">
         <input className="goal" aria-label="Reading goal" placeholder="Why am I reading this?" value={state.board.goal}
                onChange={(e) => dispatch({ type: "setGoal", goal: e.target.value })} />
+        <FilterBar />
       </div>
       <div className="workspace">
         {/* Both views stay mounted and the inactive one is only hidden: switching never moves anything (SPEC 4). */}

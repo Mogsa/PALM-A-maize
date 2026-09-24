@@ -59,3 +59,13 @@ button { cursor: pointer; }
 .load-failed { gap: 12px; justify-items: center; text-align: center; }
 .load-failed p { margin: 0; color: var(--lost); }
 .load-failed button { padding: 6px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-small); background: var(--surface); font-weight: 500; }
+
+/* the tag filter (subbar) and the tag manager (side panel) */
+.filter-bar { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.filter-bar .chip { cursor: pointer; opacity: 0.55; }
+.filter-bar .chip.on { opacity: 1; font-weight: 600; }
+.filter-bar .clear { color: var(--ink-muted); font-size: var(--text-ui-small); }
+.tag-manager ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.tag-manager li { display: flex; align-items: center; gap: 6px; }
+.tag-manager input[type="text"] { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--radius-small); }
+.tag-manager input[type="color"] { width: 26px; height: 22px; padding: 0; border: 0; background: none; }
