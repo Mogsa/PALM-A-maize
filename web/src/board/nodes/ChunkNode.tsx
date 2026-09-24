@@ -4,6 +4,7 @@ import { markDimmed } from "../../model/filter";
 import { highlightsIn } from "../../model/geometry";
 import { notesConnectedTo } from "../../model/links";
 import type { ChunkNode as ChunkNodeType } from "../../model/types";
+import { PeekButton, PeekText, usePeek } from "../../paper/PeekLines";
 import { useBoard } from "../../state/BoardProvider";
 import { inHandle, outHandle } from "../handles";
 import { HEAD_MIDDLE_PX, useMarkOffsets } from "../markOffsets";
@@ -24,7 +25,10 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const shown = paintedIds(painted).size;
   const notes = notesConnectedTo(state.board, [id, ...marks.map((m) => m.id)]).length;
   const [bodyRef, overflowing] = useOverflow<HTMLDivElement>();
-  const offsets = useMarkOffsets(bodyRef, id, data.collapsed, painted);
+  const peek = usePeek(data.region.rects);
+  // The peek's lines move the marks down the body, so their handles follow them.
+  const bodyContent = useMemo(() => ({ painted, open: peek.open, lines: peek.lines }), [painted, peek.open, peek.lines]);
+  const offsets = useMarkOffsets(bodyRef, id, data.collapsed, bodyContent);
   const dimmed = (highlightId: string) => { const h = marks.find((m) => m.id === highlightId); return h ? markDimmed(active, h) : false; };
   const title = reflow(data.region.start.exact, words).slice(0, 80);
   const page = data.region.rects[0].page + 1;
@@ -38,9 +42,12 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
         <span className="title">{title}</span>
         <Counts marks={shown} unplaced={marks.length - shown} notes={notes} />
         <NodeTags id={id} tags={data.tags} />
+        {!data.collapsed && <PeekButton peek={peek} />}
         <button className="quiet open-source" data-testid="open-source" title="Open in paper" aria-label="Open in paper">↗</button>
       </div>
-      {!data.collapsed && <div className="node-body" ref={bodyRef}><ChunkBody painted={painted} dimmed={dimmed} /></div>}
+      {!data.collapsed && <div className="node-body" ref={bodyRef}>
+        <PeekText peek={peek} side="before" /><ChunkBody painted={painted} dimmed={dimmed} /><PeekText peek={peek} side="after" />
+      </div>}
       {/* Every mark inside keeps a handle, painted or not, since an edge may end on it. */}
       {marks.map((h) => (data.collapsed
         ? <Handle key={h.id} id={h.id} type="source" position={Position.Top} title={h.anchor.quote.exact.slice(0, 60)} />

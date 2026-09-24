@@ -20,7 +20,7 @@ const sideways = (region: { rect: Rect }, x: number) => Math.max(region.rect[0] 
 
 /** The column a band starts in: the region the band crosses nearest the destination's left, widened to that left;
  *  else the half of the page holding it. */
-function column(left: number, top: number, bottom: number, page: PageInfo, regions: LayoutRegion[]): [number, number] {
+export function column(left: number, top: number, bottom: number, page: PageInfo, regions: LayoutRegion[]): [number, number] {
   const near = regions
     .filter((r) => r.page === page.index && r.rect[1] < bottom && r.rect[3] > top && sideways(r, left) <= COLUMN_REACH_PT)
     .sort((a, b) => sideways(a, left) - sideways(b, left))[0];

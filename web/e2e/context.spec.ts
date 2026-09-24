@@ -115,3 +115,24 @@ test("hovering a term shows the reader's definition first, on a card and on the 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
   await expect(card).toContainText("Your definition");
 });
+
+test("more context on a card shows the paper's lines around it, and collapses again, changing nothing (D28)", async ({ page, request }) => {
+  await save(request, { nodes: [chunk(await sectionData(request, "3.1. Residual Learning"))] });
+  const version = (await boardOf(request)).version;
+  await open(page);
+  const body = cardOf(page).locator(".node-body");
+  const before = await body.textContent();
+  await cardOf(page).getByRole("button", { name: "More context" }).click();
+  // Just above §3.1's text is its own heading; just below it, the start of §3.2.
+  await expect(body.locator(".peek.before")).toContainText("Residual Learning");
+  await expect(body.locator(".peek.after")).not.toBeEmpty();
+  await cardOf(page).getByRole("button", { name: "Less context" }).click();
+  await expect(body.locator(".peek")).toHaveCount(0);
+  expect(await body.textContent()).toBe(before);
+  await cardOf(page).getByRole("button", { name: "More context" }).click();
+  await expect(body.locator(".peek.before")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(body.locator(".peek")).toHaveCount(0);
+  await page.waitForTimeout(1_000);   // twice the board's save debounce
+  expect((await boardOf(request)).version).toBe(version);
+});
