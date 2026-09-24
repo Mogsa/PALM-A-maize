@@ -1,9 +1,12 @@
 # Addendum: shapes, contracts, and rules
 
-15 September 2026, revised 23 September 2026 for board schema 2. Companion to SPEC.md.
-Grounded in three verification passes over the libraries SPEC.md section 8 names. The
-schema 2 revision writes in the nineteen decisions of SPEC.md's fifth revision; section 12
-lists them and every **[CHOICE]** they added.
+15 September 2026, revised 23 September 2026 for board schema 2, and again the same day
+for D20 to D23. Companion to SPEC.md. Grounded in three verification passes over the
+libraries SPEC.md section 8 names. The schema 2 revision writes in the nineteen decisions
+of SPEC.md's fifth revision. The later revision writes in the four of its sixth, with no
+change to the board's schema: live text on the board (D20, D21, section 4.10), notes in
+Markdown with maths (D22) and sketch notes (D23, both section 4.4). Section 12 lists them
+all and every **[CHOICE]** they added.
 
 SPEC.md decides *what* the tool is and *why*. It does not say what shape anything is.
 That is fine for a human building it alone and fatal for agents building it in parallel,
@@ -364,8 +367,9 @@ SPEC.md section 4 puts highlights on the paper and chunks on the board. In the f
   - `page-header` and `page-footer` regions never contribute: they are furniture, not
     content.
 
-  The server computes blocks, in `POST /text` and in migration (section 4.6), and the
-  chunk stores them so the board renders without the source. Re-anchoring that moves a
+  The server computes blocks, in `POST /text`, in the chunk routes (section 4.10) and in
+  migration (section 4.6), and the chunk stores them so the board renders without the
+  source. Re-anchoring that moves a
   chunk recomputes them.
 - **Connections.** An edge is stored as `{id, from, to, data: {tags}}`. `from` and `to`
   are each a node id or a highlight id. The order is the order it was drawn in and carries
@@ -542,6 +546,32 @@ that each head can attend to a different *kind* of relationship.
 and an orphaned note is detectable by a directory listing. You would prefer content-named
 files if you wanted the notes directory to be independently browsable and meaningful.
 
+**Rendering** (D22). A note is stored and edited as plain Markdown text, exactly as
+before, and shown rendered when it is not being edited: Markdown by `react-markdown`, maths
+between `$` or `$$` by `remark-math` and `rehype-katex` into KaTeX. All four are MIT and
+bundled with the client, so rendering needs no network. Links open in a new tab. Raw HTML
+in a note is never rendered, whatever it says. The file on disk does not change.
+
+**Sketches** (D23). A note may carry one freehand sketch, drawn with `perfect-freehand`
+(MIT). It is two files beside the note's Markdown:
+
+- `notes/<node-id>.sketch.json`, the strokes, kept so the sketch can be edited again;
+- `notes/<node-id>.svg`, the image, which the **server** builds from SVG path strings it
+  has validated. The browser sends path data, never markup.
+
+A sketch is not a new primitive: it belongs to its note, as the note's text does, and
+`board.json` does not mention it. `GET /notes/{node_id}` says whether a note has one
+(section 6). Export writes it above the note's text (section 6.1).
+
+**[CHOICE]** The server builds the SVG from validated path strings instead of storing SVG
+the browser sends. An SVG is a document that can carry script, and it is served back to
+the browser and written into export; building it on the server from path data alone means
+nothing a page wrote is ever served as markup. You would prefer storing the browser's SVG
+if sketches ever needed text, fills or styles that path strings cannot carry.
+
+**[CHOICE]** A note's rendered Markdown never includes raw HTML. You would allow a
+sanitised subset if pasted AI answers (section 6.2) often arrive as HTML tables.
+
 ### 4.5 Ids
 
 All ids are minted client-side as ULIDs, prefixed by kind: `n-` node, `e-` edge, `h-` highlight, `t-` tag.
@@ -611,6 +641,10 @@ None of this is persisted. It is client behaviour with consequences for the file
   collision, so tidied pieces do not land on it, and nothing inside a group moves. The
   layout starts from the current positions and runs a fixed number of ticks with no
   randomness, so the same board tidies the same way twice.
+
+- **Live text** (section 4.10). A highlight made on the board, a Split here, a Cut out, a
+  Join and a Group are one snapshot each. A note made by letting go of a line is one
+  snapshot with its connection.
 
 **[CHOICE]** Deleting a note node never deletes its `.md` file, so undo can restore the
 note with its text. An orphaned note file is harmless, and section 4.4 already allows for
@@ -695,6 +729,170 @@ an empty note with `origin: "reader"` inside the group, with the prompt as the e
 placeholder; the prompt is never written into the note. A slot is otherwise an ordinary
 group: rename, delete, add, nest. Putting a piece in a slot does not tag it, and a tag
 does not put anything in a slot.
+
+### 4.10 Live text on the board
+
+D20 and D21, and a note from a line (SPEC.md sections 4, 5.1 and 5.3). **No schema
+change**: a highlight made on
+the board is an entry in `highlights` like any other, and the pieces of a split, a cut or
+a join are ordinary chunk nodes. SPEC.md's principle for this section: *the paper's order
+lives inside a chunk; your order lives between chunks.*
+
+**Selecting.** An expanded chunk's text blocks are selectable. A drag that starts on a
+text block selects text and never moves the card (the block carries React Flow's `nodrag`
+class); a drag that starts anywhere else on the card moves it. When the mouse is released
+with a selection whose two ends lie in the text blocks of one chunk, a popover offers
+Highlight, Split here and Cut out. The browser describes the selection as a quote
+selector, and sends no geometry:
+
+- `exact` is the selected text as the card shows it, with the chunk's text blocks joined
+  by `\n` in order, trimmed of whitespace at either end;
+- `prefix` and `suffix` are up to 32 characters (`CONTEXT_CHARS`) of that same joined
+  text before and after it. Clip blocks contribute no text.
+
+The card's text is reflowed (single line breaks made spaces, some line-end hyphens
+joined), so a position on the card says nothing about the page. The words say everything.
+
+**Finding the words.** One rule, used by all three actions. The server looks for the
+quote with section 5.2's matcher: whitespace stripped, exact first, then approximate;
+candidates scored on quote, prefix, suffix and nearness to the chunk's `position` as
+there. It accepts a candidate only when the first and the last of its matched lines have
+their midpoints inside one of the chunk's `region.rects` on the same page, section 4.0's
+containment test. So the same words elsewhere in the paper are never taken. The quote is
+looked for on single pages first, then across each page break, as a highlight's quote is
+in section 5.2. When nothing is accepted the answer is `422` with code `quote_not_found`.
+The matched lines are the text's own printed lines, from its words, by section 5.1's
+whole-word rule.
+
+**Highlight** (D20). The highlight anchor is built from the matched lines exactly as
+`POST /text` builds one from the browser's `lines` (section 6): one rect per printed line,
+`quote.exact` the words on them, and `prefix`, `suffix` and `position` from the page text.
+A highlight made on a card and one made on the paper over the same words are therefore the
+same shape, and the card's reflowed text is never stored. The client mints the `h-` id and
+adds the highlight as one undo step. It shows on the card and on the paper at once, because
+both paint `highlights`.
+
+**Split here and Cut out** (D21). The server divides the chunk's `region.rects` at
+printed-line boundaries:
+
+- the *start boundary* is the top edge of the first matched line, in the region rect that
+  holds that line's midpoint;
+- for Cut out only, the *end boundary* is the bottom edge of the last matched line, in the
+  region rect that holds its midpoint.
+
+Each region rect is cut across at the boundaries inside it. The rects and parts of rects
+before the first boundary are the first piece, those between the boundaries the second,
+and the rest the last. A printed line belongs to the piece that holds most of its height,
+by the whole-word rule, so the line a selection starts on is the first line of the later
+piece, and a selection that starts or ends mid-line takes its whole first and last lines.
+Within a piece, a rect under which there is no block (section 4.0) is dropped, and a piece
+left with no rect is omitted. Each piece's `region` is built as a cut's (section 5.1:
+`start` and `end` quoted from the text under its first and last rects, `position` from its
+start, `state: "anchored"`), and its `blocks` by section 4.0. `POST /chunks/split` returns
+the pieces in paper order. Fewer than two means there is nothing to divide, and the client
+changes nothing.
+
+On the board, the first piece *is* the original node, shrunk: it keeps its `id`,
+`position`, `parentId`, `width`, `data.tags`, `data.collapsed` and `data.source_id`, and
+takes the new `region` and `blocks`, with no `height` and `user_sized: false` so it sizes
+to its text. Because it keeps the id, a connection whose end is the original node stays
+with the piece that begins where the original began, and no edge is rewritten; the tray's
+ghost row for its section still finds it. Each later piece is a new chunk, with an `n-` id
+the client mints, the same `parentId`, `width`, `data.tags` and `data.collapsed`, no
+`source_id`, placed to the right of the piece before it, `GAP` apart and top-aligned.
+Highlights are not touched: each shows on whichever piece now holds its lines. The whole
+change is one undo step.
+
+**Join** (D21). Offered when two or more chunks, and nothing else, are selected on the
+board, and they are neighbours in the paper. *Neighbours* is defined on words:
+
+- a chunk's words are the words under its `region.rects` by the whole-word rule;
+- the reading order of the paper's words is page, then the word's index in PyMuPDF's word
+  list for that page (`page_words`), the order `page_text` is built in and `position`
+  counts in;
+- a chunk *spans* from its first word to its last in that order;
+- sorted by their first words, each chunk and the next are neighbours when the next begins
+  at or before the last word of the one before, so they overlap, or when every word
+  strictly between the two lies in a region labelled `page-header`, `page-footer`,
+  `footnote` or `caption`. That is `FURNITURE`, the set section extents already leave out.
+
+A chunk with no words is no one's neighbour. The joined region is the chunks' `rects` in
+that order, collapsed by the column-run rule of section 3's `extent`, so joining the
+pieces of a split gives back the original rects and blocks exactly. Its `start`, `end` and
+`blocks` are built as for a cut. `POST /chunks/join` returns the joined piece and `order`,
+the indices of the requested regions in paper order, or `422` with code `not_contiguous`.
+
+On the board, the chunk first in paper order keeps its `id`, `position`, `parentId`,
+`width` and `data.collapsed`, and takes the joined `region` and `blocks`, no `height`,
+`user_sized: false`, the union of every joined chunk's tags in paper order, and the first
+`source_id` among them in paper order. The others are removed. Every edge with an end on
+one of them moves that end to the kept chunk; an edge that would then join the chunk to
+itself is dropped, and so is one that would repeat a connection already there. One undo
+step.
+
+The client asks `POST /chunks/join` each time the selection becomes two or more chunks, so
+whether Join is offered is decided by the one implementation; it keeps the answer for that
+selection and applies it on click. With two or more nodes selected and no Join on offer,
+Group is offered instead.
+
+**Group.** The existing primitive, made one gesture for a selection: a new unnamed group
+around the selected nodes, the smallest box holding them, `GROUP_PAD` larger on every side
+and `GROUP_HEAD` more at the top for its name. They are re-parented into it without moving
+on screen (section 4.2). When every one of them has the same parent, the group is made
+inside that parent; otherwise at the top level. A selected node inside another selected
+node moves with its ancestor and is not re-parented. One undo step.
+
+**A note from a line.** Dragging a new line from any handle, a mark's or a card's,
+and letting go where there is no card makes a note with `origin: "reader"`, its top-left
+corner at that point, at the top level, and a connection from what the line was drawn from
+to the note. Both are added as one undo step, and the note opens for writing. Letting go
+on a group is letting go on a card: nothing is made, as before.
+
+**[CHOICE]** A connection to the original node stays with the first piece, the one that
+begins where the original began, by that piece keeping the node's id. You would prefer
+copying the connection to every piece if a connection to a chunk usually means all of it,
+at the cost of lines the reader did not draw. Minting a new id for every piece and moving
+the connection gives the same result with more to rewrite, and loses the tray's ghost row.
+
+**[CHOICE]** The board's scissors cut between printed lines, not between words. A piece is
+still a rectangle per column run, and its blocks are paragraphs as the page has them. You
+would prefer word-exact pieces if readers often cut out a sentence that starts mid-line;
+the cost is a part of a line held as its own rect, shown as its own paragraph on the card,
+and up to three rects per column run.
+
+**[CHOICE]** The browser sends the selected words, not a position. The server finds them
+inside the chunk and re-reads the stored quote from the page's own words. You would prefer
+sending the text block and character offsets if the matcher ever takes the wrong one of two
+identical phrases inside one chunk, at the cost of mapping the card's reflowed text back to
+the page's words in the browser.
+
+**[CHOICE]** No forgiving snap on the board (section 5.3). The reader has already chosen
+the region, and is selecting inside it on purpose. You would prefer the snap if rough
+selections on cards turn out to be common.
+
+**[CHOICE]** The pieces of a split sit side by side, left to right in paper order, rather
+than stacked. A card's height is known only once it has rendered, and side by side never
+puts one piece on top of another. You would prefer a stack, which reads like the page, at
+the cost of a second, merged layout pass after the pieces are measured.
+
+**[CHOICE]** Every piece keeps the chunk's tags, and a join takes the union of all of them.
+You would prefer tags on the first piece only if a tag usually describes one claim that the
+split divides.
+
+**[CHOICE]** Neighbours are decided on words in reading order, ignoring the regions section
+extents ignore, and overlapping chunks count as neighbours. You would prefer deciding on
+layout regions if PyMuPDF's word order proves wrong on some layout, such as a page whose
+blocks come out of reading order.
+
+**[CHOICE]** Whether Join is offered is asked of the server on each selection of two or
+more chunks, not decided by a copy of the rule in the browser. You would prefer a client
+copy if the round trip ever shows as a lag before the button appears.
+
+**[CHOICE]** Group is offered only when Join is not, as the owner put it ("Group instead").
+You would offer both if grouping neighbours without joining them turns out to be common.
+
+**[CHOICE]** A line let go of on a group makes nothing, because a group is a card. You
+would prefer making the note inside the group if readers aim notes at slots this way.
 
 ---
 
@@ -891,21 +1089,30 @@ FastAPI, bound to localhost only. All geometry per section 2.
 | `GET` | `/api/papers/{id}/pdf` | — | the PDF bytes |
 | `GET` | `/api/papers/{id}/board` | — | `board.json` with anchors resolved |
 | `PUT` | `/api/papers/{id}/board` | `board.json` + `If-Match: <version>` | `{version}` |
-| `GET` | `/api/papers/{id}/notes/{node_id}` | — | `{markdown}` |
+| `GET` | `/api/papers/{id}/notes/{node_id}` | — | `{markdown, has_sketch}` |
 | `PUT` | `/api/papers/{id}/notes/{node_id}` | `{markdown}` | `204` |
+| `PUT` | `/api/papers/{id}/notes/{node_id}/sketch` | the strokes and their path strings | `204`; validates the paths, writes `.sketch.json` and builds `.svg` (D23) |
+| `GET` | `/api/papers/{id}/notes/{node_id}/sketch` | — | the strokes, for editing again |
+| `DELETE` | `/api/papers/{id}/notes/{node_id}/sketch` | — | `204`; removes both sketch files |
+| `GET` | `/api/papers/{id}/notes/{node_id}/sketch.svg` | — | `image/svg+xml`, with a `Content-Security-Policy` header |
 | `POST` | `/api/papers/{id}/text` | `{rects: [{page, rect}], snap, mode, lines?}` | `Selection`: `{text, rects, region_label, highlight, chunk, blocks}` |
 | `PUT` | `/api/papers/{id}/clips/{node_id}` | `{page, rect, dpi}`, `dpi` default 216 | `{clip, clip_size}`; renders and stores the PNG |
 | `GET` | `/api/papers/{id}/clips/{node_id}.png` | — | `image/png` |
 | `GET` | `/api/papers/{id}/render` | `?page&x0&y0&x1&y1&dpi`, `dpi` default 216 | `image/png`; stateless, writes nothing |
 | `GET` | `/api/papers/{id}/questions` | — | `[{id, kind, text}]` |
 | `POST` | `/api/papers/{id}/split` | — | `{nodes: [draft]}`; the section and figure pieces the board is missing, writes nothing |
+| `POST` | `/api/papers/{id}/chunks/highlight` | `{region, quote}` | `{highlight}`; a highlight anchor for words selected in a chunk on the board, writes nothing |
+| `POST` | `/api/papers/{id}/chunks/split` | `{region, at, mode}` | `{nodes: [piece]}`; Split here or Cut out, writes nothing |
+| `POST` | `/api/papers/{id}/chunks/join` | `{regions}` | `{node: piece, order}`; Join, writes nothing |
 | `POST` | `/api/papers/{id}/export` | `{tags: [tag_id], order}` | `{path}` |
 | `GET` | `/api/tags` / `PUT` `/api/tags` | `tags.json` | `tags.json` |
 | `GET` | `/api/template` / `PUT` `/api/template` | `template.json` | `template.json` |
 
 Errors are `{"error": {"code": "...", "message": "..."}}` with `403` a write without the
 header below, `404` unknown paper or node, `409` version conflict on board PUT, `422`
-malformed geometry, `500` extraction failure with the extractor's message passed through.
+malformed geometry, words not found in a chunk (`quote_not_found`) or chunks that are not
+neighbours (`not_contiguous`), `500` extraction failure with the extractor's message
+passed through.
 A paper id is the folder name, so one that extraction could not have made, anything but
 `[a-z0-9][a-z0-9.-]*` or anything holding `..`, is an unknown paper: `%2e%2e` never
 reaches outside `papers/`.
@@ -1007,6 +1214,43 @@ tested with pytest. You would prefer the client if split latency ever became vis
 `PUT /clips` per figure after the drafts are added. You would prefer the server minting ids
 and storing the clips in the same call if first open felt slow on a figure-heavy paper.
 
+**The chunk routes** (D20, D21) carry out section 4.10. All three are stateless: they read
+`source.json` and the PDF, never the board, so the client need not save first, and they
+write nothing. `region` is a chunk anchor (section 5.1) and `quote` and `at` are quote
+selectors, each as the chunk stores it or as the browser builds it (section 4.10).
+
+- `POST /chunks/highlight {region, quote}` returns `{highlight}`, a ready-to-store
+  highlight anchor for the words, found inside the region.
+- `POST /chunks/split {region, at, mode}`, `mode` `"split"` (Split here) or `"cut"` (Cut
+  out), returns `{nodes: [piece]}`, the pieces in paper order. Fewer than two pieces means
+  there is nothing to divide.
+- `POST /chunks/join {regions}`, two or more chunk anchors in any order, returns `{node:
+  piece, order}`: the joined piece, and the indices into `regions` in paper order, so
+  `order[0]` names the chunk that is kept. Chunks that are not neighbours are a `422`
+  with code `not_contiguous`.
+
+A *piece* is `{type: "chunk", data}`, with `data` a whole chunk's data: `region`,
+`blocks`, `tags: []`, `collapsed: false`, `user_sized: false`, `source_id: null`. It has no
+`id`, no `position` and no `parentId`; the client mints the id and takes the rest from the
+chunk it replaces (section 4.10), as it does for split's drafts. Words the server cannot
+find inside `region` are a `422` with code `quote_not_found`, on all three routes that
+take a quote.
+
+**[CHOICE]** Three routes under `/chunks/`, each returning what the client adds, rather
+than one route that edits `board.json`. Every other change to the board is the client's,
+through the reducer, so it can be undone; these stay the same. You would prefer the server
+writing the board if two clients ever needed to split the same chunk at once.
+
+**Sketch routes** (D23, section 4.4). `PUT /notes/{node_id}/sketch` takes the strokes,
+kept for editing again, and one SVG path string per stroke. The server refuses a path
+string that is not path data, stores the strokes as `notes/<node-id>.sketch.json`, and
+builds `notes/<node-id>.svg` itself from the path strings it accepted. `GET .../sketch`
+returns the strokes; `DELETE .../sketch` removes both files. `GET .../sketch.svg` serves
+the image as `image/svg+xml` with a `Content-Security-Policy` header, so even an image
+opened on its own runs nothing. `GET /notes/{node_id}` adds `has_sketch`. The exact shape
+of a stroke is the implementing plan's; this addendum fixes only that no markup comes
+from the browser.
+
 `GET /api/template` returns `template.json`, or the nine defaults when there is no file.
 `PUT /api/template` replaces it, atomically, like `PUT /api/tags`.
 
@@ -1040,7 +1284,8 @@ the file is what was on screen. The file, in order:
    nothing, plus any connected only to other notes or to groups.
 
 A note is written as the body of its Markdown file. A note whose `origin` is `"ai"` starts
-with `**AI:**`, so the literature note never passes an AI's words off as the reader's.
+with `**AI:**`, so the literature note never passes an AI's words off as the reader's. A
+note with a sketch (D23) has `![sketch](notes/<node-id>.svg)` above its text.
 
 Paper order is reading order, the same key for pieces and highlights: page, then the
 index in `regions` of the layout region the first rect starts in, then `(y0, x0)`. Never
@@ -1087,6 +1332,11 @@ Three schema 2 features are client-only and store nothing new.
   `text` of the section that holds the mark's first line, and the board's goal. It then
   creates an empty note with `origin: "ai"`, connected to the mark, for the answer to be
   pasted into.
+
+- **A note from a line**, section 4.10. A note made by letting go of a line is written
+  like any new note, on first save.
+- **Notes in Markdown with maths** (D22), section 4.4. Rendered in the browser from the
+  note's text; nothing is stored differently.
 
 **[CHOICE]** A note's `origin` is fixed when it is created. Rewriting an AI answer in your
 own words is a new note, and connecting that note is what clears the question. You would
@@ -1215,6 +1465,27 @@ Schema 2 adds these, applied in SPEC.md's fifth revision of 23 September 2026:
 23. **Sections 7, 8 and 9**: `template.json` in the files, split and the template in the
     API, and templates removed from "not in v1".
 
+D20 to D23 add these, applied in SPEC.md's sixth revision of 23 September 2026:
+
+24. **Section 4**: the board's text is live; Highlight, Split here and Cut out on a
+    selection in a chunk; Join for neighbours; the principle that the paper's order lives
+    inside a chunk and yours between chunks (D20, D21). The paper view is no longer "the
+    only place you mark or cut".
+25. **Section 5.1**: the note row names Markdown with maths and a sketch (D22, D23); the
+    scissors are the one exception to "no piece-specific operations"; "text in a chunk is
+    read, not selected" is reversed (D20).
+26. **Section 5.3**: a line let go of on empty board makes a connected note.
+27. **Section 6**: Split here, Cut out and Join are commands, with one implementation on
+    the server.
+28. **Section 8**: the API gains the three chunk routes.
+29. **Section 9**: "marking or cutting from the board" is removed. Added as later:
+    drawing on the paper, and iPad use over Wi-Fi; as proposed: prediction before
+    expanding and a recall view; as declined: runnable cells.
+30. **Section 10**: build step 7.
+31. **Sections 6, 7 and 8**: export writes a note's sketch; the sketch files; the Markdown,
+    maths and sketch libraries and the sketch routes (D22, D23).
+32. **Section 12**: rows D20 to D23; the "where you cut" row is marked superseded.
+
 ---
 
 ## 10. Open, and deliberately so
@@ -1232,6 +1503,17 @@ Schema 2 adds these, applied in SPEC.md's fifth revision of 23 September 2026:
   schema 2 it serves two rules, character coverage for text and area coverage for
   rectangles (section 5.3).
 - **The tool still has no name.** SPEC.md section 12 is right that it decides nothing.
+- **Later, not yet decided in detail.** Drawing directly on the paper, as ink anchored the
+  way a highlight is (section 5.1). iPad use over Wi-Fi: an opt-in `serve --lan` with a
+  pairing token, and touch toggles for the rectangle drag and for exact selection; it
+  would relax "bound to localhost only" (section 6) for that mode alone.
+- **Proposed, not decided.** Predicting what a chunk says before expanding it, and a recall
+  view.
+- **Declined.** Jupyter-style runnable cells.
+- **The reading-role presets stay** (`problem`, `claim`, `method`, `evidence`,
+  `assumption`, section 4.3). The owner is undecided whether a reader who answers the
+  template's questions still wants them. They are deletable, so keeping them costs a
+  reader five clicks at most; nothing in D20 to D23 depends on them either way.
 
 ---
 
@@ -1345,3 +1627,52 @@ The **[CHOICE]**s these added, for red-penning:
   carries a wanted tag, as section 6.1 already said; it was written whatever the filter.
 - **M4, the paper id.** An id extraction could not have made is an unknown paper, so
   `%2e%2e` no longer reads or writes outside `papers/` (section 6).
+
+**Live text, Markdown and sketches, decided by the owner after using the board, 23 September
+2026.** Four decisions, D20 to D23, the same numbering as SPEC.md section 12, and one small
+change with no number. No change to the board's schema: everything they make is a
+highlight, a chunk, a note or an edge of schema 2, and a sketch is two files beside its
+note.
+
+- **D20, highlight on the board.** Words selected in a chunk's text are found inside its
+  region and become a highlight anchor, built as `POST /text` builds one from `lines`
+  (sections 4.10 and 6, `POST /chunks/highlight`). Reverses SPEC.md section 9's "marking
+  or cutting from the board" and section 5.1's "text in a chunk is read, not selected".
+- **D21, Split here, Cut out, Join.** Cuts between printed lines; the first piece keeps the
+  node; Join for neighbours by word order, Group otherwise (sections 4.10 and 6,
+  `POST /chunks/split` and `POST /chunks/join`). Also reverses SPEC.md section 12's "where
+  you cut: paper view only".
+- **D22, notes in Markdown with maths.** `react-markdown`, `remark-math`,
+  `rehype-katex` and KaTeX, bundled; links open in a new tab; raw HTML never renders;
+  editing and storage unchanged (section 4.4). Supersedes the features plan's deferral of
+  Markdown rendering. Reverses the links-only rendering first proposed for this revision,
+  never built: CS notes need formulas.
+- **D23, sketch notes.** One freehand sketch per note, `perfect-freehand`, stored as its
+  strokes and as an SVG the server builds from validated path strings; the sketch routes;
+  `has_sketch`; export above the note's text (sections 4.4, 6 and 6.1).
+- **A note from a line**, no number. Letting go of a new line on empty board makes a
+  connected reader note (sections 4.10 and 6.2).
+
+The **[CHOICE]**s these added, for red-penning:
+
+- A connection to the original chunk stays with its first piece, which keeps the node's
+  id (section 4.10).
+- The board's scissors cut between printed lines, not words (section 4.10).
+- The browser sends the selected words, not a position; the stored quote is re-read from
+  the page (section 4.10).
+- No forgiving snap on the board (section 4.10).
+- A split's pieces sit side by side, not stacked (section 4.10).
+- Every piece keeps the chunk's tags; a join takes their union (section 4.10).
+- Neighbours are decided on word order, ignoring furniture; overlapping chunks are
+  neighbours (section 4.10).
+- Whether Join is offered is asked of the server (section 4.10).
+- Group only when Join is not offered (section 4.10).
+- A line let go of on a group makes nothing (section 4.10).
+- The server builds a sketch's SVG from validated path strings; the browser never sends
+  markup (section 4.4).
+- Raw HTML in a note is never rendered (section 4.4).
+
+Withdrawn before it was built: links only, not full Markdown, first proposed for this
+revision. D22 replaced it.
+- Three stateless chunk routes returning what the client adds, not a route that writes the
+  board (section 6).
