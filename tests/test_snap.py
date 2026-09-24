@@ -2,10 +2,10 @@ import pymupdf
 import pytest
 from conftest import FIXTURES
 
-from paperboard.snap import SNAP_THRESHOLD, select
-from paperboard.source_model import PageRect
 from paperboard.anchoring import build_index, global_position
 from paperboard.geometry import contains_point, midpoint
+from paperboard.snap import SNAP_THRESHOLD, select
+from paperboard.source_model import PageRect
 from paperboard.words import line_rects_under, text_under
 
 

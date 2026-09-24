@@ -1,5 +1,7 @@
 """The whole-word rule and a highlight's line rects (addendum 5.1)."""
 
+from itertools import pairwise
+
 import pymupdf
 import pytest
 from conftest import FIXTURES
@@ -29,7 +31,7 @@ def test_one_line_rect_per_printed_line_of_the_words_under_the_rect(resnet):
     assert len(rects) == len(lines) - 1 > 3
     tops = [r[1] for r in rects]
     assert tops == sorted(tops)
-    assert all(b[1] - a[1] > 8 for a, b in zip(rects, rects[1:]))   # 12 pt leading, no two on one row
+    assert all(b[1] - a[1] > 8 for a, b in pairwise(rects))   # 12 pt leading, no two on one row
     for rect in rects:
         assert contains_point(region.rect, *midpoint(rect))
         assert rect[3] - rect[1] < 15   # a line, not a paragraph
