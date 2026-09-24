@@ -64,3 +64,8 @@ button.quiet { border: 0; background: none; cursor: pointer; font: inherit; }
 .node-body mark.dim { background: var(--hl); opacity: var(--dim); }
 .node-head .note-count { flex: none; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--surface-muted); color: var(--ink-muted); font-size: 10.5px; font-weight: 600; }
 .node .react-flow__handle-top { top: -5px; }
+
+/* connections */
+.board .react-flow__edge-path { stroke: var(--border-strong); stroke-width: 1.5; }
+.board .react-flow__edge.selected .react-flow__edge-path { stroke-width: 2.5; }
+.edge-popover { width: 300px; display: flex; flex-direction: column; gap: 6px; }

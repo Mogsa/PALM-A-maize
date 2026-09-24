@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useMemo } from "react";
-import { Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized, type Node, type OnNodeDrag } from "@xyflow/react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized,
+  type EdgeChange, type Node, type OnBeforeDelete, type OnConnect, type OnNodeDrag,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { planDelete } from "../model/dissolve";
-import { resolveEdges, type FlowEdge } from "../model/edges";
+import { hiddenNodeIds } from "../model/filter";
 import { newId } from "../model/ids";
+import { newEdge } from "../model/links";
 import { fitsInside, isDescendant, reparent, type Box } from "../model/reparent";
 import { parentsFirst } from "../model/serialize";
 import type { BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
+import { useTags } from "../state/TagsProvider";
+import { EdgePopover } from "./EdgePopover";
+import { applySelection, endOf, flowEdges, type FlowEdge } from "./handles";
 import { ChunkNode } from "./nodes/ChunkNode";
 import { FigureNode } from "./nodes/FigureNode";
 import { GroupNode } from "./nodes/GroupNode";
@@ -23,8 +29,12 @@ const DELETE_KEYS = ["Backspace", "Delete"];
 
 function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Props) {
   const { state, dispatch } = useBoard();
+  const { byId } = useTags();
   const { getInternalNode, fitView, getZoom } = useReactFlow<BoardNode>();
   const initialized = useNodesInitialized();
+  const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(() => new Set());
+  const [edgeMenu, setEdgeMenu] = useState<{ id: string; at: DOMRect } | null>(null);
+  const hidden = useMemo(() => hiddenNodeIds(state.board), [state.board]);
   useEffect(() => {
     if (!initialized || !focusNode) return;
     void fitView({ nodes: [{ id: focusNode }], minZoom: 0.2, maxZoom: getZoom() });
@@ -35,12 +45,14 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
    *  covers dropping in, dragging out, moving between groups, and nesting groups. Whole containment,
    *  not intersection, because a partial overlap is where the spike saw nodes jump (findings, section 2).
    *  Coordinates converted explicitly (addendum 4.2). The rule applies to every dragged node: React Flow
-   *  calls onNodeDragStop for a multi-selection and for a dragged selection box too, with all of them in `nodes`. */
+   *  calls onNodeDragStop for a multi-selection and for a dragged selection box too, with all of them in `nodes`.
+   *  The re-parenting joins the drag's undo step. */
   const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, __, draggedNodes) => {
     const box = (id: string): Box => {
       const internal = getInternalNode(id)!;
       return { ...internal.internals.positionAbsolute, width: internal.measured?.width ?? 0, height: internal.measured?.height ?? 0 };
     };
+    const moved: BoardNode[] = [];
     for (const dragged of draggedNodes) {
       const me = box(dragged.id);
       const target = state.board.nodes
@@ -50,8 +62,9 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
         .sort((a, b) => a.box.width * a.box.height - b.box.width * b.box.height)[0] ?? null;
       if ((target?.id ?? null) === (dragged.parentId ?? null)) continue;
       const stored = state.board.nodes.find((n) => n.id === dragged.id)!;
-      dispatch({ type: "replaceNode", node: reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null) });
+      moved.push(reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null));
     }
+    if (moved.length) dispatch({ type: "upsertNodes", nodes: moved, merge: true });
   }, [dispatch, getInternalNode, state.board.nodes]);
 
   const addGroup = () => {
@@ -68,10 +81,30 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   // Every path into <ReactFlow> goes through parentsFirst, not only saving: a node re-parented into a
   // group created after it would otherwise be listed before its parent (findings, section 3).
   // Collapse only the rendered height of any piece, retaining the expanded size in the saved board.
-  const nodes = useMemo(() => parentsFirst(state.board.nodes).map((node) =>
-    node.type !== "group" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node), [state.board.nodes]);
+  // `hidden` is set on this copy only, never on the stored nodes (addendum 4.2).
+  const nodes = useMemo(() => parentsFirst(state.board.nodes).map((node) => {
+    const drawn = node.type !== "group" && node.data.collapsed ? { ...node, height: undefined, initialHeight: undefined } : node;
+    return hidden.has(node.id) ? { ...drawn, hidden: true } : drawn;
+  }), [state.board.nodes, hidden]);
   // Stored connections are between the things themselves; React Flow's form is computed here (addendum 4.0).
-  const edges = useMemo(() => resolveEdges(state.board), [state.board]);
+  const edges = useMemo(() => flowEdges(state.board, hidden, selectedEdges, (tagId) => byId.get(tagId)?.colour), [state.board, hidden, selectedEdges, byId]);
+
+  const onConnect: OnConnect = useCallback(({ source, sourceHandle, target, targetHandle }) => {
+    dispatch({ type: "add", edges: [newEdge(endOf(source, sourceHandle), endOf(target, targetHandle))] });
+  }, [dispatch]);
+  const onEdgesChange = useCallback((changes: EdgeChange<FlowEdge>[]) => setSelectedEdges((current) => applySelection(current, changes)), []);
+
+  // React Flow offers the selection plus every descendant and every touching edge. The reader chose only the selected
+  // ones: the reducer removes those as one undo step and dissolves groups in place (addendum 4.2, 4.7).
+  const onBeforeDelete: OnBeforeDelete<BoardNode, FlowEdge> = useCallback(async ({ nodes: offered, edges: offeredEdges }) => {
+    const nodeIds = offered.filter((n) => n.selected).map((n) => n.id);
+    const edgeIds = offeredEdges.filter((e) => e.selected).map((e) => e.id);
+    if (nodeIds.length || edgeIds.length) dispatch({ type: "remove", nodeIds, edgeIds });
+    setSelectedEdges(new Set());
+    return false;
+  }, [dispatch]);
+  const closeEdgeMenu = useCallback(() => setEdgeMenu(null), []);
+
   return (
     <div className="board">
       <div className="board-tools">
@@ -84,19 +117,10 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       <ReactFlow<BoardNode, FlowEdge>
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
         onNodesChange={(changes) => dispatch({ type: "nodes", changes })}
-        onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick}
-        onBeforeDelete={async ({ nodes: toDelete, edges: edgesToDelete }) => {
-          // Dissolving a group must leave its pieces (addendum 4.2). React Flow hands us the group, all its
-          // descendants and every edge touching them; planDelete keeps what the reader did not choose. It
-          // decides on the stored edges, whose ends are what they connect, not the chunk drawing them.
-          const absolute = (id: string) => getInternalNode(id)!.internals.positionAbsolute;
-          const offered = new Set(edgesToDelete.map((e) => e.id));
-          const stored = state.board.edges.filter((e) => offered.has(e.id));
-          const plan = planDelete(state.board.nodes, toDelete, stored, absolute);
-          for (const node of plan.lifted) dispatch({ type: "replaceNode", node });
-          const dropped = new Set(plan.edges.map((e) => e.id));
-          return { nodes: plan.nodes, edges: edgesToDelete.filter((e) => dropped.has(e.id)) };
-        }}
+        onEdgesChange={onEdgesChange} onConnect={onConnect}
+        onEdgeClick={(event, edge) => setEdgeMenu({ id: edge.id, at: new DOMRect(event.clientX, event.clientY, 0, 0) })}
+        onPaneClick={closeEdgeMenu}
+        onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onBeforeDelete={onBeforeDelete}
         defaultViewport={state.board.viewport}
         onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
         minZoom={0.2} fitView={false} deleteKeyCode={active ? DELETE_KEYS : null}
@@ -104,6 +128,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
         <Background />
         <Controls />
       </ReactFlow>
+      {edgeMenu && <EdgePopover edgeId={edgeMenu.id} at={edgeMenu.at} onClose={closeEdgeMenu} />}
     </div>
   );
 }
