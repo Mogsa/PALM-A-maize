@@ -69,6 +69,17 @@ describe("BoardProvider", () => {
     await waitFor(() => expect(api.putBoard).toHaveBeenCalledTimes(1));   // flushed now, not after the 500 ms debounce
   });
 
+  it("asks the browser to hold the page and writes the note when the tab closes while a note is typed into (I1)", async () => {
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    act(() => ctx!.notes.edit("n-1", "typed, not yet written"));
+    const event = new Event("beforeunload", { cancelable: true });
+    act(() => { window.dispatchEvent(event); });
+    expect(event.defaultPrevented).toBe(true);
+    await waitFor(() => expect(api.putNote).toHaveBeenCalledWith("p", "n-1", "typed, not yet written"));
+    expect(api.putBoard).not.toHaveBeenCalled();
+  });
+
   it("shows the server's message when the paper cannot be loaded, and retries", async () => {
     vi.mocked(api.getSource).mockRejectedValueOnce(new Error("No paper named p"));
     const { findByText, findByRole, findByTestId } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);

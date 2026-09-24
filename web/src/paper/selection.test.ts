@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectionToPageRects } from "./selection";
+import { selectionToLineRects, selectionToPageRects } from "./selection";
 
 const frames = [
   { page: 2, box: { left: 100, top: 1000, right: 800, bottom: 1906 }, widthPt: 612 },   // scale 700/612
@@ -95,5 +95,61 @@ describe("selectionToPageRects", () => {
     const rects = selectionToPageRects(lines, frames);
     expect(rects).toHaveLength(2);
     expect(rects[0].rect[2]).toBeLessThan(rects[1].rect[0]);
+  });
+});
+
+// Contract 1 (D1): the selection's own lines, so the server can paint only what was selected of the first and last line.
+describe("selectionToLineRects", () => {
+  const pt = (px: number, origin: number) => (px - origin) / scale;
+
+  it("keeps one rect per printed line, in page points, where the column run merges them", () => {
+    const lines = [
+      { left: 400, top: 1500, right: 720, bottom: 1512 },   // a mid-line start
+      { left: 150, top: 1514, right: 720, bottom: 1526 },
+      { left: 150, top: 1528, right: 300, bottom: 1540 },   // a mid-line end
+    ];
+    const rects = selectionToLineRects(lines, frames);
+    expect(rects).toHaveLength(3);
+    expect(rects.every((r) => r.page === 2)).toBe(true);
+    expect(rects[0].rect[0]).toBeCloseTo(pt(400, 100), 3);
+    expect(rects[0].rect[1]).toBeCloseTo(pt(1500, 1000), 3);
+    expect(rects[2].rect[2]).toBeCloseTo(pt(300, 100), 3);
+  });
+
+  it("merges the spans of a line, a span's two boxes and a superscript into one rect", () => {
+    const lines = [
+      { left: 150, top: 1500, right: 300, bottom: 1512 },
+      { left: 150, top: 1498, right: 300, bottom: 1512 },   // the same span's text box, 2 px taller
+      { left: 303, top: 1500, right: 420, bottom: 1512 },   // next span on the line, past a word gap
+      { left: 420, top: 1496, right: 426, bottom: 1504 },   // a superscript
+    ];
+    const [line, ...rest] = selectionToLineRects(lines, frames);
+    expect(rest).toEqual([]);
+    expect(line.rect[0]).toBeCloseTo(pt(150, 100), 3);
+    expect(line.rect[1]).toBeCloseTo(pt(1496, 1000), 3);
+    expect(line.rect[2]).toBeCloseTo(pt(426, 100), 3);
+  });
+
+  it("never merges lines at the same height across a column gutter", () => {
+    const lines = [
+      { left: 150, top: 1500, right: 427, bottom: 1512 },   // left column
+      { left: 453, top: 1500, right: 723, bottom: 1512 },   // right column, same height
+    ];
+    const rects = selectionToLineRects(lines, frames);
+    expect(rects).toHaveLength(2);
+    expect(rects[0].rect[2]).toBeLessThan(rects[1].rect[0]);
+  });
+
+  it("keeps reading order across columns and pages, and skips empty rects and rects on no page", () => {
+    const lines = [
+      { left: 160, top: 1700, right: 427, bottom: 1712 },   // left column, low
+      { left: 400, top: 1712, right: 400, bottom: 1712 },   // empty
+      { left: 453, top: 1082, right: 723, bottom: 1094 },   // right column, high
+      { left: 0, top: 0, right: 10, bottom: 10 },           // on no page
+      { left: 150, top: 2000, right: 300, bottom: 2012 },   // next page
+    ];
+    const rects = selectionToLineRects(lines, frames);
+    expect(rects.map((r) => r.page)).toEqual([2, 2, 3]);
+    expect(rects[0].rect[1]).toBeGreaterThan(rects[1].rect[1]);
   });
 });

@@ -26,7 +26,8 @@ type Props = {
   board: Board;
   focus: PageRect | null;                       // scroll here once, then onFocusHandled
   onFocusHandled: () => void;
-  onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode) => void;
+  /** `lines` (a text selection only) is the selection one rect per printed line (contract 1). */
+  onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode, lines?: PageRect[]) => void;
   onClickPaper: (hit: PaperHit) => void;
   onOutlineClick: (nodeId: string) => void;
   connecting: boolean;                          // choosing the other end of a connection

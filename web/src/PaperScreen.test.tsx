@@ -8,7 +8,7 @@ let board: Board;
 let clickPaper: ((hit: PaperHit) => void) | null = null;
 vi.mock("./state/BoardProvider", () => ({
   useBoard: () => ({ state: { board }, dispatch, paperId: "p", source: { sections: [], figures: [], page_text: [], pages: [] } }),
-  useNote: () => ({ text: "", error: null, save: vi.fn() }),
+  useNote: () => ({ text: "", error: null, loadFailed: false, edit: vi.fn(), commit: vi.fn(), retry: vi.fn() }),
 }));
 vi.mock("./paper/PaperView", () => ({ PaperView: (props: { onClickPaper: (hit: PaperHit) => void }) => { clickPaper = props.onClickPaper; return null; } }));
 vi.mock("./tags/TagPicker", () => ({ TagPicker: () => null }));

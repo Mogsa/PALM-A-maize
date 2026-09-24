@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNoteStore } from "./notes";
+import { SAVE_DELAY_MS } from "./persistence";
 
 describe("the note store", () => {
   it("loads a note once and shares it", async () => {
@@ -36,15 +37,104 @@ describe("the note store", () => {
     expect(await loading).toBe("typed");
     expect(store.peek("n-1")).toBe("typed");
   });
-  it("settled rejects while a note's last write has failed", async () => {
-    const store = createNoteStore({ get: vi.fn(), put: vi.fn().mockRejectedValueOnce(new Error("down")) });
+  it("settled tries a failed write again, and rejects while it still fails", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const put = vi.fn().mockRejectedValueOnce(new Error("down")).mockRejectedValueOnce(new Error("down")).mockResolvedValue(undefined);
+    const store = createNoteStore({ get: vi.fn(), put });
     await expect(store.save("n-1", "a")).rejects.toThrow("down");
     await expect(store.settled()).rejects.toThrow();
+    await store.settled();
+    expect(put).toHaveBeenCalledTimes(3);
+    expect(put).toHaveBeenLastCalledWith("n-1", "a");
+    expect(store.hasUnsaved()).toBe(false);
   });
   it("a failed load can be tried again", async () => {
     const get = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue("ok");
     const store = createNoteStore({ get, put: vi.fn() });
     await expect(store.load("n-1")).rejects.toThrow("down");
     expect(await store.load("n-1")).toBe("ok");
+  });
+});
+
+describe("the note store, while typing (I1)", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+  /** A put that lands only when `land` is called. */
+  function heldPut() {
+    const held: Array<() => void> = [];
+    const put = vi.fn(() => new Promise<void>((resolve) => { held.push(resolve); }));
+    return { put, land: () => held.shift()?.() };
+  }
+
+  it("nothing is unsaved in a store only read from", async () => {
+    const store = createNoteStore({ get: vi.fn(async () => "text"), put: vi.fn() });
+    await store.load("n-1");
+    expect(store.hasUnsaved()).toBe(false);
+  });
+  it("a keystroke shows at once, is unsaved, and is written once, SAVE_DELAY_MS after the last one", async () => {
+    const put = vi.fn(async () => undefined);
+    const store = createNoteStore({ get: vi.fn(), put });
+    store.edit("n-1", "a");
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS - 1);
+    store.edit("n-1", "ab");
+    expect(store.peek("n-1")).toBe("ab");
+    expect(store.hasUnsaved()).toBe(true);
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS - 1);
+    expect(put).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(put).toHaveBeenCalledWith("n-1", "ab");
+    expect(store.hasUnsaved()).toBe(false);
+  });
+  it("a write in flight is unsaved until it lands", async () => {
+    const { put, land } = heldPut();
+    const store = createNoteStore({ get: vi.fn(), put });
+    store.edit("n-1", "a");
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS);
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(store.hasUnsaved()).toBe(true);
+    land();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.hasUnsaved()).toBe(false);
+  });
+  it("commit writes a note's pending edit now, once", async () => {
+    const put = vi.fn(async () => undefined);
+    const store = createNoteStore({ get: vi.fn(), put });
+    store.edit("n-1", "typed");
+    await store.commit("n-1");
+    expect(put).toHaveBeenCalledWith("n-1", "typed");
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS);
+    expect(put).toHaveBeenCalledTimes(1);
+    await store.commit("n-1");   // nothing pending: nothing written
+    expect(put).toHaveBeenCalledTimes(1);
+  });
+  it("flush writes every pending edit now, and settled does too before it waits", async () => {
+    const put = vi.fn(async () => undefined);
+    const store = createNoteStore({ get: vi.fn(), put });
+    store.edit("n-1", "one");
+    store.edit("n-2", "two");
+    await store.flush();
+    expect(put.mock.calls).toEqual([["n-1", "one"], ["n-2", "two"]]);
+    store.edit("n-1", "three");
+    await store.settled();
+    expect(put).toHaveBeenLastCalledWith("n-1", "three");
+    expect(store.hasUnsaved()).toBe(false);
+  });
+  it("a failed write stays unsaved and marks the note failed until an edit is written", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const put = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue(undefined);
+    const store = createNoteStore({ get: vi.fn(), put });
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.edit("n-1", "a");
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS);
+    expect(store.failed("n-1")).toBe(true);
+    expect(store.hasUnsaved()).toBe(true);
+    listener.mockClear();
+    store.edit("n-1", "ab");
+    await vi.advanceTimersByTimeAsync(SAVE_DELAY_MS);
+    expect(store.failed("n-1")).toBe(false);
+    expect(listener).toHaveBeenCalled();
+    expect(store.hasUnsaved()).toBe(false);
   });
 });

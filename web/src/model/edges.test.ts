@@ -47,9 +47,9 @@ describe("resolveEdges", () => {
     expect(resolveEdges(board(nodes, highlights, edges))).toEqual([]);
   });
 
-  it("a highlight in overlapping chunks resolves to the first of them in nodes order", () => {
-    const overlapping = [chunk("n-wide", at(2, [40, 90, 300, 410])), ...nodes];
-    expect(ends(board(overlapping, highlights, [edge("e-1", "h-left", "n-note")]))[0]).toMatchObject({ source: "n-wide", sourceHandle: "h-left" });
+  it("a highlight in chunks of the same size resolves to the first of them in nodes order", () => {
+    const twins = [chunk("n-twin", LEFT), ...nodes];
+    expect(ends(board(twins, highlights, [edge("e-1", "h-left", "n-note")]))[0]).toMatchObject({ source: "n-twin", sourceHandle: "h-left" });
   });
 
   it("a highlight is held by a chunk that contains any one of its lines", () => {
@@ -60,6 +60,31 @@ describe("resolveEdges", () => {
   it("a figure never holds a highlight's handle: only chunks draw marks", () => {
     const onlyFigure = [figure("n-fig", RIGHT), note("n-note")];
     expect(resolveEdges(board(onlyFigure, highlights, [edge("e-1", "h-right", "n-note")]))).toEqual([]);
+  });
+
+  describe("which chunk draws a highlight's end (contract 3)", () => {
+    const tray: BoardNode = { id: "n-tray", type: "group", position: { x: 0, y: 0 }, data: { tags: [], name: "Paper", tray: true } };
+    const pile: BoardNode = { id: "n-pile", type: "group", position: { x: 0, y: 0 }, parentId: "n-tray", data: { tags: [] } };
+    const inside = (node: BoardNode, parentId: string): BoardNode => ({ ...node, parentId });
+    const SMALL = at(2, [55, 190, 250, 220]);
+    const WIDE = at(2, [40, 90, 300, 410]);
+    it.each([
+      ["a tray chunk and a reader's chunk both hold it: the reader's, though the tray's is smaller and first",
+        [tray, inside(chunk("n-in-tray", SMALL), "n-tray"), chunk("n-reader", WIDE)], "n-reader"],
+      ["two chunks outside the tray: the one with the smaller region",
+        [chunk("n-wide", WIDE), chunk("n-small", SMALL)], "n-small"],
+      ["a region's area is the sum of its rects",
+        [chunk("n-two-rects", SMALL, at(2, [320, 50, 545, 500])), chunk("n-wide", WIDE)], "n-wide"],
+      ["only the tray holds it: the tray's chunk",
+        [tray, inside(chunk("n-in-tray", WIDE), "n-tray")], "n-in-tray"],
+      ["only the tray holds it, at any depth: the smaller of the tray's chunks",
+        [tray, pile, inside(chunk("n-in-tray", WIDE), "n-tray"), inside(chunk("n-in-pile", SMALL), "n-pile")], "n-in-pile"],
+      ["a chunk in a group that is not the tray is outside the tray",
+        [tray, inside(chunk("n-in-tray", SMALL), "n-tray"), { ...pile, parentId: undefined }, inside(chunk("n-in-pile", WIDE), "n-pile")], "n-in-pile"],
+    ])("%s", (_, holders, expected) => {
+      const b = board([...holders, note("n-note")], [mark("h-left", IN_LEFT)], [edge("e-1", "h-left", "n-note")]);
+      expect(ends(b)[0]).toMatchObject({ source: expected, sourceHandle: "h-left" });
+    });
   });
 
   it("keeps the edge's data and runtime selection", () => {

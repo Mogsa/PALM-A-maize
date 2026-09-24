@@ -90,11 +90,13 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
     // A flush alone cannot survive the tab closing: its PUT waits behind a microtask or a save in flight,
     // and the browser aborts it. So while anything is unsaved, ask the browser to show its leave prompt,
     // which holds the page long enough for the flush to land. (keepalive is no answer: 64 KB body cap.)
+    // Note text typed but not yet written counts too (I1).
     const flushOnLeave = (event: BeforeUnloadEvent) => {
-      if (!persist.hasUnsaved()) return;
+      if (!persist.hasUnsaved() && !notes.hasUnsaved()) return;
       event.preventDefault();
       event.returnValue = "";   // older browsers show the prompt only when returnValue is set
       void persist.flush();
+      void notes.flush();
     };
     window.addEventListener("beforeunload", flushOnLeave);
     return () => {
@@ -102,8 +104,9 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
       window.removeEventListener("beforeunload", flushOnLeave);
       void persist.flush();   // takes the pending board now, so the dispose below cannot cancel it
       persist.dispose();
+      void notes.flush();     // and the notes typed into, still inside their debounce
     };
-  }, [paperId]);
+  }, [paperId, notes]);
 
   useEffect(() => {
     if (state.dirty) persistence.current?.schedule(state.board, state.revision);
@@ -150,22 +153,31 @@ export function useBoard(): Ctx {
   return ctx;
 }
 
-/** One note's text, shared by every view that shows it. Loads on first use; `save` writes the file (addendum 4.4). */
-export function useNote(nodeId: string): { text: string | undefined; error: string | null; save: (markdown: string) => Promise<void> } {
+export type NoteHandle = {
+  text: string | undefined; error: string | null; edit: (markdown: string) => void; commit: () => Promise<void>;
+  /** The saved text could not be read: nothing may be typed over it until `retry` loads it. */
+  loadFailed: boolean; retry: () => void;
+};
+
+/** One note's text, shared by every view that shows it. Loads on first use. `edit` is a keystroke: every view shows it
+ *  at once and the store writes it after a pause in typing; `commit` writes it now (addendum 4.4, I1). */
+export function useNote(nodeId: string): NoteHandle {
   const { notes } = useBoard();
   const text = useSyncExternalStore(notes.subscribe, () => notes.peek(nodeId));
-  const [error, setError] = useState<string | null>(null);
+  const failed = useSyncExternalStore(notes.subscribe, () => notes.failed(nodeId));
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    notes.load(nodeId).catch((cause: unknown) => { console.error(NOTE_LOAD_FAILED_MESSAGE, cause); setError(NOTE_LOAD_FAILED_MESSAGE); });
-  }, [notes, nodeId]);
-  const save = useCallback(async (markdown: string) => {
-    try {
-      await notes.save(nodeId, markdown);
-      setError(null);
-    } catch (cause) {
-      console.error(NOTE_SAVE_FAILED_MESSAGE, cause);
-      setError(NOTE_SAVE_FAILED_MESSAGE);
-    }
-  }, [notes, nodeId]);
-  return { text, error, save };
+    let live = true;
+    notes.load(nodeId).catch((cause: unknown) => {
+      console.error(NOTE_LOAD_FAILED_MESSAGE, cause);
+      if (live) setLoadFailed(true);
+    });
+    return () => { live = false; };
+  }, [notes, nodeId, attempt]);
+  const edit = useCallback((markdown: string) => notes.edit(nodeId, markdown), [notes, nodeId]);
+  const commit = useCallback(() => notes.commit(nodeId), [notes, nodeId]);
+  const retry = useCallback(() => { setLoadFailed(false); setAttempt((n) => n + 1); }, []);
+  const error = loadFailed ? NOTE_LOAD_FAILED_MESSAGE : failed ? NOTE_SAVE_FAILED_MESSAGE : null;
+  return { text, error, edit, commit, loadFailed, retry };
 }

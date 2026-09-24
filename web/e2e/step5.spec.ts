@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { WRITE } from "./headers";
 
 /** The acceptance checks of the features plan (Task 3D), and SPEC.md section 11's mechanical items 4 and 5
  *  (item 6 is step3.spec.ts). Specs run in file order with one worker and this one runs last, so the specs before it
@@ -14,6 +15,8 @@ const ATTENTION_PDF = process.env.PAPERBOARD_ATTENTION ?? `${process.cwd()}/../t
 const UPLOAD_TIMEOUT_MS = 240_000;
 /** A whole-word highlight may start a little before the drag point, never at the line's own start. */
 const WORD_SLACK_PX = 4;
+/** A selection starts and ends on the character boundary nearest the mouse. */
+const CHAR_SLACK_PX = 12;
 /** Attention's §3.2.1, which holds equation (1) on page 4 (index 3). */
 const SCALED_DOT_PRODUCT = "Scaled Dot-Product Attention";
 const EQUATION_PAGE = 3;
@@ -26,7 +29,7 @@ test.beforeAll(async ({ playwright }, info) => {
   const request = await playwright.request.newContext({ baseURL: info.project.use.baseURL });
   const before: { paper_id: string }[] = await (await request.get("/api/papers")).json();
   const upload = await request.post("/api/papers", {
-    multipart: { file: { name: "attention.pdf", mimeType: "application/pdf", buffer: await readPdf(ATTENTION_PDF) } }, timeout: UPLOAD_TIMEOUT_MS,
+    multipart: { file: { name: "attention.pdf", mimeType: "application/pdf", buffer: await readPdf(ATTENTION_PDF) } }, headers: WRITE, timeout: UPLOAD_TIMEOUT_MS,
   });
   expect(upload.ok()).toBeTruthy();
   attention = (await upload.json()).paper_id;
@@ -40,7 +43,7 @@ type Json = Record<string, any>;
 const boardOf = async (request: APIRequestContext, id: string): Promise<Json> => (await request.get(`/api/papers/${id}/board`)).json();
 const sourceOf = async (request: APIRequestContext, id: string): Promise<Json> => (await request.get(`/api/papers/${id}/source`)).json();
 /** What split would add to the board as saved; the endpoint writes nothing. */
-const splitOf = async (request: APIRequestContext, id: string): Promise<Json[]> => (await (await request.post(`/api/papers/${id}/split`)).json()).nodes;
+const splitOf = async (request: APIRequestContext, id: string): Promise<Json[]> => (await (await request.post(`/api/papers/${id}/split`, { headers: WRITE })).json()).nodes;
 
 const paperPicker = (page: Page) => page.getByRole("combobox", { name: "Paper", exact: true });
 
@@ -57,7 +60,7 @@ async function save(request: APIRequestContext, id: string, parts: { nodes?: Jso
   const next: Json = { ...current, nodes: parts.nodes ?? [], edges: parts.edges ?? [], highlights: parts.highlights ?? [], active_tags: [], view: "paper",
     viewport: { x: 0, y: 0, zoom: 1 } };
   delete next.paper_scroll;
-  const put = await request.put(`/api/papers/${id}/board`, { data: next, headers: { "If-Match": String(current.version) } });
+  const put = await request.put(`/api/papers/${id}/board`, { data: next, headers: { "If-Match": String(current.version), ...WRITE } });
   expect(put.ok()).toBeTruthy();
 }
 
@@ -177,6 +180,38 @@ test("export in the template's order lists the nine slot names, in the template'
   expect(headings.filter((h) => names.includes(h))).toEqual(names);
 });
 
+test("in the paper view the hidden board's tray and slots neither show nor take the paper's clicks", async ({ page }) => {
+  // The laid-out board of first open, saved in the paper view at zoom 1, so the slots sit over the paper's first page.
+  const laidOut = await boardOf(page.request, attention);
+  expect(laidOut.nodes.filter((n: Json) => n.type === "group" && n.data.prompt)).toHaveLength(9);
+  expect(laidOut.nodes.some((n: Json) => n.data.tray)).toBe(true);
+  const put = await page.request.put(`/api/papers/${attention}/board`, {
+    data: { ...laidOut, view: "paper", viewport: { x: 0, y: 0, zoom: 1 } }, headers: { "If-Match": String(laidOut.version), ...WRITE },
+  });
+  expect(put.ok()).toBeTruthy();
+  await open(page, attention);
+  const slots = page.locator(".react-flow__node:has(.node.group.slot)");
+  await expect(slots).toHaveCount(9);
+  await expect(slots.first()).toBeHidden();
+  const boxes = (els: Element[]) => els.map((el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+  const slotBoxes = await slots.evaluateAll(boxes);
+  const spans = page.locator('.react-pdf__Page[data-page-number="1"] .react-pdf__Page__textContent span');
+  await expect(spans.first()).toBeAttached();
+  const spanBoxes = await spans.evaluateAll(boxes);
+  const inSlot = (x: number, y: number) => slotBoxes.some((s) => s.left < x && x < s.right && s.top < y && y < s.bottom);
+  const under = spanBoxes.find((b) => b.right - b.left > 60 && inSlot(b.left + 2, (b.top + b.bottom) / 2) && inSlot(b.right - 2, (b.top + b.bottom) / 2))!;
+  expect(under).toBeTruthy();
+  const y = (under.top + under.bottom) / 2;
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest(".paper, .react-flow__node")?.className ?? "", [under.left + 4, y]);
+  expect(hit).toContain("paper");
+  await page.mouse.move(under.left + 2, y);
+  await page.mouse.down();
+  await page.mouse.move(under.right - 2, y, { steps: 6 });
+  await page.mouse.up();
+  expect((await page.evaluate(() => window.getSelection()?.toString() ?? "")).trim()).not.toBe("");
+  await expect(page.getByRole("button", { name: "Highlight", exact: true })).toBeVisible();
+});
+
 test("a chunk over Attention's §3.2.1 shows equation (1) as an image of the page", async ({ page }) => {
   // Its own board: the section's piece as split makes it, so the test does not lean on the first-open test.
   const sections: Json[] = (await sourceOf(page.request, attention)).sections;
@@ -225,8 +260,10 @@ test("the paper's own link to section 3.2 scrolls the paper to §3.2", async ({ 
 type Box = { left: number; right: number; top: number; bottom: number };
 
 /** An exact (Alt) drag from the middle of a wide line in the lower left column of ResNet's page 3 to the middle of one
- *  in the upper right column. Returns the lines dragged from and to, the page's middle, and the new mark's lines. */
-async function twoColumnHighlight(page: Page): Promise<{ a: Box; b: Box; mid: number; lines: Box[] }> {
+ *  in the upper right column. Returns the lines dragged from and to, the page's middle, the new mark's lines, and the
+ *  `lines` the client sent with the selection (contract 1), all in CSS pixels. */
+async function twoColumnHighlight(page: Page): Promise<{ a: Box; b: Box; mid: number; lines: Box[]; sent: Box[] }> {
+  const pageWidthPt: number = (await sourceOf(page.request, resnet)).pages[2].width;
   await seed(page, resnet);
   const pageEl = page.locator('.react-pdf__Page[data-page-number="3"]');
   await expect(pageEl.locator(".react-pdf__Page__textContent span").first()).toBeAttached();
@@ -251,12 +288,16 @@ async function twoColumnHighlight(page: Page): Promise<{ a: Box; b: Box; mid: nu
   await page.mouse.move((b.left + b.right) / 2, (b.top + b.bottom) / 2, { steps: 12 });
   await page.mouse.up();
   await page.keyboard.up("Alt");
+  const posted = page.waitForRequest((r) => r.url().endsWith("/text") && r.method() === "POST");
   await page.getByRole("button", { name: "Highlight", exact: true }).click();
+  const scale = canvas.width / pageWidthPt;
+  const sent: Box[] = ((await posted).postDataJSON().lines ?? []).map(({ rect: [x0, y0, x1, y1] }: { rect: number[] }) =>
+    ({ left: canvas.x + x0 * scale, top: canvas.y + y0 * scale, right: canvas.x + x1 * scale, bottom: canvas.y + y1 * scale }));
   await expect.poll(async () => (await markIds(page)).length).toBe(before.length + 1);
   const id = (await markIds(page)).find((m) => !before.includes(m))!;
   const lines = await page.locator(`.overlay .mark[data-highlight-id="${id}"]`).evaluateAll((els) =>
     els.map((el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; }));
-  return { a, b, mid, lines };
+  return { a, b, mid, lines, sent };
 }
 
 test("a highlight across two columns paints the lines selected, one by one, and none outside them (D1)", async ({ page }) => {
@@ -271,7 +312,22 @@ test("a highlight across two columns paints the lines selected, one by one, and 
   for (const line of right) expect(line.bottom).toBeLessThan(b.bottom + WORD_SLACK_PX);    // nothing below the last
 });
 
-// Product bug (D1): the client sends each column run as one hull rect, so a selection starting or ending mid-line paints that whole line.
+test("a text selection is sent with its own lines, from where the drag starts to where it ends (contract 1)", async ({ page }) => {
+  const { a, b, mid, sent } = await twoColumnHighlight(page);
+  const left = sent.filter((l) => l.right < mid);
+  const right = sent.filter((l) => l.left > mid);
+  expect(left.length).toBeGreaterThan(1);
+  expect(right.length).toBeGreaterThan(0);
+  expect(sent.length).toBe(left.length + right.length);   // no line over the gutter
+  for (const line of sent) expect(line.bottom - line.top).toBeLessThan(2 * (a.bottom - a.top));   // one printed line each
+  const first = left.reduce((x, y) => (y.top < x.top ? y : x));
+  const last = right.reduce((x, y) => (y.top > x.top ? y : x));
+  expect(Math.abs(first.left - (a.left + a.right) / 2)).toBeLessThan(CHAR_SLACK_PX);   // starts at the drag, not the line's start
+  expect(Math.abs(last.right - (b.left + b.right) / 2)).toBeLessThan(CHAR_SLACK_PX);   // ends at the drop, not the line's end
+});
+
+// Waits on the server (contract 1): the client sends the selection's own lines (the test above); once POST /text builds
+// the highlight from them, it paints only what they cover. Until then it paints the whole first and last lines.
 test.fixme("a highlight across two columns leaves the unselected ends of its first and last lines unpainted", async ({ page }) => {
   const { a, b, mid, lines } = await twoColumnHighlight(page);
   const first = lines.filter((l) => l.right < mid).reduce((x, y) => (y.top < x.top ? y : x));
@@ -339,6 +395,27 @@ test("a question with only an AI note stays on the list, and a note of your own 
   await mine.fill("The block learns what to add to its input, not the whole mapping.");
   await mine.blur();
   await expect(page.locator(".question-list li")).toHaveCount(0);
+});
+
+test("a note typed into and never left is saved as it is typed, and is there after a reload (I1)", async ({ page }) => {
+  await seed(page, resnet);
+  const id = await highlight(page, 3, 20, 22);
+  await clickMark(page, id);
+  await page.locator(".mark-popover").getByRole("button", { name: "Add note", exact: true }).click();
+  const field = page.locator(".mark-popover .note-editor.reader textarea");
+  const words = "Typed and never left: the field keeps its focus.";
+  await field.click();
+  await page.keyboard.type(words);
+  await expect(field).toBeFocused();
+  await expect.poll(async () => (await boardOf(page.request, resnet)).nodes.filter((n: Json) => n.type === "note").length).toBe(1);
+  const noteId = (await boardOf(page.request, resnet)).nodes.find((n: Json) => n.type === "note").id;
+  await expect.poll(async () => (await (await page.request.get(`/api/papers/${resnet}/notes/${noteId}`)).json()).markdown).toBe(words);
+  await expect(field).toBeFocused();   // saved while typing, not because the field lost focus
+
+  await page.reload();
+  await paperPicker(page).selectOption(resnet);
+  await clickMark(page, id);
+  await expect(page.locator(".mark-popover .note-editor.reader textarea")).toHaveValue(words);
 });
 
 test("Cmd-Z undoes a group dissolve in one step", async ({ page }) => {

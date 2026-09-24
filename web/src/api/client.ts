@@ -21,8 +21,17 @@ async function parse<T>(response: Response): Promise<T> {
   return body as T;
 }
 
+/** Sent on every request. The server refuses a write without it, and a custom header makes any other origin's
+ *  request need a CORS preflight the server never grants, so no other page can write here (contract 2). */
+export const PAPERBOARD_HEADERS: Record<string, string> = { "X-Paperboard": "1" };
+
+/** fetch with PAPERBOARD_HEADERS added; `headers` must be a plain object. */
+function request(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(path, { ...init, headers: { ...PAPERBOARD_HEADERS, ...(init.headers as Record<string, string> | undefined) } });
+}
+
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
-  return parse<T>(await fetch(path, { ...init, headers: { "content-type": "application/json", ...(init.headers ?? {}) } }));
+  return parse<T>(await request(path, { ...init, headers: { "content-type": "application/json", ...(init.headers as Record<string, string> | undefined) } }));
 }
 
 const send = <T>(method: string, path: string, body?: unknown) =>
@@ -42,7 +51,7 @@ export const api = {
   async addPaper(pdf: Blob, filename: string): Promise<AddPaperResult> {
     const form = new FormData();
     form.append("file", pdf, filename);
-    return parse<AddPaperResult>(await fetch("/api/papers", { method: "POST", body: form }));
+    return parse<AddPaperResult>(await request("/api/papers", { method: "POST", body: form }));
   },
   getSource: (id: string) => call<Source>(`${paper(id)}/source`),
   reextract: (id: string) => send<ReextractResult>("POST", `${paper(id)}/extract`),
@@ -50,7 +59,7 @@ export const api = {
 
   getBoard: (id: string) => call<Board>(`${paper(id)}/board`),
   async putBoard(id: string, board: Board, version: number): Promise<{ version: number } | { conflict: true; current: number }> {
-    const response = await fetch(`${paper(id)}/board`, {
+    const response = await request(`${paper(id)}/board`, {
       method: "PUT", headers: { "content-type": "application/json", "If-Match": String(version) }, body: JSON.stringify(board),
     });
     const body = await response.json();
@@ -69,8 +78,10 @@ export const api = {
   },
   putNote: (id: string, nodeId: string, markdown: string) => send<void>("PUT", `${paper(id)}/notes/${nodeId}`, { markdown }),
 
-  postText: (id: string, rects: PageRect[], snap: boolean, mode: SelectionMode = "text") =>
-    send<Selection>("POST", `${paper(id)}/text`, { rects, snap, mode }),
+  /** `lines`, a text selection's rects one per printed line, is what the highlight paints (contract 1); an older
+   *  server ignores it. */
+  postText: (id: string, rects: PageRect[], snap: boolean, mode: SelectionMode = "text", lines?: PageRect[]) =>
+    send<Selection>("POST", `${paper(id)}/text`, { rects, snap, mode, ...(lines ? { lines } : {}) }),
 
   /** Renders and stores a figure's clip. */
   putClip: (id: string, nodeId: string, target: PageRect, dpi = CLIP_DPI) =>
