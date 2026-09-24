@@ -141,14 +141,24 @@ def test_tags_default_to_presets_and_persist(store_root):
     assert store.read_tags().tags[0].name == "gap"
 
 
-def test_add_paper_extracts_and_lays_out_the_folder(tmp_path):
+def _add(store, pdf_bytes):
+    doc = store.extract_pdf(pdf_bytes)
+    store.install_paper(doc, pdf_bytes)
+    return doc
+
+
+def test_extract_then_install_lays_out_the_folder(tmp_path):
     store = Store(tmp_path)
-    doc = store.add_paper(FIXTURES["resnet"].read_bytes())
+    doc = store.extract_pdf(FIXTURES["resnet"].read_bytes())
+    assert not store.has_paper(doc.paper_id)          # extraction alone writes nothing
+    assert not (tmp_path / "papers").exists()
+    store.install_paper(doc, FIXTURES["resnet"].read_bytes())
     folder = tmp_path / "papers" / doc.paper_id
     assert (folder / "paper.pdf").exists() and (folder / "source.json").exists()
+    assert store.has_paper(doc.paper_id)
     assert store.read_source(doc.paper_id).paper_id == doc.paper_id
     # adding the same PDF again is idempotent: same id, one folder
-    assert store.add_paper(FIXTURES["resnet"].read_bytes()).paper_id == doc.paper_id
+    assert _add(store, FIXTURES["resnet"].read_bytes()).paper_id == doc.paper_id
     assert len(list((tmp_path / "papers").iterdir())) == 1
 
 
@@ -161,8 +171,8 @@ def test_re_adding_a_newer_version_replaces_the_pdf_with_its_source(tmp_path, mo
     store = Store(tmp_path)
     v1 = FIXTURES["resnet"].read_bytes()
     v2 = v1 + b"\n% revised\n"
-    paper_id = store.add_paper(v1).paper_id
-    assert store.add_paper(v2).paper_id == paper_id
+    paper_id = _add(store, v1).paper_id
+    assert _add(store, v2).paper_id == paper_id
     assert store.pdf_path(paper_id).read_bytes() == v2
 
 

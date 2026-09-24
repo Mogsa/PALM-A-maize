@@ -5,7 +5,15 @@ from typing import Literal
 
 import pymupdf
 
-from paperboard.board_model import Board, ChunkNode, FigureNode, Highlight, NoteNode, TextBlock
+from paperboard.board_model import (
+    Board,
+    ChunkNode,
+    FigureNode,
+    GroupNode,
+    Highlight,
+    NoteNode,
+    TextBlock,
+)
 from paperboard.geometry import contains_point, midpoint, normalise
 from paperboard.source_model import SourceDocument
 
@@ -91,79 +99,158 @@ def _reading_key(doc: SourceDocument, page: int, rect):
     return (page, idx if idx is not None else float("inf"), y0, x0)
 
 
-def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pdf: pymupdf.Document, tags: list[str],
-                    order: ExportOrder = "paper") -> str:
-    """The literature note. `order="template"` (addendum 6.1, D19) is the
-    export task's; until it lands every export is in paper order."""
-    nodes = {n.id: n for n in board.nodes}
-    notes_for: dict[str, list[str]] = {}
+Piece = ChunkNode | FigureNode
 
-    def link_note(owner: str, note_id: str) -> None:
-        linked = notes_for.setdefault(owner, [])
-        if note_id not in linked:
-            linked.append(note_id)
 
-    # A note belongs to whatever it is connected to, a highlight or a node, in
-    # either direction; nothing caches it (addendum 4.0, D7).
+def _is_slot(node) -> bool:
+    """A slot is a group with a prompt (addendum 4.9)."""
+    return isinstance(node, GroupNode) and bool(node.data.prompt)
+
+
+def _slot_of(node, by_id: dict) -> str | None:
+    """The id of the nearest slot enclosing `node`, at any depth, or None."""
+    parent = node.parentId
+    while parent is not None:
+        group = by_id[parent]
+        if _is_slot(group):
+            return group.id
+        parent = group.parentId
+    return None
+
+
+def _connected_notes(board: Board) -> dict[str, list[str]]:
+    """For each highlight or node id, the notes connected to it in either
+    direction, in edge order. Nothing caches this (addendum 4.0, D7)."""
+    note_ids = {n.id for n in board.nodes if isinstance(n, NoteNode)}
+    out: dict[str, list[str]] = {}
     for edge in board.edges:
         for end, other in ((edge.from_, edge.to), (edge.to, edge.from_)):
-            if isinstance(nodes.get(other), NoteNode):
-                link_note(end, other)
-    used_notes: set[str] = set()
+            linked = out.setdefault(end, [])
+            if other in note_ids and other not in linked:
+                linked.append(other)
+    return out
 
-    def note_lines(owner: str) -> list[str]:
-        lines = []
-        for note_id in notes_for.get(owner, []):
-            body = notes.get(note_id, "").strip()
-            if body:
-                lines += ["", body]
-                used_notes.add(note_id)
-        return lines
 
-    out: list[str] = []
-    title = doc.sections[0].title if doc.sections else doc.paper_id
-    out += [f"# {title}", ""]
-    if board.goal.strip():
-        out += [f"*Reading goal: {board.goal.strip()}*", ""]
+def _quoted(text: str) -> str:
+    return "\n".join(f"> {line}".rstrip() for line in text.strip().splitlines())
 
-    placed: set[str] = set()
-    pieces = sorted((n for n in board.nodes if isinstance(n, (ChunkNode, FigureNode))),
-                     key=lambda n: _order_key(doc, n))
-    for node in pieces:
-        # A mark inside overlapping chunks is printed once, under the first in paper order.
-        marks = sorted((h for h in highlights_in(board, node) if h.id not in placed),
-                       key=lambda h: _mark_key(doc, h))
-        placed.update(h.id for h in marks)
-        if not _wanted(tags, node.data.tags) and not any(_wanted(tags, h.tags) for h in marks):
-            continue
-        out += [f"## {_title(node)}", ""]
+
+def _page_of(node: Piece) -> int:
+    return node.data.region.rects[0].page + 1
+
+
+class _Writer:
+    """One pass over the board. It remembers what it has written, so a highlight
+    or a note is written once, at its first place (addendum 6.1)."""
+
+    def __init__(self, doc: SourceDocument, board: Board, notes: dict[str, str],
+                 tags: list[str], tag_names: dict[str, str]):
+        self.doc, self.board, self.notes = doc, board, notes
+        self.tags, self.tag_names = tags, tag_names
+        self.out: list[str] = []
+        self.written: set[str] = set()
+        self.by_id = {n.id: n for n in board.nodes}
+        self.notes_for = _connected_notes(board)
+        self.pieces = sorted((n for n in board.nodes if isinstance(n, (ChunkNode, FigureNode))),
+                             key=lambda n: _order_key(doc, n))
+        self.inside = {h.id for p in self.pieces for h in highlights_in(board, p)}
+
+    def para(self, text: str) -> None:
+        self.out += [text, ""]
+
+    def header(self) -> None:
+        title = self.doc.sections[0].title if self.doc.sections else self.doc.paper_id
+        self.para(f"# {title}")
+        if self.board.goal.strip():
+            self.para(f"*Reading goal: {self.board.goal.strip()}*")
+
+    def note(self, note_id: str) -> None:
+        body = self.notes.get(note_id, "").strip()
+        if not body or note_id in self.written:
+            return
+        # An AI's words are never passed off as the reader's (D14).
+        self.para(f"**AI:** {body}" if self.by_id[note_id].data.origin == "ai" else body)
+        self.written.add(note_id)
+
+    def notes_of(self, owner: str) -> None:
+        for note_id in self.notes_for.get(owner, []):
+            self.note(note_id)
+
+    def mark(self, highlight: Highlight, with_page: bool = False) -> None:
+        self.para(_quoted(highlight.anchor.quote.exact))
+        names = [self.tag_names[t] for t in highlight.tags if t in self.tag_names]
+        meta = [f"p. {highlight.anchor.rects[0].page + 1}"] if with_page else []
+        if names:
+            meta.append(", ".join(names))
+        if meta:
+            self.para(f"*{' · '.join(meta)}*")
+        self.written.add(highlight.id)
+        self.notes_of(highlight.id)
+
+    def piece(self, node: Piece, level: int) -> None:
+        """A chunk or figure, when it or a highlight inside it carries a wanted
+        tag, then its unwritten highlights in paper order, then its notes."""
+        inside = highlights_in(self.board, node)
+        if not _wanted(self.tags, node.data.tags) and not any(_wanted(self.tags, h.tags) for h in inside):
+            return
+        self.para(f"{'#' * level} {_title(node)} (p. {_page_of(node)})")
         if isinstance(node, FigureNode):
             if node.data.clip:
-                out += [f"![{_title(node)}]({node.data.clip})", ""]
-            if node.data.caption:
-                out += [node.data.caption.strip(), ""]
-        for h in marks:
-            if not _wanted(tags, h.tags) and tags:
-                continue
-            out += [f"> {h.anchor.quote.exact.strip()}"]
-            out += note_lines(h.id)
-            out += [""]
-        out += note_lines(node.id)
-        out += [""]
+                self.para(f"![{_title(node)}]({node.data.clip})")
+            if node.data.caption.strip():
+                self.para(node.data.caption.strip())
+        marks = [h for h in inside if h.id not in self.written and _wanted(self.tags, h.tags)]
+        for h in sorted(marks, key=lambda h: _mark_key(self.doc, h)):
+            self.mark(h)
+        self.notes_of(node.id)
 
-    loose = [h for h in board.highlights if h.id not in placed and _wanted(tags, h.tags)]
-    if loose:
-        out += ["## Highlights outside any chunk", ""]
-        for h in sorted(loose, key=lambda h: _mark_key(doc, h)):
-            out += [f"> {h.anchor.quote.exact.strip()}  (page {h.anchor.rects[0].page + 1})"]
-            out += note_lines(h.id)
-            out += [""]
+    def paper_body(self, pieces: list[Piece], level: int) -> None:
+        """Section 6.1 items 2 to 4: the pieces, the highlights no piece holds,
+        then every note not yet written."""
+        for node in pieces:
+            self.piece(node, level)
+        loose = [h for h in self.board.highlights
+                 if h.id not in self.inside and h.id not in self.written and _wanted(self.tags, h.tags)]
+        if loose:
+            self.para(f"{'#' * level} Highlights outside any chunk")
+            for h in sorted(loose, key=lambda h: _mark_key(self.doc, h)):
+                self.mark(h, with_page=True)
+        remaining = [n.id for n in self.board.nodes if isinstance(n, NoteNode) and n.id not in self.written
+                     and _wanted(self.tags, n.data.tags) and self.notes.get(n.id, "").strip()]
+        if remaining:
+            self.para(f"{'#' * level} Notes")
+            for note_id in remaining:
+                self.note(note_id)
 
-    remaining = [n for n in board.nodes if isinstance(n, NoteNode) and n.id not in used_notes
-                 and _wanted(tags, n.data.tags) and notes.get(n.id, "").strip()]
-    if remaining:
-        out += ["## Notes", ""]
-        for n in remaining:
-            out += [notes[n.id].strip(), ""]
+    def template_body(self) -> None:
+        """D19: each slot in `nodes` order, with the notes and pieces whose
+        nearest slot it is, then everything in no slot in paper order."""
+        home = {n.id: _slot_of(n, self.by_id) for n in self.board.nodes}
+        for slot in (n for n in self.board.nodes if _is_slot(n)):
+            self.para(f"## {slot.data.name or ''}".rstrip())
+            self.para(f"*{slot.data.prompt.strip()}*")
+            for n in self.board.nodes:
+                if isinstance(n, NoteNode) and home[n.id] == slot.id:
+                    self.note(n.id)
+            for piece in self.pieces:
+                if home[piece.id] == slot.id:
+                    self.piece(piece, 3)
+        start = len(self.out)
+        self.paper_body([p for p in self.pieces if home[p.id] is None], 3)
+        if len(self.out) > start:
+            self.out[start:start] = ["## Not in a slot", ""]
 
-    return "\n".join(out).rstrip() + "\n"
+
+def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pdf: pymupdf.Document,
+                    tags: list[str], order: ExportOrder = "paper",
+                    tag_names: dict[str, str] | None = None) -> str:
+    """The literature note (addendum 6.1). `tags` filters; `order` is the paper's
+    (default) or the template's (D19). `tag_names` maps tag ids to the names
+    written after a quote; an id it lacks is a deleted tag and is left out (4.3)."""
+    writer = _Writer(doc, board, notes, tags, tag_names or {})
+    writer.header()
+    if order == "template":
+        writer.template_body()
+    else:
+        writer.paper_body(writer.pieces, 2)
+    return "\n".join(writer.out).rstrip() + "\n"

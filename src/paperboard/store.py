@@ -130,18 +130,23 @@ class Store:
             out.append(PaperSummary(paper_id=folder.name, title=title, page_count=len(doc.pages)))
         return out
 
-    def add_paper(self, pdf_bytes: bytes) -> SourceDocument:
-        """Extract a PDF and lay out its folder. Idempotent for the same bytes,
-        because paper_id is a pure function of the file (extractor Task 7).
-        A newer arXiv version has the same id, so the PDF is always replaced
-        along with source.json: the two in one folder must describe one file."""
+    def has_paper(self, paper_id: str) -> bool:
+        return (self.papers_dir / paper_id / "source.json").is_file()
+
+    def extract_pdf(self, pdf_bytes: bytes) -> SourceDocument:
+        """Extract a PDF from a scratch copy, touching nothing in the store, so a
+        failed extraction leaves any paper with the same id as it was (D9)."""
         with tempfile.TemporaryDirectory() as scratch:
             staged = Path(scratch) / "paper.pdf"
             staged.write_bytes(pdf_bytes)
-            doc = extract(staged)
+            return extract(staged)
+
+    def install_paper(self, doc: SourceDocument, pdf_bytes: bytes) -> None:
+        """Lay out, or replace, a paper's PDF and `source.json`, each atomically.
+        The PDF is always replaced along with source.json: the two in one folder
+        must describe one file. The board, notes and clips are kept (D9)."""
         atomic_write(self.papers_dir / doc.paper_id / "paper.pdf", pdf_bytes)
         self.write_source(doc.paper_id, doc)
-        return doc
 
     def read_source(self, paper_id: str) -> SourceDocument:
         return SourceDocument.model_validate_json((self.paper_dir(paper_id) / "source.json").read_text())

@@ -330,6 +330,45 @@ def test_loading_a_board_with_no_basis_re_finds_once_and_stamps_it(client, resne
     assert got["anchor_basis"]
 
 
+def _board_with_misplaced_chunk(client, resnet_id, blocks):
+    """A chunk cut from a page 2 paragraph, its rects then moved elsewhere on
+    the page: re-finding it relocates it."""
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    region = _first_text_region(source, 2)
+    chunk = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()["chunk"]
+    moved = {**chunk, "rects": [{"page": 2, "rect": [60.0, 700.0, 200.0, 710.0]}]}
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [{"id": "n-chunk", "type": "chunk", "position": {"x": 0, "y": 0},
+                       "data": {"tags": [], "collapsed": False, "region": moved, "blocks": blocks}}]
+    board.pop("anchor_basis", None)
+    return board
+
+
+def test_a_chunk_that_re_anchoring_moves_gets_its_blocks_recomputed(client, resnet_id):
+    stale = [{"kind": "text", "page": 2, "rect": [60.0, 700.0, 200.0, 710.0], "text": "stale words"}]
+    board = _board_with_misplaced_chunk(client, resnet_id, stale)
+    _put(client, resnet_id, board)
+    chunk = client.get(f"/api/papers/{resnet_id}/board").json()["nodes"][0]["data"]
+    assert chunk["region"]["state"] == "relocated"
+    assert chunk["blocks"] and chunk["blocks"] != stale
+    assert all(b["page"] == 2 for b in chunk["blocks"])
+
+
+def test_a_chunk_that_holds_keeps_its_blocks(client, resnet_id):
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    region = _first_text_region(source, 2)
+    chunk = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()["chunk"]
+    kept = [{"kind": "text", "page": 2, "rect": region["rect"], "text": "as the reader cut it"}]
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [{"id": "n-chunk", "type": "chunk", "position": {"x": 0, "y": 0},
+                       "data": {"tags": [], "collapsed": False, "region": chunk, "blocks": kept}}]
+    board.pop("anchor_basis", None)
+    _put(client, resnet_id, board)
+    got = client.get(f"/api/papers/{resnet_id}/board").json()["nodes"][0]["data"]
+    assert got["region"]["state"] == "anchored"
+    assert got["blocks"] == kept
+
+
 def test_loading_a_board_re_finds_when_the_source_text_changed(client, resnet_id, store_root):
     board, _anchor = _board_with_misplaced_highlight(client, resnet_id)
     board["anchor_basis"] = client.get(f"/api/papers/{resnet_id}/board").json()["anchor_basis"]
@@ -483,3 +522,85 @@ def test_a_clip_renders_at_216_dpi_by_default(client, resnet_id):
     response = client.put(f"/api/papers/{resnet_id}/clips/{FIG}", json={"page": 2, "rect": [60, 100, 280, 130]})
     assert response.status_code == 200, response.text
     assert response.json()["clip_size"]["width"] == pytest.approx((280 - 60 + 8) * 216 / 72, abs=3)
+
+
+# -- D6: export names tags ------------------------------------------------------
+
+
+def test_export_writes_a_highlights_tags_by_their_current_names(client, resnet_id):
+    test_board_put_get_and_version_conflict(client, resnet_id)   # h-1 carries t-question
+    tags = client.get("/api/tags").json()
+    tags["tags"] = [{**t, "name": "open question"} if t["id"] == "t-question" else t for t in tags["tags"]]
+    client.put("/api/tags", json=tags)
+    markdown = client.post(f"/api/papers/{resnet_id}/export", json={"tags": []}).json()["markdown"]
+    assert "*p. 3 · open question*" in markdown
+
+
+# -- D9: re-upload replaces -------------------------------------------------------
+
+
+def _upload(client, pdf_bytes):
+    return client.post("/api/papers", files={"file": ("paper.pdf", pdf_bytes, "application/pdf")})
+
+
+def _paper_files(store_root, paper_id):
+    folder = store_root / "papers" / paper_id
+    return {name: (folder / name).read_bytes() for name in ("paper.pdf", "source.json", "board.json")}
+
+
+def test_re_uploading_a_paper_replaces_it_and_reports_what_changed(client, resnet_id, store_root, monkeypatch, extracted):
+    import paperboard.store as store_module
+
+    test_board_put_get_and_version_conflict(client, resnet_id)   # h-1 on page 2
+    before = _paper_files(store_root, resnet_id)
+    doc = extracted["resnet"]
+    pages = [p.model_copy(update={"text": ""}) if p.page == 2 else p for p in doc.page_text]
+    monkeypatch.setattr(store_module, "extract", lambda _path: doc.model_copy(update={"page_text": pages}))
+    revised = FIXTURES["resnet"].read_bytes() + b"\n% revised\n"
+
+    response = _upload(client, revised)
+    assert response.status_code == 200, response.text
+    assert response.json() == {"paper_id": resnet_id, "changed": ["h-1"], "states": {"h-1": "orphaned"}}
+    after = _paper_files(store_root, resnet_id)
+    assert after["paper.pdf"] == revised
+    assert after["source.json"] != before["source.json"]
+    assert after["board.json"] == before["board.json"]   # the board is kept, never written
+
+
+def test_re_uploading_the_same_paper_changes_nothing(client, resnet_id, monkeypatch, extracted):
+    import paperboard.store as store_module
+
+    test_board_put_get_and_version_conflict(client, resnet_id)
+    monkeypatch.setattr(store_module, "extract", lambda _path: extracted["resnet"])
+    response = _upload(client, FIXTURES["resnet"].read_bytes())
+    assert response.status_code == 200, response.text
+    assert response.json() == {"paper_id": resnet_id, "changed": [], "states": {"h-1": "anchored"}}
+
+
+def test_a_failed_re_upload_leaves_the_paper_as_it_was(client, resnet_id, store_root, monkeypatch):
+    import paperboard.store as store_module
+
+    test_board_put_get_and_version_conflict(client, resnet_id)
+    before = _paper_files(store_root, resnet_id)
+
+    def fail(_path):
+        raise RuntimeError("layout model crashed")
+
+    monkeypatch.setattr(store_module, "extract", fail)
+    response = _upload(client, FIXTURES["resnet"].read_bytes() + b"\n% revised\n")
+    assert response.status_code == 500
+    assert response.json()["error"] == {"code": "extraction_failed", "message": "RuntimeError: layout model crashed"}
+    assert _paper_files(store_root, resnet_id) == before
+
+
+# -- D12, D14: the question list --------------------------------------------------
+
+
+def test_a_question_note_is_listed_by_its_first_line(client, resnet_id):
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [{"id": ASK, "type": "note", "position": {"x": 0, "y": 0},
+                       "data": {"tags": ["t-question"], "collapsed": False, "note": f"notes/{ASK}.md"}}]
+    _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/{ASK}", json={"markdown": "\nWhy does depth hurt?\nMore on that.\n"})
+    assert client.get(f"/api/papers/{resnet_id}/questions").json() == [
+        {"id": ASK, "kind": "note", "text": "Why does depth hurt?"}]
