@@ -41,13 +41,15 @@ test("highlights and cuts survive a reload and the views mirror each other", asy
     await page.getByRole("button", { name: "Cut" }).click();
     await expect(page.locator(".popover")).toBeHidden();
   }
-  await expect(page.locator(".overlay .mark")).toHaveCount(5);
+  const highlights = async () => new Set(await page.locator(".overlay .mark").evaluateAll(
+    (marks) => marks.map((m) => m.getAttribute("data-highlight-id")))).size;   // a mark per line since D1
+  await expect.poll(highlights).toBe(5);
   await expect(page.locator(".overlay .outline")).toHaveCount(3);
   await expect(page.locator(".notice")).toHaveText(/Saved v\d+/);
 
   await page.reload();
   await page.locator("select").selectOption({ index: 1 });
-  await expect(page.locator(".overlay .mark")).toHaveCount(5);
+  await expect.poll(highlights).toBe(5);
   await expect(page.locator(".overlay .outline")).toHaveCount(3);
 
   await page.getByRole("button", { name: "Board" }).click();
