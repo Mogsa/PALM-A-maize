@@ -86,3 +86,32 @@ def test_the_lines_found_are_inside_the_region_in_reading_order(resnet):
     lines = lines_in_region(pdf, build_index(doc), region, QuoteSelector(exact=SHORTCUTS))
     assert [line.page for line in lines] == [2, 2]
     assert lines[0].rect[1] < lines[1].rect[1]
+
+
+@pytest.fixture(scope="module")
+def attention(extracted):
+    doc = extracted["attention"]
+    pdf = pymupdf.open(FIXTURES["attention"])
+    yield doc, pdf
+    pdf.close()
+
+
+def test_words_across_a_page_break_take_the_lines_on_both_pages_and_nothing_between(attention):
+    """Attention §3 runs from page 1 onto page 2; the page number "2" lies between in the page text."""
+    doc, pdf = attention
+    region = _section(doc, pdf, "3").region
+    quote = QuoteSelector(exact="symbols as additional input when generating the next.\nFigure 1: The Transformer - model architecture.")
+    anchor = highlight_in_chunk(doc, pdf, region, quote)
+    assert {line.page for line in anchor.rects} == {1, 2}
+    assert all(_inside(line, region.rects) for line in anchor.rects)
+    assert "\n2\n" not in anchor.quote.exact
+
+
+def test_a_word_joined_across_a_line_end_is_marked_where_it_was_selected(resnet):
+    """The card shows "de-\\ntection" as "detection", which is also printed whole elsewhere in §4.3."""
+    doc, pdf = resnet
+    region = _section(doc, pdf, "4.3").region
+    quote = QuoteSelector(exact="detection", prefix="We adopt Faster R-CNN [32] as the ", suffix=" method. Here we are interested")
+    anchor = highlight_in_chunk(doc, pdf, region, quote)
+    assert anchor.quote.exact.split()[0] == "de-"
+    assert anchor.quote.prefix.endswith("as the ")
