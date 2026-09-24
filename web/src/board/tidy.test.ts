@@ -31,6 +31,21 @@ describe("Tidy (D11, addendum 4.7)", () => {
   it("tidies the same board the same way twice", () => {
     expect(tidyPositions(board, size)).toEqual(tidyPositions(board, size));
   });
+  it("moves a tray and a slot only a little on a board laid out by first open", () => {
+    const sized = (id: string, x: number, y: number, width: number, height: number): BoardNode => ({ ...group(id, x, y), width, height });
+    const slots = Array.from({ length: 9 }, (_, i) => sized(`n-s${i}`, 420 + (i % 3) * 424, Math.floor(i / 3) * 324, 400, 300));
+    const note: BoardNode = { id: "n-note", type: "note", position: { x: 16, y: 48 }, parentId: "n-s0", data: { tags: [], collapsed: false, note: "notes/n-note.md", origin: "reader" } };
+    const laid = make([sized("n-tray", 0, 0, 360, 968), chunk("n-in", 20, 48, "n-tray"), ...slots, note], [edge("e-1", "n-in", "n-note")]);
+    const boxes = new Map(laid.nodes.map((n) => [n.id, { width: n.width ?? 320, height: n.height ?? 100 }]));
+    const moved = tidyPositions(laid, (id) => boxes.get(id)!);
+    expect([...moved.keys()].sort()).toEqual(["n-s0", "n-tray"]);
+    const start = new Map(laid.nodes.map((n) => [n.id, n.position]));
+    for (const [id, at] of moved) expect(Math.hypot(at.x - start.get(id)!.x, at.y - start.get(id)!.y)).toBeLessThan(400);
+    const box = (id: string) => ({ ...(moved.get(id) ?? start.get(id)!), ...boxes.get(id)! });
+    const overlap = (a: ReturnType<typeof box>, b: ReturnType<typeof box>) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+    const top = laid.nodes.filter((n) => !n.parentId).map((n) => n.id);
+    for (const id of moved.keys()) for (const other of top) if (other !== id) expect(overlap(box(id), box(other)), `${id} on ${other}`).toBe(false);
+  });
   it("keeps tidied pieces off a fixed piece between them", () => {
     const between = make([chunk("n-a", 0, 0), chunk("n-b", 1200, 0), chunk("n-c", 600, 0)], [edge("e-1", "n-a", "n-b")]);
     const moved = tidyPositions(between, size);
