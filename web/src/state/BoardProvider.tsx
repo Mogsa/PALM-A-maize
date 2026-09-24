@@ -153,17 +153,31 @@ export function useBoard(): Ctx {
   return ctx;
 }
 
+export type NoteHandle = {
+  text: string | undefined; error: string | null; edit: (markdown: string) => void; commit: () => Promise<void>;
+  /** The saved text could not be read: nothing may be typed over it until `retry` loads it. */
+  loadFailed: boolean; retry: () => void;
+};
+
 /** One note's text, shared by every view that shows it. Loads on first use. `edit` is a keystroke: every view shows it
  *  at once and the store writes it after a pause in typing; `commit` writes it now (addendum 4.4, I1). */
-export function useNote(nodeId: string): { text: string | undefined; error: string | null; edit: (markdown: string) => void; commit: () => Promise<void> } {
+export function useNote(nodeId: string): NoteHandle {
   const { notes } = useBoard();
   const text = useSyncExternalStore(notes.subscribe, () => notes.peek(nodeId));
   const failed = useSyncExternalStore(notes.subscribe, () => notes.failed(nodeId));
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    notes.load(nodeId).catch((cause: unknown) => { console.error(NOTE_LOAD_FAILED_MESSAGE, cause); setLoadError(NOTE_LOAD_FAILED_MESSAGE); });
-  }, [notes, nodeId]);
+    let live = true;
+    notes.load(nodeId).catch((cause: unknown) => {
+      console.error(NOTE_LOAD_FAILED_MESSAGE, cause);
+      if (live) setLoadFailed(true);
+    });
+    return () => { live = false; };
+  }, [notes, nodeId, attempt]);
   const edit = useCallback((markdown: string) => notes.edit(nodeId, markdown), [notes, nodeId]);
   const commit = useCallback(() => notes.commit(nodeId), [notes, nodeId]);
-  return { text, error: loadError ?? (failed ? NOTE_SAVE_FAILED_MESSAGE : null), edit, commit };
+  const retry = useCallback(() => { setLoadFailed(false); setAttempt((n) => n + 1); }, []);
+  const error = loadFailed ? NOTE_LOAD_FAILED_MESSAGE : failed ? NOTE_SAVE_FAILED_MESSAGE : null;
+  return { text, error, edit, commit, loadFailed, retry };
 }

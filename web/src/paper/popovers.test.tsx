@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyBoard, type Board, type Highlight } from "../model/types";
 
 const dispatch = vi.fn();
-const note = { text: undefined as string | undefined, error: null as string | null, save: vi.fn(async () => undefined) };
+const note = { text: undefined as string | undefined, error: null as string | null, loadFailed: false, edit: vi.fn(), commit: vi.fn(async () => undefined), retry: vi.fn() };
 let board: Board;
 vi.mock("../state/BoardProvider", () => ({
   useBoard: () => ({ state: { board }, dispatch, paperId: "p", source: { sections: [], figures: [], page_text: [], pages: [] } }),
