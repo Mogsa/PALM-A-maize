@@ -76,6 +76,8 @@
 .find-panel li button { width: 100%; padding: 6px 10px; border: 0; border-bottom: 1px solid var(--border); background: none; text-align: left; font-family: var(--font-read); font-size: 12.5px; }
 .find-panel li button:hover { background: var(--surface-muted); }
 .find-panel .where { display: block; font-family: var(--font-ui); font-size: var(--text-ui-small); color: var(--ink-muted); }
+/* a hit whose sentence reads like a definition (D25): listed first */
+.find-panel .definition-badge { margin-left: 6px; padding: 0 6px; border-radius: var(--radius-pill); border: 1px solid var(--cut-edge); color: var(--cut); font-size: 10px; font-weight: 600; }
 .find-panel mark, .react-pdf__Page__textContent mark.find-hit { background: var(--hl); color: inherit; }
 .react-pdf__Page__textContent mark.find-hit.current { outline: 2px solid var(--hl-solid); outline-offset: 1px; }
 
