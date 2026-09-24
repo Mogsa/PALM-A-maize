@@ -34,6 +34,10 @@ _FRONT_MATTER = re.compile(r"\A---\nid: (?P<id>[^\n]+)\n---\n", re.DOTALL)
 # A node id as the client mints it: "n-" and a ULID (addendum 4.5). Checked
 # before an id becomes a filename or a front-matter line.
 _NODE_ID = re.compile(r"n-[0-9A-HJKMNP-TV-Z]{26}")
+# A paper id as extraction makes it: a lowercase slug, then an arXiv id or a short
+# hash (`paper_id_for`). Checked before an id from a URL becomes a folder, so `..`
+# (sent as `%2e%2e`) never reaches outside `papers/`.
+_PAPER_ID = re.compile(r"[a-z0-9][a-z0-9.-]*")
 # Parses board.json into a dict before its schema is known. Invalid JSON is a
 # ValidationError, like any other corrupt file on disk.
 _RAW_BOARD = TypeAdapter(dict[str, Any])
@@ -80,6 +84,10 @@ def atomic_write(path: Path, data: bytes) -> None:
         raise
 
 
+def _is_paper_id(paper_id: str) -> bool:
+    return bool(_PAPER_ID.fullmatch(paper_id)) and ".." not in paper_id
+
+
 def _check_node_id(node_id: str) -> None:
     if not _NODE_ID.fullmatch(node_id):
         raise NodeNotFound(node_id)
@@ -108,7 +116,7 @@ class Store:
 
     def paper_dir(self, paper_id: str) -> Path:
         folder = self.papers_dir / paper_id
-        if not (folder / "source.json").is_file():
+        if not _is_paper_id(paper_id) or not (folder / "source.json").is_file():
             raise PaperNotFound(paper_id)
         return folder
 
@@ -123,7 +131,7 @@ class Store:
         if not self.papers_dir.is_dir():
             return out
         for folder in sorted(self.papers_dir.iterdir()):
-            if not (folder / "source.json").is_file():
+            if not _is_paper_id(folder.name) or not (folder / "source.json").is_file():
                 continue
             doc = self.read_source(folder.name)
             title = doc.sections[0].title if doc.sections else folder.name

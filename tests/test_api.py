@@ -80,6 +80,19 @@ def test_unknown_paper_is_404_with_the_error_shape(client):
     assert response.json()["error"]["code"] == "paper_not_found"
 
 
+@pytest.mark.parametrize("route", ["source", "board", "pdf", f"notes/{NOTE}"])
+def test_an_escaping_paper_id_is_404(client, store_root, resnet_id, route):
+    """`%2e%2e` decodes to `..`: with a paper's files at the store root it would
+    otherwise read, and write, outside papers/."""
+    for name in ("source.json", "paper.pdf"):
+        (store_root / name).write_bytes((store_root / "papers" / resnet_id / name).read_bytes())
+    response = client.get(f"/api/papers/%2e%2e/{route}")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "paper_not_found"
+    put = client.put(f"/api/papers/%2e%2e/notes/{NOTE}", json={"markdown": "x"})
+    assert put.status_code == 404 and not (store_root / "notes").exists()
+
+
 def test_pdf_bytes(client, resnet_id):
     response = client.get(f"/api/papers/{resnet_id}/pdf")
     assert response.status_code == 200
