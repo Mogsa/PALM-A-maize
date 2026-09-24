@@ -128,3 +128,19 @@ export function resolveReference(ref: Reference, source: Source): Target | null 
     }
   }
 }
+
+export type ReferencePart = { text: string; ref: Reference | null };
+
+/** `text` cut at the references this paper can show, in order; a reference with no match stays in the plain text. */
+export function splitReferences(text: string, source: Source): ReferencePart[] {
+  const parts: ReferencePart[] = [];
+  let cursor = 0;
+  for (const ref of findReferences(text)) {
+    if (!resolveReference(ref, source)) continue;
+    if (ref.start > cursor) parts.push({ text: text.slice(cursor, ref.start), ref: null });
+    parts.push({ text: text.slice(ref.start, ref.end), ref });
+    cursor = ref.end;
+  }
+  if (cursor < text.length || !parts.length) parts.push({ text: text.slice(cursor), ref: null });
+  return parts;
+}

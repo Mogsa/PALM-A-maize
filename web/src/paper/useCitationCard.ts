@@ -1,9 +1,9 @@
-import { useRef, type RefObject } from "react";
-import { api } from "../api/client";
+import type { RefObject } from "react";
 import type { PageRect, Source } from "../model/types";
 import { cardRect, clipAt, firstEntry, resolveLink, type LinkDocument, type LinkTarget } from "./citation";
 import { destinationTop } from "./links";
 import type { HoverCard } from "./useHoverCard";
+import { useWordsUnder } from "./useWordsUnder";
 
 /** The paper's own internal links, as pdf.js's annotation layer draws them. */
 const INTERNAL_LINK = "section.linkAnnotation[data-internal-link]";
@@ -20,18 +20,10 @@ const goTo = (target: LinkTarget, source: Source): PageRect => {
  *  destination by the existing `POST /text`; a destination on a figure, table or formula shows its clip (D26).
  *  Returns the paper's handlers; the card is `hover`'s. */
 export function useCitationCard(pdf: RefObject<LinkDocument | null>, source: Source, paperId: string, hover: HoverCard) {
-  const words = useRef(new Map<string, Promise<string>>());
-
+  const wordsUnder = useWordsUnder(paperId);
   const wordsAt = (target: LinkTarget): Promise<string> => {
     const rect = cardRect(target.dest, source.pages[target.pageIndex], source.regions);
-    if (!rect) return Promise.reject(new Error("not an explicit destination"));
-    const key = `${target.pageIndex}:${rect.join(",")}`;
-    const cached = words.current.get(key);
-    if (cached) return cached;
-    const read = api.postText(paperId, [{ page: target.pageIndex, rect }], false, "text").then((s) => firstEntry(s.text));
-    read.catch(() => words.current.delete(key));   // a failed read is tried again on the next hover
-    words.current.set(key, read);
-    return read;
+    return rect ? wordsUnder({ page: target.pageIndex, rect }).then(firstEntry) : Promise.reject(new Error("not an explicit destination"));
   };
 
   const show = async (link: Element) => {

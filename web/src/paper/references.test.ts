@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Figure, PageRect, Section, Source } from "../model/types";
-import { findReferences, formulaNumbered, referenceCard, resolveReference, type Reference } from "./references";
+import { findReferences, formulaNumbered, referenceCard, resolveReference, splitReferences, type Reference } from "./references";
 
 const spans = (text: string) => findReferences(text).map((r) => [r.kind, r.key, text.slice(r.start, r.end)]);
 
@@ -121,6 +121,19 @@ describe("referenceCard (D26): what the card shows for a matched reference", () 
     expect(await referenceCard({ kind: "equation", key: "2", regions: [a, b] }, read))
       .toEqual({ text: "", clip: { page: 2, rect: b.rect }, go: { page: 2, rect: b.rect } });
     expect(await referenceCard({ kind: "equation", key: "3", regions: [a, b] }, read)).toBeNull();
+  });
+});
+
+describe("splitReferences: a run of a card's text, cut at the references the paper can show", () => {
+  it("cuts out matched references and leaves unmatched ones as plain text", () => {
+    const text = "shown in Fig. 2 and Figure 3, see Sec. 3.1 and [22, 40].";
+    expect(splitReferences(text, resnet).map((p) => [p.text, p.ref?.kind ?? null])).toEqual([
+      ["shown in Fig. 2 and ", null], ["Figure 3", "figure"], [", see ", null], ["Sec. 3.1", "section"], [" and [", null],
+      ["22", "citation"], [", 40].", null],
+    ]);
+  });
+  it("is the text whole when nothing matches", () => {
+    expect(splitReferences("plain words", resnet)).toEqual([{ text: "plain words", ref: null }]);
   });
 });
 
