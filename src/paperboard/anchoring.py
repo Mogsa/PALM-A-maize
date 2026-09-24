@@ -12,6 +12,7 @@ only thing that produces them.
 import bisect
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import pymupdf
@@ -193,14 +194,19 @@ def _windows(index: list[PageIndex], span: int) -> list[PageIndex]:
     return [_joined(index, first, span) for first in range(len(index) - span + 1)]
 
 
-def find_quote(index: list[PageIndex], quote: QuoteSelector, position: int, page_hint: int, span: int = 1) -> Match | None:
+def find_quote(index: list[PageIndex], quote: QuoteSelector, position: int, page_hint: int, span: int = 1,
+               accept: Callable[[Match], bool] | None = None) -> Match | None:
     """Best match across pages, nearest page to the hint searched first only so
     that ties resolve toward it; every page is scored, since scoring all twelve
     pages of a paper costs a few milliseconds.
 
     A quote that crossed a page break when it was made (`span` pages) is matched
     against every run of that many pages, joined (addendum 5.2); the match's
-    `page` is then the first of them and its offsets run on across the break."""
+    `page` is then the first of them and its offsets run on across the break.
+
+    `accept`, when given, must approve a candidate before it can be the best:
+    the words selected in a chunk on the board are taken only inside that
+    chunk (addendum 4.10). It is asked only of a candidate that would win."""
     needle, _ = strip_whitespace(quote.exact)
     if not needle:
         return None
@@ -218,8 +224,11 @@ def find_quote(index: list[PageIndex], quote: QuoteSelector, position: int, page
             distance = abs(global_position(index, page.page, start) - position)
             score = _weighted(quote_score, _similarity(prefix, before), _similarity(suffix, after),
                               1.0 - min(1.0, distance / total_len))
-            if score >= MIN_SCORE and (best is None or score > best.score):
-                best = Match(page.page, start, end, score)
+            if score < MIN_SCORE or (best is not None and score <= best.score):
+                continue
+            match = Match(page.page, start, end, score)
+            if accept is None or accept(match):
+                best = match
     return best
 
 
@@ -525,6 +534,12 @@ def _matched_lines(pdf: pymupdf.Document, index: list[PageIndex], spans: list[Ma
             rects = [box] if box is not None else []
         lines += [PageRect(page=span.page, rect=r) for r in rects]
     return lines or None
+
+
+def matched_lines(pdf: pymupdf.Document, index: list[PageIndex], match: Match) -> list[PageRect] | None:
+    """A `find_quote` match's own printed lines, page by page, as a highlight's
+    lines are recomputed (addendum 5.1). None when no page gives any."""
+    return _matched_lines(pdf, index, _page_spans(index, match))
 
 
 def resolve_highlight(anchor: HighlightAnchor, index: list[PageIndex], pdf: pymupdf.Document) -> HighlightAnchor:
