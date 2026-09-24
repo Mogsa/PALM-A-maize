@@ -6,9 +6,9 @@ import { WRITE } from "./headers";
 
 type Json = Record<string, any>;
 // Ids as the client mints them: a kind and a ULID (addendum 4.5).
-const CHUNK = "n-01K0C0NTEXTCHNK0000000000";
-const MARK = "h-01K0C0NTEXTMRK00000000000";
-const NOTE = "n-01K0C0NTEXTN0TE0000000000";
+const CHUNK = "n-01K0CTXCHNK000000000000000";
+const MARK = "h-01K0CTXMRK0000000000000000";
+const NOTE = "n-01K0CTXN0TE000000000000000";
 
 let resnet = "";
 
@@ -75,4 +75,43 @@ test("an equation reference shows the formula carrying its number, and a citatio
   await cardOf(page).locator('.ref[data-ref-kind="citation"]', { hasText: "29" }).first().hover();
   await expect(card).toContainText("[29] V. Nair and G. E. Hinton. Rectiﬁed linear units improve restricted boltzmann machines. In ICML, 2010.");
   await expect(card).not.toContainText("[30]");
+});
+
+/** §3.1 on the board with "underlying mapping" marked as a term, and the reader's definition connected to it. */
+async function seedTerm(request: APIRequestContext) {
+  const data = await sectionData(request, "3.1. Residual Learning");
+  const anchor = (await (await request.post(`/api/papers/${resnet}/chunks/highlight`, {
+    data: { region: data.region, quote: { exact: "underlying mapping" } }, headers: WRITE })).json()).highlight;
+  const note = { id: NOTE, type: "note", position: { x: 720, y: 80 }, data: { tags: [], collapsed: false, note: `notes/${NOTE}.md`, origin: "reader" } };
+  await save(request, { nodes: [chunk(data), note], highlights: [{ id: MARK, tags: ["t-term"], anchor }],
+    edges: [{ id: "e-01K0CTXEDGE000000000000000", from: MARK, to: NOTE, data: { tags: [] } }] });
+  const put = await request.put(`/api/papers/${resnet}/notes/${NOTE}`, { data: { markdown: "The mapping **we want** the layers to fit.\nMore." }, headers: WRITE });
+  expect(put.ok()).toBeTruthy();
+}
+
+test("hovering a term shows the reader's definition first, on a card and on the paper, and the Glossary lists it (D27)", async ({ page, request }) => {
+  await seedTerm(request);
+  await open(page);
+  await cardOf(page).locator(`mark[data-highlight-id="${MARK}"]`).first().hover();
+  const card = page.getByRole("dialog", { name: "underlying mapping" });
+  await expect(card).toContainText("Your definition");
+  await expect(card.locator("strong")).toHaveText("we want");
+  await expect(card.getByRole("button", { name: "Look up elsewhere" })).toBeVisible();
+  const text = await card.textContent();
+  expect(text!.indexOf("Your definition")).toBeLessThan(text!.indexOf("Look up elsewhere"));
+  await page.mouse.move(5, 500);
+  await expect(card).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Glossary" }).click();
+  const glossary = page.getByRole("region", { name: "Glossary" });
+  await expect(glossary.getByRole("listitem")).toHaveCount(1);
+  await expect(glossary.getByRole("listitem")).toContainText("The mapping we want the layers to fit.");
+  await expect(glossary.getByRole("listitem")).not.toContainText("More.");
+  // Its jump opens the paper where the term is used; there, hovering the mark shows the same card.
+  await glossary.getByRole("button", { name: "underlying mapping" }).click();
+  const onPaper = page.locator(`.overlay .mark[data-highlight-id="${MARK}"]`).first();
+  await expect(onPaper).toBeInViewport();
+  const box = (await onPaper.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+  await expect(card).toContainText("Your definition");
 });

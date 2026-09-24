@@ -80,6 +80,14 @@ button { cursor: pointer; }
 .question-list li button:hover { color: var(--cut); }
 .question-list .kind { margin-right: 6px; font-family: var(--font-ui); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
 
+/* glossary (side panel, D27): each term, the reader's definition's first line */
+.glossary ul { list-style: none; margin: 0; padding: 0; }
+.glossary li { display: flex; flex-direction: column; gap: 2px; padding: 6px 0; border-top: 1px solid var(--border); }
+.glossary li button { padding: 0; border: 0; background: none; text-align: left; }
+.glossary li button:hover { color: var(--cut); }
+.glossary .term { font-family: var(--font-read); font-size: 13.5px; font-weight: 600; }
+.glossary .definition .note-markdown p { margin: 0; font-size: var(--text-ui); }
+
 /* export (side panel) */
 .export-dialog { display: flex; flex-direction: column; gap: 8px; }
 .export-dialog .field { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-ui-small); color: var(--ink-muted); }

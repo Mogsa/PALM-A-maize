@@ -3,6 +3,7 @@ import { api } from "./api/client";
 import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
 import { ExportDialog } from "./panels/ExportDialog";
+import { Glossary } from "./panels/Glossary";
 import { QuestionList } from "./panels/QuestionList";
 import { TemplateEditor } from "./panels/TemplateEditor";
 import { useUndoKeys } from "./panels/undoKeys";
@@ -12,7 +13,7 @@ import { FilterBar } from "./tags/FilterBar";
 import { TagManager } from "./tags/TagManager";
 import "./styles.css";
 
-export type Panel = "questions" | "export" | "tags" | "template";
+export type Panel = "questions" | "glossary" | "export" | "tags" | "template";
 
 function Notice() {
   const { notice, state } = useBoard();
@@ -33,10 +34,13 @@ function PanelButton({ panel, open, label, onToggle }: { panel: Panel; open: Pan
   return <button type="button" className="panel-button" aria-pressed={open === panel} onClick={() => onToggle(panel)}>{label}</button>;
 }
 
+type SidePanelProps = { panel: Panel; onQuestion: (question: Question) => void; onJump: (at: PageRect) => void; onOpenNote: (noteId: string) => void };
+
 /** The side panel's contents: one panel at a time, beside whichever view is open. */
-function SidePanel({ panel, onQuestion }: { panel: Panel; onQuestion: (question: Question) => void }) {
+function SidePanel({ panel, onQuestion, onJump, onOpenNote }: SidePanelProps) {
   switch (panel) {
     case "questions": return <QuestionList onPick={onQuestion} />;
+    case "glossary": return <Glossary onJump={onJump} onOpenNote={onOpenNote} />;
     case "export": return <ExportDialog />;
     case "tags": return <TagManager />;
     case "template": return <TemplateEditor />;
@@ -75,6 +79,7 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
         </div>
         <div className="panel-buttons">
           <PanelButton panel="questions" open={panel} label="Questions" onToggle={toggle} />
+          <PanelButton panel="glossary" open={panel} label="Glossary" onToggle={toggle} />
           <PanelButton panel="export" open={panel} label="Export" onToggle={toggle} />
           <PanelButton panel="tags" open={panel} label="Tags" onToggle={toggle} />
           <PanelButton panel="template" open={panel} label="Template" onToggle={toggle} />
@@ -96,7 +101,7 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
             <BoardView active={view === "board"} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={openInPaper} />
           </div>
         </div>
-        {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} /></aside>}
+        {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} onJump={openInPaper} onOpenNote={openOnBoard} /></aside>}
       </div>
     </>
   );
