@@ -326,9 +326,9 @@ test("a text selection is sent with its own lines, from where the drag starts to
   expect(Math.abs(last.right - (b.left + b.right) / 2)).toBeLessThan(CHAR_SLACK_PX);   // ends at the drop, not the line's end
 });
 
-// Waits on the server (contract 1): the client sends the selection's own lines (the test above); once POST /text builds
-// the highlight from them, it paints only what they cover. Until then it paints the whole first and last lines.
-test.fixme("a highlight across two columns leaves the unselected ends of its first and last lines unpainted", async ({ page }) => {
+// Contract 1: the client sends the selection's own lines (the test above) and POST /text builds the highlight from
+// them, so it paints only what they cover, never the whole first and last lines.
+test("a highlight across two columns leaves the unselected ends of its first and last lines unpainted", async ({ page }) => {
   const { a, b, mid, lines } = await twoColumnHighlight(page);
   const first = lines.filter((l) => l.right < mid).reduce((x, y) => (y.top < x.top ? y : x));
   const last = lines.filter((l) => l.left > mid).reduce((x, y) => (y.top > x.top ? y : x));
