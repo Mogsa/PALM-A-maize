@@ -1,26 +1,33 @@
+import { useMemo } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
-import { blocksText } from "../../model/blocks";
+import { markDimmed } from "../../model/filter";
 import { highlightsIn } from "../../model/geometry";
+import { notesConnectedTo } from "../../model/links";
 import type { ChunkNode as ChunkNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
-import { paintMarks, reflow } from "../marks";
+import { inHandle, outHandle } from "../handles";
+import { HEAD_MIDDLE_PX, useMarkOffsets } from "../markOffsets";
+import { paintBlocks, paintedIds, reflow } from "../marks";
 import { useOverflow } from "../overflow";
+import { ChunkBody } from "./ChunkBody";
 import { CollapseToggle } from "./CollapseToggle";
+import { Counts } from "./Counts";
+import { NodeTags } from "./NodeTags";
 
 export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const { state, words } = useBoard();
+  const { highlights, active_tags: active } = state.board;
   // NodeProps.height also includes automatic measurements; only a stored height fixes the box size.
   const height = state.board.nodes.find((node) => node.id === id)?.height;
-  const marks = highlightsIn(state.board.highlights, data.region);
-  const text = reflow(blocksText(data.blocks), words);
-  // The count is what is painted: a mark inside the region whose quote is not found in the text (or ties)
-  // is not painted and not counted, but it keeps its handle, since an edge may end on it.
-  const runs = paintMarks(text, marks, words);
-  const painted = new Set(runs.flatMap((run) => (run.highlightId ? [run.highlightId] : []))).size;
-  const unplaced = marks.length - painted;
+  const marks = useMemo(() => highlightsIn(highlights, data.region), [highlights, data.region]);
+  const painted = useMemo(() => paintBlocks(data.blocks, marks, words), [data.blocks, marks, words]);
+  const shown = paintedIds(painted).size;
+  const notes = notesConnectedTo(state.board, [id, ...marks.map((m) => m.id)]).length;
+  const [bodyRef, overflowing] = useOverflow<HTMLDivElement>();
+  const offsets = useMarkOffsets(bodyRef, id, data.collapsed, painted);
+  const dimmed = (highlightId: string) => { const h = marks.find((m) => m.id === highlightId); return h ? markDimmed(active, h) : false; };
   const title = reflow(data.region.start.exact, words).slice(0, 80);
   const page = data.region.rects[0].page + 1;
-  const [bodyRef, overflowing] = useOverflow<HTMLDivElement>();
   const classes = ["node", "chunk", data.region.state, height !== undefined && !data.collapsed ? "sized" : "", overflowing ? "overflowing" : ""].filter(Boolean).join(" ");
   return (
     <div className={classes}>
@@ -29,18 +36,17 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
         <CollapseToggle id={id} collapsed={data.collapsed} />
         <span className="badge" title={`Page ${page}`}>p{page}</span>
         <span className="title">{title}</span>
-        {painted > 0 && <span className="count" title={`${painted} highlight${painted === 1 ? "" : "s"} inside${unplaced ? `; ${unplaced} more not found in this text` : ""}`}>{painted}</span>}
+        <Counts marks={shown} unplaced={marks.length - shown} notes={notes} />
+        <NodeTags id={id} tags={data.tags} />
         <button className="quiet open-source" data-testid="open-source" title="Open in paper" aria-label="Open in paper">↗</button>
       </div>
-      {!data.collapsed && (
-        <div className="node-body" ref={bodyRef}>
-          {runs.map((run, i) => run.highlightId ? <mark key={i}>{run.text}</mark> : <span key={i}>{run.text}</span>)}
-        </div>
-      )}
-      {marks.map((h, i) => (
-        <Handle key={h.id} id={h.id} type="source" position={Position.Right} style={{ top: 36 + i * 14 }} title={h.anchor.quote.exact.slice(0, 60)} />
-      ))}
-      <Handle id={`${id}-in`} type="target" position={Position.Left} />
+      {!data.collapsed && <div className="node-body" ref={bodyRef}><ChunkBody painted={painted} dimmed={dimmed} /></div>}
+      {/* Every mark inside keeps a handle, painted or not, since an edge may end on it. */}
+      {marks.map((h) => (data.collapsed
+        ? <Handle key={h.id} id={h.id} type="source" position={Position.Top} title={h.anchor.quote.exact.slice(0, 60)} />
+        : <Handle key={h.id} id={h.id} type="source" position={Position.Right} style={{ top: offsets.get(h.id) ?? HEAD_MIDDLE_PX }} title={h.anchor.quote.exact.slice(0, 60)} />))}
+      <Handle id={inHandle(id)} type="target" position={Position.Left} />
+      <Handle id={outHandle(id)} type="source" position={Position.Right} />
     </div>
   );
 }

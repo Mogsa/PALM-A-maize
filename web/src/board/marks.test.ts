@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { paintMarks, paperWords, reflow } from "./marks";
-import type { Highlight } from "../model/types";
+import { paintBlocks, paintedIds, paintMarks, paperWords, reflow } from "./marks";
+import type { Block, Highlight, Rect } from "../model/types";
 
 const mark = (id: string, exact: string): Highlight =>
   ({ id, tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], quote: { exact, prefix: "", suffix: "" }, position: 0, state: "anchored" } });
@@ -67,4 +67,49 @@ it("paints a quote that spans a hyphenated line end after reflow", () => {
   const runs = paintMarks(text, [mark("h-1", "reward func-\ntion overfitting")], words);
   expect(runs.map((r) => r.highlightId)).toEqual([null, "h-1", null]);
   expect(runs[1].text).toBe("reward function overfitting");
+});
+
+describe("paintBlocks (D1, D2)", () => {
+  const quote = (exact: string) => ({ exact, prefix: "", suffix: "" });
+  const line = (rect: Rect) => ({ page: 0, rect });
+  const mark = (id: string, exact: string, lines: Rect[]): Highlight => ({ id, tags: [], anchor: { rects: lines.map(line), quote: quote(exact), position: 0, state: "anchored" } });
+  const text = (rect: Rect, t: string): Block => ({ kind: "text", page: 0, rect, text: t });
+  const none = new Set<string>();
+
+  it("paints a mark in the block that holds its line, and leaves a clip unpainted", () => {
+    const blocks: Block[] = [text([0, 0, 300, 100], "The residual function is learned."), { kind: "clip", page: 0, rect: [0, 110, 300, 150], label: "formula" }];
+    const painted = paintBlocks(blocks, [mark("h-1", "residual function", [[30, 10, 150, 20]])], none);
+    expect(painted[0].runs).toEqual([
+      { text: "The ", highlightId: null }, { text: "residual function", highlightId: "h-1" }, { text: " is learned.", highlightId: null },
+    ]);
+    expect(painted[1].runs).toEqual([]);
+    expect(paintedIds(painted)).toEqual(new Set(["h-1"]));
+  });
+
+  it("a mark split across two blocks paints its part in each", () => {
+    const first = text([0, 0, 300, 100], "Attention maps a query and a set of key-value pairs");
+    const second = text([0, 150, 300, 250], "to an output, where the query, keys and values are vectors.");
+    const across = mark("h-1", "a set of key-value pairs to an output, where", [[100, 80, 290, 95], [0, 150, 200, 165]]);
+    const [a, b] = paintBlocks([first, second], [across], none);
+    expect(a.runs.find((r) => r.highlightId)?.text).toBe("a set of key-value pairs");
+    expect(b.runs.find((r) => r.highlightId)?.text).toBe("to an output, where");
+  });
+
+  it("paints a whole block that lies inside a longer mark", () => {
+    const block = text([0, 100, 300, 120], "keys and values");
+    const long = mark("h-1", "the queries, keys and values are all vectors", [[0, 80, 300, 95], [0, 102, 300, 118], [0, 125, 300, 140]]);
+    expect(paintBlocks([block], [long], none)[0].runs).toEqual([{ text: "keys and values", highlightId: "h-1" }]);
+  });
+
+  it("does not paint a mark whose lines are all outside the block, even where its words are", () => {
+    const block = text([0, 0, 300, 100], "the same words appear here");
+    const elsewhere = mark("h-1", "the same words", [[0, 500, 100, 510]]);
+    expect(paintBlocks([block], [elsewhere], none)[0].runs.every((r) => r.highlightId === null)).toBe(true);
+  });
+
+  it("does not guess from a fragment shorter than MIN_PARTIAL_CHARS", () => {
+    const block = text([0, 0, 300, 100], "ends with a key");
+    const across = mark("h-1", "a key thing that continues on", [[200, 10, 290, 20]]);
+    expect(paintBlocks([block], [across], none)[0].runs.every((r) => r.highlightId === null)).toBe(true);
+  });
 });
