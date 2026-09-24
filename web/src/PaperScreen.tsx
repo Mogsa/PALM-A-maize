@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client";
 import { newId } from "./model/ids";
 import { sectionLabel } from "./model/sections";
@@ -32,6 +32,16 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   const [jump, setJump] = useState<PageRect | null>(null);
   const connect = useConnect(setError);
   const find = useFind(setJump);
+  // The shell keeps the paper mounted, only hidden, while the board is shown: nothing of the paper's may stay open
+  // there, or its keys (Delete, Escape) would act on the paper behind the board.
+  const active = state.board.view === "paper";
+  const cancelConnect = connect.cancel;
+  useEffect(() => {
+    if (active) return;
+    setPending(null);
+    setOpenMark(null);
+    cancelConnect();
+  }, [active, cancelConnect]);
 
   const choose = async (kind: "highlight" | "cut") => {
     if (!pending) return;

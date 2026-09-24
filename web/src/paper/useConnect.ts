@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { linesInside } from "../model/geometry";
 import { newId } from "../model/ids";
@@ -48,5 +48,6 @@ export function useConnect(onError: (message: string) => void) {
     if (hit.mark) dispatch({ type: "add", edges: [newEdge(from, hit.mark.id)] });   // the reducer drops a line to itself
     else if (hit.heading) void connectToHeading(from, hit.heading);
   };
-  return { connectingFrom, start: setConnectingFrom, cancel: () => setConnectingFrom(null), connectTo };
+  const cancel = useCallback(() => setConnectingFrom(null), []);
+  return { connectingFrom, start: setConnectingFrom, cancel, connectTo };
 }
