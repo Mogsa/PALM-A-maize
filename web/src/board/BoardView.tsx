@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized,
-  type EdgeChange, type Node, type OnBeforeDelete, type OnConnect, type OnNodeDrag,
+  type EdgeChange, type Node, type OnBeforeDelete, type OnConnect, type OnConnectEnd, type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { hiddenNodeIds } from "../model/filter";
@@ -15,12 +15,17 @@ import { useBoard } from "../state/BoardProvider";
 import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
 import { BoardTools } from "./BoardTools";
+import { noteAtDrop, onEmptyBoard } from "./dropNote";
+import { clearCardSelection, textMenuAfterMouseUp, type CardSelection } from "./cardSelection";
 import { EdgePopover } from "./EdgePopover";
+import { groupAround } from "./grouping";
 import { applySelection, endOf, flowEdges, type FlowEdge } from "./handles";
 import { ChunkNode } from "./nodes/ChunkNode";
 import { FigureNode } from "./nodes/FigureNode";
 import { GroupNode } from "./nodes/GroupNode";
 import { NoteNode } from "./nodes/NoteNode";
+import { SelectionBar } from "./SelectionBar";
+import { TextPopover } from "./TextPopover";
 import { tidyPositions } from "./tidy";
 
 const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group: GroupNode };
@@ -40,6 +45,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   const initialized = useNodesInitialized();
   const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(() => new Set());
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; at: DOMRect } | null>(null);
+  const [textMenu, setTextMenu] = useState<CardSelection | null>(null);
   // The note being written stays in sight whatever the filter: a new note carries no tag yet (D8).
   const hidden = useMemo(() => {
     const ids = hiddenNodeIds(state.board);
@@ -52,6 +58,11 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
     onFocusHandled?.();
   }, [initialized, focusNode, fitView, getZoom, onFocusHandled]);
 
+  const box = useCallback((id: string): Box => {
+    const internal = getInternalNode(id)!;
+    return { ...internal.internals.positionAbsolute, width: internal.measured?.width ?? 0, height: internal.measured?.height ?? 0 };
+  }, [getInternalNode]);
+
   /** On drop, a node belongs to the smallest group that wholly contains it, or to none. This one rule
    *  covers dropping in, dragging out, moving between groups, and nesting groups. Whole containment,
    *  not intersection, because a partial overlap is where the spike saw nodes jump (findings, section 2).
@@ -59,10 +70,6 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
    *  calls onNodeDragStop for a multi-selection and for a dragged selection box too, with all of them in `nodes`.
    *  The re-parenting joins the drag's undo step. */
   const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, __, draggedNodes) => {
-    const box = (id: string): Box => {
-      const internal = getInternalNode(id)!;
-      return { ...internal.internals.positionAbsolute, width: internal.measured?.width ?? 0, height: internal.measured?.height ?? 0 };
-    };
     const moved: BoardNode[] = [];
     for (const dragged of draggedNodes) {
       const me = box(dragged.id);
@@ -76,7 +83,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       moved.push(reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null));
     }
     if (moved.length) dispatch({ type: "upsertNodes", nodes: moved, merge: true });
-  }, [dispatch, getInternalNode, state.board.nodes]);
+  }, [box, dispatch, state.board.nodes]);
 
   const focusOn = useCallback((id: string) => {
     void fitView({ nodes: [{ id }], minZoom: 0.2, maxZoom: getZoom(), duration: 300 });
@@ -109,6 +116,24 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
     dispatch({ type: "addNode", node });
   };
 
+  /** Words selected on a card offer Highlight, Split here and Cut out (D20, D21). The popover follows the selection:
+   *  it closes when the words are no longer selected, and closing it clears them so it does not come back. */
+  const onBoardMouseUp = (event: React.MouseEvent) => {
+    const next = textMenuAfterMouseUp(boardRef.current!, event.target);
+    if (next !== undefined) setTextMenu(next);
+  };
+  const closeTextMenu = useCallback(() => {
+    clearCardSelection(boardRef.current);
+    setTextMenu(null);
+  }, []);
+
+  /** Group, one gesture (addendum 4.10): a new group just around the selected pieces, one undo step. */
+  const group = (ids: string[]) => {
+    const nodes = groupAround(state.board.nodes, ids, box);
+    if (nodes.length) dispatch({ type: "upsertNodes", nodes });
+  };
+  const selectedNodes = useMemo(() => state.board.nodes.filter((n) => n.selected), [state.board.nodes]);
+
   const onNodeClick = (event: React.MouseEvent, node: Node) => {
     if ((event.target as HTMLElement).closest("[data-testid=open-source]") && (node.type === "chunk" || node.type === "figure")) {
       onOpenInPaper((node as BoardNode & { data: { region: { rects: PageRect[] } } }).data.region.rects[0]);
@@ -129,6 +154,15 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   const onConnect: OnConnect = useCallback(({ source, sourceHandle, target, targetHandle }) => {
     dispatch({ type: "add", edges: [newEdge(endOf(source, sourceHandle), endOf(target, targetHandle))] });
   }, [dispatch]);
+  /** A line let go of on empty board makes a note there, connected (addendum 4.10): one undo step, then the note opens. */
+  const onConnectEnd: OnConnectEnd = useCallback((event, connection) => {
+    if (connection.isValid || !connection.fromNode) return;
+    const { clientX, clientY } = "changedTouches" in event ? event.changedTouches[0] : event;
+    if (!onEmptyBoard(document.elementFromPoint(clientX, clientY))) return;
+    const { note, edge } = noteAtDrop(connection.fromNode.id, connection.fromHandle?.id, screenToFlowPosition({ x: clientX, y: clientY }));
+    dispatch({ type: "add", nodes: [note], edges: [edge] });
+    setEditing(note.id);
+  }, [dispatch, screenToFlowPosition]);
   const onEdgesChange = useCallback((changes: EdgeChange<FlowEdge>[]) => setSelectedEdges((current) => applySelection(current, changes)), []);
 
   // React Flow offers the selection plus every descendant and every touching edge. The reader chose only the selected
@@ -144,15 +178,16 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
 
   return (
     <BoardActionsProvider value={actions}>
-    <div className="board" ref={boardRef}>
+    <div className="board" ref={boardRef} onMouseUp={onBoardMouseUp}>
       <BoardTools onAddGroup={addGroup} onAddNote={addNote} onTidy={tidy} />
+      <SelectionBar selected={selectedNodes} onGroup={group} />
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
       <ReactFlow<BoardNode, FlowEdge>
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
         onNodesChange={(changes) => dispatch({ type: "nodes", changes })}
-        onEdgesChange={onEdgesChange} onConnect={onConnect}
+        onEdgesChange={onEdgesChange} onConnect={onConnect} onConnectEnd={onConnectEnd}
         onEdgeClick={(event, edge) => setEdgeMenu({ id: edge.id, at: new DOMRect(event.clientX, event.clientY, 0, 0) })}
-        onPaneClick={closeEdgeMenu}
+        onPaneClick={() => { closeEdgeMenu(); closeTextMenu(); }}
         onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onBeforeDelete={onBeforeDelete}
         defaultViewport={state.board.viewport}
         onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
@@ -162,6 +197,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
         <Controls />
       </ReactFlow>
       {edgeMenu && <EdgePopover edgeId={edgeMenu.id} at={edgeMenu.at} onClose={closeEdgeMenu} />}
+      {textMenu && <TextPopover selection={textMenu} onClose={closeTextMenu} />}
     </div>
     </BoardActionsProvider>
   );
