@@ -99,7 +99,6 @@ def _reading_key(doc: SourceDocument, page: int, rect):
     return (page, idx if idx is not None else float("inf"), y0, x0)
 
 
-
 Piece = ChunkNode | FigureNode
 
 
@@ -150,6 +149,7 @@ class _Writer:
         self.tags, self.tag_names = tags, tag_names
         self.out: list[str] = []
         self.written: set[str] = set()
+        self.by_id = {n.id: n for n in board.nodes}
         self.notes_for = _connected_notes(board)
         self.pieces = sorted((n for n in board.nodes if isinstance(n, (ChunkNode, FigureNode))),
                              key=lambda n: _order_key(doc, n))
@@ -168,9 +168,8 @@ class _Writer:
         body = self.notes.get(note_id, "").strip()
         if not body or note_id in self.written:
             return
-        node = next(n for n in self.board.nodes if n.id == note_id)
         # An AI's words are never passed off as the reader's (D14).
-        self.para(f"**AI:** {body}" if node.data.origin == "ai" else body)
+        self.para(f"**AI:** {body}" if self.by_id[note_id].data.origin == "ai" else body)
         self.written.add(note_id)
 
     def notes_of(self, owner: str) -> None:
@@ -226,8 +225,7 @@ class _Writer:
     def template_body(self) -> None:
         """D19: each slot in `nodes` order, with the notes and pieces whose
         nearest slot it is, then everything in no slot in paper order."""
-        by_id = {n.id: n for n in self.board.nodes}
-        home = {n.id: _slot_of(n, by_id) for n in self.board.nodes}
+        home = {n.id: _slot_of(n, self.by_id) for n in self.board.nodes}
         for slot in (n for n in self.board.nodes if _is_slot(n)):
             self.para(f"## {slot.data.name or ''}".rstrip())
             self.para(f"*{slot.data.prompt.strip()}*")
