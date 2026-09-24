@@ -79,7 +79,8 @@ def test_text_returns_a_selection_with_anchors(client, resnet_id):
     assert response.status_code == 200, response.text
     selection = response.json()
     assert selection["rects"] == [{"page": 2, "rect": region["rect"]}]
-    assert selection["highlight"]["rects"] == selection["rects"]
+    lines = selection["highlight"]["rects"]   # one per line (D1)
+    assert len(lines) > 1 and all(line["page"] == 2 for line in lines)
     assert selection["highlight"]["quote"]["exact"]
     assert selection["chunk"]["start"]["exact"]
     assert [(b["kind"], b["page"]) for b in selection["blocks"]] == [("text", 2)]
@@ -491,10 +492,24 @@ def test_render_of_an_unknown_paper_is_404(client):
 
 
 def test_split_returns_draft_nodes_and_writes_nothing(client, resnet_id, store_root):
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
     response = client.post(f"/api/papers/{resnet_id}/split")
     assert response.status_code == 200
-    assert response.json() == {"nodes": []}
+    drafts = response.json()["nodes"]
+    assert len(drafts) == len(source["sections"]) + len(source["figures"])
+    assert all("id" not in d and d["data"]["collapsed"] for d in drafts)
     assert not (store_root / "papers" / resnet_id / "board.json").exists()
+
+
+def test_an_area_selection_over_a_figure_snaps_to_it_and_is_one_clip(client, resnet_id):
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    picture = next(r for r in source["regions"] if r["page"] == 3 and r["label"] == "picture")
+    x0, y0, x1, y1 = picture["rect"]
+    body = {"rects": [{"page": 3, "rect": [x0 - 10, y0 - 10, x1 + 10, y0 + (y1 - y0) * 0.7]}], "mode": "area"}
+    selection = client.post(f"/api/papers/{resnet_id}/text", json=body).json()
+    assert selection["region_label"] == "picture"
+    assert [(b["kind"], b["label"]) for b in selection["blocks"]] == [("clip", "picture")]
+    assert selection["highlight"]["rects"] == selection["rects"]
 
 
 def test_template_defaults_to_nine_slots_and_can_be_replaced(client, store_root):

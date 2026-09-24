@@ -154,7 +154,7 @@ def test_resolve_highlight_states(resnet):
 
     moved = resolve_highlight(HighlightAnchor(rects=[PageRect(page=2, rect=(50.0, 700.0, 286.0, 720.0))], quote=quote, position=0), index, pdf)
     assert moved.state == "relocated"
-    assert len(moved.rects) == 1 and overlap_ratio(moved.rects[0].rect, true_rect) > 0.9
+    assert all(r.page == 2 and overlap_ratio(r.rect, true_rect) > 0.9 for r in moved.rects)
 
     gone = resolve_highlight(HighlightAnchor(rects=[PageRect(page=2, rect=true_rect)], quote=QuoteSelector(exact="never in the paper, not once, not ever"), position=0), index, pdf)
     assert gone.state == "orphaned" and gone.rects == [PageRect(page=2, rect=true_rect)]
@@ -284,3 +284,58 @@ def test_a_relocated_chunk_across_a_page_break_leaves_out_page_furniture(resnet)
     assert resolved.state == "relocated"
     for region in furniture:
         assert not any(r.page == region.page and contains_point(r.rect, *midpoint(region.rect)) for r in resolved.rects)
+
+
+# -- per-line highlights (D1) --------------------------------------------------
+
+
+def _stale(anchor: HighlightAnchor) -> HighlightAnchor:
+    """The same quote with its lines drawn somewhere the text is not, on the same pages."""
+    pages = sorted({r.page for r in anchor.rects})
+    rects = [PageRect(page=p, rect=(300.0, 740.0 - 12 * i, 540.0, 750.0 - 12 * i)) for i, p in enumerate(pages)]
+    return anchor.model_copy(update={"rects": rects})
+
+
+def test_a_highlight_whose_lines_hold_keeps_them_as_drawn(resnet):
+    doc, index, pdf = resnet
+    region = [r for r in doc.regions if r.page == 2 and r.label == "text"][2]
+    anchor = select(doc, pdf, [PageRect(page=2, rect=region.rect)], snap=False).highlight
+    assert len(anchor.rects) > 3
+    resolved = resolve_highlight(anchor, index, pdf)
+    assert resolved.state == "anchored" and resolved.rects == anchor.rects
+
+
+def test_a_relocated_highlight_gets_its_lines_back_from_the_matched_words(resnet):
+    """Re-anchoring recomputes one rect per line from the matched words by the same
+    rule as a fresh selection, never a bounding box and never shifted copies."""
+    doc, index, pdf = resnet
+    region = [r for r in doc.regions if r.page == 2 and r.label == "text"][2]
+    anchor = select(doc, pdf, [PageRect(page=2, rect=region.rect)], snap=False).highlight
+    resolved = resolve_highlight(_stale(anchor), index, pdf)
+    assert resolved.state == "relocated"
+    assert resolved.rects == anchor.rects
+
+
+def test_a_highlight_across_a_page_break_is_matched_on_the_joined_pages(resnet):
+    """One quote across a page break (addendum 5.2 [CHOICE]): matched against the
+    text of the pages it spans, joined, then split back into each page's lines."""
+    doc, index, pdf = resnet
+    last = [r for r in doc.regions if r.page == 2 and r.label == "text"][-1]
+    first = next(r for r in doc.regions if r.page == 3 and r.label == "text")
+    anchor = select(doc, pdf, [PageRect(page=2, rect=last.rect), PageRect(page=3, rect=first.rect)], snap=False).highlight
+    assert {r.page for r in anchor.rects} == {2, 3}
+    assert resolve_highlight(anchor, index, pdf).state == "anchored"
+    resolved = resolve_highlight(_stale(anchor), index, pdf)
+    assert resolved.state == "relocated"
+    assert resolved.rects == anchor.rects
+
+
+def test_a_highlight_on_two_columns_relocates_to_each_columns_lines(resnet):
+    doc, index, pdf = resnet
+    texts = [r for r in doc.regions if r.page == 2 and r.label == "text"]
+    left = next(r for r in reversed(texts) if r.rect[2] < 300)
+    right = next(r for r in texts if r.rect[0] > 300)
+    anchor = select(doc, pdf, [PageRect(page=2, rect=left.rect), PageRect(page=2, rect=right.rect)], snap=False).highlight
+    resolved = resolve_highlight(_stale(anchor), index, pdf)
+    assert resolved.state == "relocated"
+    assert resolved.rects == anchor.rects
