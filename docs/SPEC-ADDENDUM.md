@@ -371,9 +371,13 @@ SPEC.md section 4 puts highlights on the paper and chunks on the board. In the f
   are each a node id or a highlight id. The order is the order it was drawn in and carries
   no meaning. At render, each end resolves to a card:
   - a node id resolves to that node, with no handle;
-  - a highlight id resolves to the first chunk in `nodes` order that contains it, with
-    the highlight id as the handle, placed at the first of its lines inside that chunk. A
-    collapsed chunk puts the handle on its edge.
+  - a highlight id resolves to one chunk that contains it, with the highlight id as the
+    handle, placed at the first of its lines inside that chunk. Among the chunks that
+    contain one of its line rects, a chunk not inside the tray (the `data.tray` group, at
+    any depth) is preferred; among those, the one whose `region.rects` have the smallest
+    total area; a tie goes to the earlier in `nodes` order. Only when every containing
+    chunk is in the tray does the same rule pick among the tray's. A collapsed chunk puts
+    the handle on its edge.
 
   If either end resolves to nothing, the board does not draw the edge. That is the normal
   state of a connection between marks that no chunk holds yet. The line appears the
@@ -400,8 +404,12 @@ from "`board.json` is React Flow's native shape" for edges only. React Flow's `s
 to the chunk that contains it, the same geometry that places marks, and are never stored.
 So re-cutting or deleting a chunk never breaks a connection, and a highlight in no chunk
 can be connected at all. The cost is a resolution pass on every render and a rule for
-overlapping chunks: the first containing chunk in `nodes` order draws the line, which is
-deterministic but still one pick among several. You would prefer storing React Flow's
+overlapping chunks: the smallest containing chunk outside the tray draws the line, which is
+deterministic but still one pick among several. The rule was first "the first containing
+chunk in `nodes` order". First open (D15) puts a chunk for every section in the tray, so
+the tray contains every line of the paper and that rule always drew the line from the tray,
+never from the piece the reader had cut and placed. The smallest chunk outside the tray is
+the reader's own, most specific cut. You would prefer storing React Flow's
 native shape, a chunk plus a handle, if connections only ever ran between pieces already on
 the board. You would prefer drawing one line from every containing chunk if overlapping
 chunks become common and a line from only one of them misleads.
@@ -885,7 +893,7 @@ FastAPI, bound to localhost only. All geometry per section 2.
 | `PUT` | `/api/papers/{id}/board` | `board.json` + `If-Match: <version>` | `{version}` |
 | `GET` | `/api/papers/{id}/notes/{node_id}` | — | `{markdown}` |
 | `PUT` | `/api/papers/{id}/notes/{node_id}` | `{markdown}` | `204` |
-| `POST` | `/api/papers/{id}/text` | `{rects: [{page, rect}], snap, mode}` | `Selection`: `{text, rects, region_label, highlight, chunk, blocks}` |
+| `POST` | `/api/papers/{id}/text` | `{rects: [{page, rect}], snap, mode, lines?}` | `Selection`: `{text, rects, region_label, highlight, chunk, blocks}` |
 | `PUT` | `/api/papers/{id}/clips/{node_id}` | `{page, rect, dpi}`, `dpi` default 216 | `{clip, clip_size}`; renders and stores the PNG |
 | `GET` | `/api/papers/{id}/clips/{node_id}.png` | — | `image/png` |
 | `GET` | `/api/papers/{id}/render` | `?page&x0&y0&x1&y1&dpi`, `dpi` default 216 | `image/png`; stateless, writes nothing |
@@ -895,9 +903,18 @@ FastAPI, bound to localhost only. All geometry per section 2.
 | `GET` | `/api/tags` / `PUT` `/api/tags` | `tags.json` | `tags.json` |
 | `GET` | `/api/template` / `PUT` `/api/template` | `template.json` | `template.json` |
 
-Errors are `{"error": {"code": "...", "message": "..."}}` with `404` unknown paper or
-node, `409` version conflict on board PUT, `422` malformed geometry, `500` extraction
-failure with the extractor's message passed through.
+Errors are `{"error": {"code": "...", "message": "..."}}` with `403` a write without the
+header below, `404` unknown paper or node, `409` version conflict on board PUT, `422`
+malformed geometry, `500` extraction failure with the extractor's message passed through.
+A paper id is the folder name, so one that extraction could not have made, anything but
+`[a-z0-9][a-z0-9.-]*` or anything holding `..`, is an unknown paper: `%2e%2e` never
+reaches outside `papers/`.
+
+Every request to `/api/` other than `GET` and `HEAD` carries the header `X-Paperboard: 1`;
+without it the server answers `403` with code `forbidden`. A custom header forces a CORS
+preflight, which the server never grants, so no page on another origin can send one: a
+form posted from elsewhere cannot write. The web client sends it on every request. This
+sits beside the `Host` check, which stops a rebound name from reading.
 
 `snap` defaults to true; the browser sends false while a modifier key is held, which is
 SPEC.md's "exact selection when you want it". `POST /text` is where the forgiving-highlight rule of section 5.3 is applied — the browser
@@ -916,6 +933,18 @@ decides afterwards, per the gesture, which anchor to keep.
   is never null: it holds one rect per line (section 5.1), across any number of runs and
   pages. This replaces schema 1's null for a selection of more than one run. `blocks` are
   the blocks of the snapped rects, by section 4.0's rule.
+
+  `lines`, optional, is the browser's own rectangle per printed line of the selection:
+  `Range.getClientRects()` in page space, rects on one printed line merged, in reading
+  order. The runs in `rects` still decide the snap, `chunk`, `blocks` and `region_label`.
+  When `lines` is sent and the snap did not take a whole region, `highlight` is built from
+  the words mostly inside one of `lines`, by section 5.1's whole-word rule, one rect per
+  printed line; its `quote.exact`, `prefix`, `suffix` and `position` come from those words.
+  So a selection that starts or ends mid-line paints only the words selected, never the
+  rest of its first and last lines. The runs alone cannot say where on a line a selection
+  starts, because a run is as wide as its column. When the snap took a whole region,
+  `highlight` covers the whole region, as without `lines`; so does a request with no
+  `lines` at all, or one whose lines hold no word.
 - **`"area"`**: exactly one rect, the dragged rectangle; more than one is a `422`. Section
   5.3's rectangle rule applies. `highlight` holds the one snapped rect. `blocks` is a
   single `{kind: "clip", page, rect, label}` with the snapped rect and the region's label,
@@ -983,7 +1012,9 @@ and storing the clips in the same call if first open felt slow on a figure-heavy
 
 The question list is a server-side filter, defined precisely as: every highlight or node
 carrying the `question` tag that has no edge connecting it to a note node whose
-`data.origin` is `"reader"`. A note carrying the tag is on the list like anything else.
+`data.origin` is `"reader"` and whose Markdown is not empty once whitespace is stripped. A
+note created to answer and never written in, or whose file is missing, answers nothing. A
+note carrying the tag is on the list like anything else.
 Edges are walked by `from` and `to`; nothing is cached (section 4.0). It reads the board
 after re-anchoring, as `GET /board` does. Each entry is `{id, kind, text}`: `kind` is
 `"highlight"` or the node's type, and `text` is a highlight's quote, a chunk's or figure's
@@ -1025,7 +1056,8 @@ something that is. Without `tags`, everything is written.
 template order, after the title and goal:
 
 1. Each slot, a group with a `prompt`, in `nodes` order: `## <name>`, then the prompt in
-   italics, then the notes that are its children, then its pieces as in paper order, each
+   italics, then the notes that are its children (with `tags`, those that carry one or
+   whose slot does), then its pieces as in paper order, each
    one heading level down, with their quoted highlights and connected notes. Its pieces
    are the chunks and figures inside it, at any depth, except those inside a nested slot,
    which are written under that slot.
@@ -1282,7 +1314,7 @@ The **[CHOICE]**s these added, for red-penning:
 
 - View state in `board.json`, not localStorage (section 4).
 - Edges stored as `from`/`to` and resolved at render; the first containing chunk in
-  `nodes` order draws the line (section 4.0).
+  `nodes` order draws the line (section 4.0; that rule is replaced by I2, below).
 - Block membership: text by overlap, clips by midpoint and whole (section 4.0).
 - The migrated note-cache edge's id derived from the highlight's (section 4.6).
 - A `board.v1.json` copy before the first schema 2 write (section 4.6).
@@ -1295,3 +1327,21 @@ The **[CHOICE]**s these added, for red-penning:
 - Split on the server, not client-side (section 6).
 - Split drafts without ids; the client mints them and stores figure clips (section 6).
 - An empty slot still written in template-order export (section 6.1).
+
+**Fixes after the whole-branch review, 23 September 2026.** Six, none a new feature.
+
+- **D1, lines from the browser.** `POST /text` takes `lines`, the selection's own rect per
+  printed line, and builds the highlight from the words on them (section 6). The column
+  runs alone painted whole first and last lines, against section 5.1's "never the
+  unselected ends".
+- **I2, which chunk draws a highlight's end.** The smallest containing chunk outside the
+  tray, not the first in `nodes` order, which after first open was always the tray's
+  (section 4.0 and its `[CHOICE]`).
+- **I3, cross-origin writes.** Every write to `/api/` carries `X-Paperboard: 1`, else
+  `403` (section 6).
+- **M1, an empty answer.** A reader's note answers a question only when it has text
+  (section 6).
+- **M2, the filter in template order.** A slot's note is written when it or its slot
+  carries a wanted tag, as section 6.1 already said; it was written whatever the filter.
+- **M4, the paper id.** An id extraction could not have made is an unknown paper, so
+  `%2e%2e` no longer reads or writes outside `papers/` (section 6).
