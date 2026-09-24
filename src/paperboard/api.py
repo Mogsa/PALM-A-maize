@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field, ValidationError, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
+from paperboard.blocks import chunk_blocks
 from paperboard.board_model import Board, ChunkNode, FigureNode, NoteNode, TagFile, TemplateFile
 from paperboard.clips import DEFAULT_DPI, render_clip, render_etag
 from paperboard.export import ExportOrder, export_markdown
@@ -122,7 +123,11 @@ def create_app(root: Path) -> FastAPI:
             for node in board.nodes:
                 if isinstance(node, (ChunkNode, FigureNode)):
                     region = resolve_chunk(node.data.region, index, pdf, doc)
-                    node = node.model_copy(update={"data": node.data.model_copy(update={"region": region})})
+                    update = {"region": region}
+                    # A chunk that moved shows what is under it now (addendum 4.0).
+                    if isinstance(node, ChunkNode) and region.rects != node.data.region.rects:
+                        update["blocks"] = chunk_blocks(doc, pdf, region.rects)
+                    node = node.model_copy(update={"data": node.data.model_copy(update=update)})
                 nodes.append(node)
         return board.model_copy(update={"highlights": highlights, "nodes": nodes, "anchor_basis": basis})
 

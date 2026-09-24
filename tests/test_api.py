@@ -330,6 +330,45 @@ def test_loading_a_board_with_no_basis_re_finds_once_and_stamps_it(client, resne
     assert got["anchor_basis"]
 
 
+def _board_with_misplaced_chunk(client, resnet_id, blocks):
+    """A chunk cut from a page 2 paragraph, its rects then moved elsewhere on
+    the page: re-finding it relocates it."""
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    region = _first_text_region(source, 2)
+    chunk = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()["chunk"]
+    moved = {**chunk, "rects": [{"page": 2, "rect": [60.0, 700.0, 200.0, 710.0]}]}
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [{"id": "n-chunk", "type": "chunk", "position": {"x": 0, "y": 0},
+                       "data": {"tags": [], "collapsed": False, "region": moved, "blocks": blocks}}]
+    board.pop("anchor_basis", None)
+    return board
+
+
+def test_a_chunk_that_re_anchoring_moves_gets_its_blocks_recomputed(client, resnet_id):
+    stale = [{"kind": "text", "page": 2, "rect": [60.0, 700.0, 200.0, 710.0], "text": "stale words"}]
+    board = _board_with_misplaced_chunk(client, resnet_id, stale)
+    _put(client, resnet_id, board)
+    chunk = client.get(f"/api/papers/{resnet_id}/board").json()["nodes"][0]["data"]
+    assert chunk["region"]["state"] == "relocated"
+    assert chunk["blocks"] and chunk["blocks"] != stale
+    assert all(b["page"] == 2 for b in chunk["blocks"])
+
+
+def test_a_chunk_that_holds_keeps_its_blocks(client, resnet_id):
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    region = _first_text_region(source, 2)
+    chunk = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 2, "rect": region["rect"]}], "snap": False}).json()["chunk"]
+    kept = [{"kind": "text", "page": 2, "rect": region["rect"], "text": "as the reader cut it"}]
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [{"id": "n-chunk", "type": "chunk", "position": {"x": 0, "y": 0},
+                       "data": {"tags": [], "collapsed": False, "region": chunk, "blocks": kept}}]
+    board.pop("anchor_basis", None)
+    _put(client, resnet_id, board)
+    got = client.get(f"/api/papers/{resnet_id}/board").json()["nodes"][0]["data"]
+    assert got["region"]["state"] == "anchored"
+    assert got["blocks"] == kept
+
+
 def test_loading_a_board_re_finds_when_the_source_text_changed(client, resnet_id, store_root):
     board, _anchor = _board_with_misplaced_highlight(client, resnet_id)
     board["anchor_basis"] = client.get(f"/api/papers/{resnet_id}/board").json()["anchor_basis"]
