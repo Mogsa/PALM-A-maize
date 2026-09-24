@@ -53,6 +53,36 @@ def test_unknown_paper_raises(store_root):
         Store(store_root).read_source("nope")
 
 
+@pytest.fixture
+def paper_at_the_root(store_root):
+    """A paper's files at the store root itself, so `..` from papers/ would find one."""
+    folder = next((store_root / "papers").iterdir())
+    for name in ("source.json", "paper.pdf"):
+        (store_root / name).write_bytes((folder / name).read_bytes())
+    return store_root
+
+
+@pytest.mark.parametrize("paper_id", ["..", "../papers", "a/b", "a\\b", "x..y", "Upper", "-lead", ".hidden", ""])
+def test_a_paper_id_no_extraction_could_make_is_not_found(paper_at_the_root, paper_id):
+    store = Store(paper_at_the_root)
+    with pytest.raises(PaperNotFound):
+        store.read_source(paper_id)
+    with pytest.raises(PaperNotFound):
+        store.write_note(paper_id, NOTE, "x")
+    assert not (paper_at_the_root / "notes").exists()
+
+
+def test_every_fixture_paper_id_is_valid(store_root):
+    assert len(Store(store_root).list_papers()) == 3
+
+
+def test_a_folder_with_an_invalid_name_is_not_listed(store_root):
+    folder = next((store_root / "papers").iterdir())
+    (store_root / "papers" / "Not A Paper").mkdir()
+    (store_root / "papers" / "Not A Paper" / "source.json").write_bytes((folder / "source.json").read_bytes())
+    assert "Not A Paper" not in [p.paper_id for p in Store(store_root).list_papers()]
+
+
 def test_board_is_empty_until_written_and_versions_advance(store_root):
     store = Store(store_root)
     paper_id = store.list_papers()[0].paper_id

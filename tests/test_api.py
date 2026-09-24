@@ -2,7 +2,7 @@ import hashlib
 import json
 
 import pytest
-from conftest import FIXTURES, LOCAL
+from conftest import FIXTURES, LOCAL, local_client
 from fastapi.testclient import TestClient
 
 from paperboard.api import create_app
@@ -16,7 +16,7 @@ REPLY = "n-01J8Z3QABCDEFGHJKMNPQRSTVZ"
 
 @pytest.fixture
 def client(store_root):
-    return TestClient(create_app(store_root), base_url=LOCAL)
+    return local_client(create_app(store_root))
 
 
 @pytest.fixture
@@ -47,10 +47,50 @@ def test_a_request_for_another_host_is_refused(client, host):
     assert client.get("/api/papers", headers={"host": host}).status_code == 400
 
 
+@pytest.fixture
+def bare_client(store_root):
+    """A client that does not send X-Paperboard, as a form on another origin cannot."""
+    return TestClient(create_app(store_root), base_url=LOCAL)
+
+
+@pytest.mark.parametrize("method, route", [
+    ("post", "/api/papers/{id}/text"), ("put", "/api/tags"), ("put", "/api/papers/{id}/board"),
+    ("post", "/api/papers/{id}/export"), ("delete", "/api/tags"), ("post", "/api/nowhere"),
+])
+def test_a_write_without_the_app_header_is_refused(bare_client, resnet_id, method, route):
+    """Cross-origin writes: a custom header forces a CORS preflight, which the
+    server never grants, so no other origin can send one (addendum section 6)."""
+    response = bare_client.request(method, route.format(id=resnet_id), json={})
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "forbidden"
+
+
+def test_a_read_without_the_app_header_is_served(bare_client, resnet_id):
+    assert bare_client.get("/api/papers").status_code == 200
+    assert bare_client.head(f"/api/papers/{resnet_id}/pdf").status_code != 403
+
+
+def test_a_write_with_the_wrong_header_value_is_refused(bare_client):
+    assert bare_client.put("/api/tags", json={}, headers={"X-Paperboard": "yes"}).status_code == 403
+
+
 def test_unknown_paper_is_404_with_the_error_shape(client):
     response = client.get("/api/papers/nope/source")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "paper_not_found"
+
+
+@pytest.mark.parametrize("route", ["source", "board", "pdf", f"notes/{NOTE}"])
+def test_an_escaping_paper_id_is_404(client, store_root, resnet_id, route):
+    """`%2e%2e` decodes to `..`: with a paper's files at the store root it would
+    otherwise read, and write, outside papers/."""
+    for name in ("source.json", "paper.pdf"):
+        (store_root / name).write_bytes((store_root / "papers" / resnet_id / name).read_bytes())
+    response = client.get(f"/api/papers/%2e%2e/{route}")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "paper_not_found"
+    put = client.put(f"/api/papers/%2e%2e/notes/{NOTE}", json={"markdown": "x"})
+    assert put.status_code == 404 and not (store_root / "notes").exists()
 
 
 def test_pdf_bytes(client, resnet_id):
@@ -61,7 +101,7 @@ def test_pdf_bytes(client, resnet_id):
 
 
 def test_upload_runs_extraction(tmp_path):
-    client = TestClient(create_app(tmp_path), base_url=LOCAL)
+    client = local_client(create_app(tmp_path))
     with FIXTURES["adam"].open("rb") as handle:
         response = client.post("/api/papers", files={"file": ("adam.pdf", handle, "application/pdf")})
     assert response.status_code == 201
@@ -89,7 +129,7 @@ def test_text_returns_a_selection_with_anchors(client, resnet_id):
 @pytest.mark.parametrize("name, route", [("board.json", "board"), ("source.json", "source")])
 def test_a_corrupt_file_on_disk_is_a_500_not_the_clients_fault(store_root, resnet_id, name, route):
     (store_root / "papers" / resnet_id / name).write_text('{"schema": 1, "paper_id": ')
-    client = TestClient(create_app(store_root), base_url=LOCAL, raise_server_exceptions=False)
+    client = local_client(create_app(store_root), raise_server_exceptions=False)
     response = client.get(f"/api/papers/{resnet_id}/{route}")
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "corrupt_data"
@@ -97,7 +137,7 @@ def test_a_corrupt_file_on_disk_is_a_500_not_the_clients_fault(store_root, resne
 
 def test_any_other_server_failure_keeps_the_error_shape(store_root, resnet_id):
     (store_root / "papers" / resnet_id / "paper.pdf").write_bytes(b"not a pdf at all")
-    client = TestClient(create_app(store_root), base_url=LOCAL, raise_server_exceptions=False)
+    client = local_client(create_app(store_root), raise_server_exceptions=False)
     response = client.post(f"/api/papers/{resnet_id}/text", json={"rects": [{"page": 0, "rect": [0, 0, 10, 10]}]})
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "internal"
@@ -176,6 +216,7 @@ def test_questions_lists_unanswered_marks_and_pieces(client, resnet_id):
     board = client.get(f"/api/papers/{resnet_id}/board").json()
     board["edges"] = [{"id": "e-1", "from": NOTE, "to": "h-1", "data": {"tags": []}}]
     _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/{NOTE}", json={"markdown": "Because the identity is easy.\n"})
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
 
 
@@ -212,6 +253,7 @@ def test_a_question_tagged_note_is_a_question_until_a_note_answers_it(client, re
     board = client.get(f"/api/papers/{resnet_id}/board").json()
     board["edges"] = [{"id": "e-1", "from": REPLY, "to": ASK}]
     _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/{REPLY}", json={"markdown": "It does not, if the layers are residual.\n"})
     assert client.get(f"/api/papers/{resnet_id}/questions").json() == []
 
 
@@ -415,6 +457,21 @@ def test_a_schema_1_board_on_disk_is_served_as_schema_2(client, resnet_id, store
     assert (store_root / "papers" / resnet_id / "board.v1.json").exists()
 
 
+@pytest.mark.parametrize("markdown", [None, "", "  \n\n\t"], ids=["no file", "empty", "whitespace"])
+def test_an_empty_note_of_the_readers_does_not_answer_a_question(client, resnet_id, markdown):
+    """A note made to answer and never written in is not an answer (addendum section 6)."""
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    board["nodes"] = [{"id": node_id, "type": "note", "position": {"x": 0, "y": 0},
+                       "data": {"tags": tags, "collapsed": False, "note": f"notes/{node_id}.md"}}
+                      for node_id, tags in ((ASK, ["t-question"]), (REPLY, []))]
+    board["edges"] = [{"id": "e-1", "from": REPLY, "to": ASK}]
+    _put(client, resnet_id, board)
+    client.put(f"/api/papers/{resnet_id}/notes/{ASK}", json={"markdown": "Why does depth hurt?\n"})
+    if markdown is not None:
+        client.put(f"/api/papers/{resnet_id}/notes/{REPLY}", json={"markdown": markdown})
+    assert [q["id"] for q in client.get(f"/api/papers/{resnet_id}/questions").json()] == [ASK]
+
+
 def test_only_a_note_the_reader_wrote_answers_a_question(client, resnet_id):
     def note(node_id, tags, origin):
         return {"id": node_id, "type": "note", "position": {"x": 0, "y": 0},
@@ -437,10 +494,29 @@ def test_text_takes_a_mode(client, resnet_id, mode):
     assert response.json()["highlight"]["rects"]
 
 
+def test_text_takes_the_selections_own_lines(client, resnet_id):
+    """Shared contract 1: `lines` narrows the highlight to the words on them;
+    `rects` still makes the chunk."""
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    x0, y0, x1, y1 = _first_text_region(source, 2)["rect"]
+    runs = [{"page": 2, "rect": [x0, y0, x1, y1]}]
+    whole = client.post(f"/api/papers/{resnet_id}/text", json={"rects": runs, "snap": False}).json()
+    first = whole["highlight"]["rects"][0]["rect"]
+    half = (first[0] + first[2]) / 2
+    lines = [{"page": 2, "rect": [half, first[1], first[2], first[3]]}]
+    response = client.post(f"/api/papers/{resnet_id}/text", json={"rects": runs, "snap": False, "lines": lines})
+    assert response.status_code == 200, response.text
+    selection = response.json()
+    assert len(selection["highlight"]["rects"]) == 1
+    assert selection["highlight"]["rects"][0]["rect"][0] >= half - 30
+    assert selection["chunk"] == whole["chunk"]
+
+
 @pytest.mark.parametrize("body", [
+    {"rects": [{"page": 2, "rect": [60, 100, 280, 130]}], "lines": [{"page": 999, "rect": [60, 100, 280, 130]}]},
     {"rects": [{"page": 2, "rect": [60, 100, 280, 130]}, {"page": 2, "rect": [320, 100, 540, 130]}], "mode": "area"},
     {"rects": [{"page": 2, "rect": [60, 100, 280, 130]}], "mode": "lasso"},
-], ids=["area with two rects", "unknown mode"])
+], ids=["a line outside the document", "area with two rects", "unknown mode"])
 def test_text_refuses_a_malformed_mode(client, resnet_id, body):
     response = client.post(f"/api/papers/{resnet_id}/text", json=body)
     assert response.status_code == 422

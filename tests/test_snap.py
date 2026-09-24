@@ -6,7 +6,7 @@ from paperboard.anchoring import build_index, global_position
 from paperboard.geometry import contains_point, midpoint, union
 from paperboard.snap import SNAP_THRESHOLD, select
 from paperboard.source_model import PageRect
-from paperboard.words import line_rects_under, text_under
+from paperboard.words import line_rects_under, lines_under, text_under
 
 
 @pytest.fixture(scope="module")
@@ -182,6 +182,56 @@ def test_a_highlight_paints_only_the_words_selected_on_its_first_line(resnet):
     rects = select(doc, pdf, drag, snap=False).highlight.rects
     assert rects[0].rect[0] >= half - 30
     assert rects[1].rect[0] == pytest.approx(x0, abs=2)
+
+
+def _mid_line_selection(pdf, region):
+    """What the browser sends for a selection from the third word of a paragraph's
+    first line to the third-last word of its last: the column run, and its own
+    per-line rects (shared contract 1). Returns those and the first and last
+    words selected."""
+    printed = line_rects_under(pdf[2], region.rect)
+    first_words = [w for line in lines_under(pdf[2], printed[0]) for w in line]
+    last_words = [w for line in lines_under(pdf[2], printed[-1]) for w in line]
+    start, end = first_words[2], last_words[-3]
+    lines = [PageRect(page=2, rect=(start[0], *printed[0][1:]))]
+    lines += [PageRect(page=2, rect=r) for r in printed[1:-1]]
+    lines.append(PageRect(page=2, rect=(*printed[-1][:2], end[2], printed[-1][3])))
+    return [PageRect(page=2, rect=region.rect)], lines, start, end
+
+
+def test_a_selection_with_its_lines_paints_only_the_words_selected(resnet):
+    """D1: the browser's own line rects decide the first and last line, so a
+    selection that starts and ends mid-line leaves both unselected ends unpainted."""
+    doc, pdf = resnet
+    region = _text_regions(doc, 2)[2]
+    runs, lines, start, end = _mid_line_selection(pdf, region)
+    highlight = select(doc, pdf, runs, snap=False, lines=lines).highlight
+    assert highlight.rects[0].rect[0] == pytest.approx(start[0])
+    assert highlight.rects[-1].rect[2] == pytest.approx(end[2])
+    assert len(highlight.rects) == len(lines)
+    assert highlight.quote.exact.startswith(start[4])
+    assert highlight.quote.exact.endswith(end[4])
+    assert highlight.quote.prefix.strip() and highlight.quote.suffix.strip()
+    index = build_index(doc)
+    assert highlight.position > global_position(index, 2, 0)
+
+
+def test_a_selection_without_lines_paints_whole_first_and_last_lines(resnet):
+    doc, pdf = resnet
+    region = _text_regions(doc, 2)[2]
+    runs, _lines, start, _end = _mid_line_selection(pdf, region)
+    highlight = select(doc, pdf, runs, snap=False).highlight
+    assert [r.rect for r in highlight.rects] == line_rects_under(pdf[2], region.rect)
+    assert highlight.rects[0].rect[0] < start[0]
+
+
+def test_lines_do_not_stop_a_snap_to_the_whole_region(resnet):
+    doc, pdf = resnet
+    region = _first_text_region(doc, 2)
+    _runs, lines, _start, _end = _mid_line_selection(pdf, region)
+    result = select(doc, pdf, [_slice(region, 0.85)], snap=True, lines=lines)
+    assert result.rects == [PageRect(page=2, rect=region.rect)]
+    assert [r.rect for r in result.highlight.rects] == line_rects_under(pdf[2], region.rect)
 
 
 def test_a_selection_carries_the_blocks_a_cut_of_it_would_show(resnet):

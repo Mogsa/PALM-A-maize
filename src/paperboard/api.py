@@ -32,12 +32,18 @@ from paperboard.store import (
 )
 
 LOCAL_HOSTS = ["127.0.0.1", "localhost"]
+# Every write to the API carries this header with the value "1" (addendum section 6).
+# A custom header forces a CORS preflight, which this server never grants, so no page
+# on another origin can send it: a form posted from elsewhere is refused.
+APP_HEADER = "X-Paperboard"
+READ_METHODS = {"GET", "HEAD"}
 
 
 class TextRequest(BaseModel):
     rects: list[PageRect] = Field(min_length=1)
     snap: bool = True
     mode: Literal["text", "area"] = "text"
+    lines: list[PageRect] | None = None   # the browser's own rect per printed line (addendum section 6)
 
     @model_validator(mode="after")
     def _area_is_one_rect(self) -> "TextRequest":
@@ -97,6 +103,13 @@ def create_app(root: Path) -> FastAPI:
     # Bound to 127.0.0.1, but a page elsewhere can rebind its own name to that
     # address; it still sends its own name as Host, so refuse any other.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=LOCAL_HOSTS)
+
+    @app.middleware("http")
+    async def _writes_come_from_the_app(request: Request, call_next):
+        if (request.url.path.startswith("/api/") and request.method not in READ_METHODS
+                and request.headers.get(APP_HEADER) != "1"):
+            return _error(403, "forbidden", f"a write to the API must carry {APP_HEADER}: 1")
+        return await call_next(request)
 
     @contextmanager
     def opened(paper_id: str):
@@ -243,7 +256,7 @@ def create_app(root: Path) -> FastAPI:
     def post_text(paper_id: str, body: TextRequest):
         doc = store.read_source(paper_id)
         with opened(paper_id) as pdf:
-            return select(doc, pdf, body.rects, body.snap, body.mode)
+            return select(doc, pdf, body.rects, body.snap, body.mode, body.lines)
 
     @app.put("/api/papers/{paper_id}/clips/{node_id}")
     def put_clip(paper_id: str, node_id: str, body: ClipRequest):
@@ -273,14 +286,15 @@ def create_app(root: Path) -> FastAPI:
     @app.get("/api/papers/{paper_id}/questions")
     def questions(paper_id: str):
         board = resolved_board(paper_id)   # after re-anchoring, as GET /board (addendum 6)
-        nodes = {n.id: n for n in board.nodes}
         # Answered: connected, in either direction, to a note the reader wrote
-        # (D14). An AI's note never answers a question for you.
+        # (D14) and wrote something in. An AI's note never answers a question for
+        # you, and nor does a note made to answer and left empty.
+        answers = {n.id for n in board.nodes
+                   if isinstance(n, NoteNode) and n.data.origin == "reader" and note_markdown(paper_id, n.id).strip()}
         answered: set[str] = set()
         for edge in board.edges:
             for end, other in ((edge.from_, edge.to), (edge.to, edge.from_)):
-                note = nodes.get(other)
-                if isinstance(note, NoteNode) and note.data.origin == "reader":
+                if other in answers:
                     answered.add(end)
         out = []
         for h in board.highlights:
@@ -291,14 +305,18 @@ def create_app(root: Path) -> FastAPI:
                 out.append({"id": n.id, "kind": n.type, "text": question_text(paper_id, n)})
         return out
 
+    def note_markdown(paper_id: str, node_id: str) -> str:
+        """A note's body, or empty when its file was never written."""
+        try:
+            return store.read_note(paper_id, node_id)
+        except NoteNotFound:
+            return ""
+
     def question_text(paper_id: str, node) -> str:
         if isinstance(node, (ChunkNode, FigureNode)):
             return node.data.region.start.exact
         if isinstance(node, NoteNode):
-            try:
-                markdown = store.read_note(paper_id, node.id).strip()
-            except NoteNotFound:
-                return ""
+            markdown = note_markdown(paper_id, node.id).strip()
             return markdown.splitlines()[0] if markdown else ""
         return node.data.name or ""
 
@@ -306,13 +324,7 @@ def create_app(root: Path) -> FastAPI:
     def export(paper_id: str, body: ExportRequest):
         doc = store.read_source(paper_id)
         board = resolved_board(paper_id)
-        notes = {}
-        for n in board.nodes:
-            if isinstance(n, NoteNode):
-                try:
-                    notes[n.id] = store.read_note(paper_id, n.id)
-                except NoteNotFound:
-                    notes[n.id] = ""
+        notes = {n.id: note_markdown(paper_id, n.id) for n in board.nodes if isinstance(n, NoteNode)}
         tag_names = {t.id: t.name for t in store.read_tags().tags}
         with opened(paper_id) as pdf:
             markdown = export_markdown(doc, board, notes, pdf, body.tags, body.order, tag_names)
