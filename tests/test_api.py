@@ -437,10 +437,29 @@ def test_text_takes_a_mode(client, resnet_id, mode):
     assert response.json()["highlight"]["rects"]
 
 
+def test_text_takes_the_selections_own_lines(client, resnet_id):
+    """Shared contract 1: `lines` narrows the highlight to the words on them;
+    `rects` still makes the chunk."""
+    source = client.get(f"/api/papers/{resnet_id}/source").json()
+    x0, y0, x1, y1 = _first_text_region(source, 2)["rect"]
+    runs = [{"page": 2, "rect": [x0, y0, x1, y1]}]
+    whole = client.post(f"/api/papers/{resnet_id}/text", json={"rects": runs, "snap": False}).json()
+    first = whole["highlight"]["rects"][0]["rect"]
+    half = (first[0] + first[2]) / 2
+    lines = [{"page": 2, "rect": [half, first[1], first[2], first[3]]}]
+    response = client.post(f"/api/papers/{resnet_id}/text", json={"rects": runs, "snap": False, "lines": lines})
+    assert response.status_code == 200, response.text
+    selection = response.json()
+    assert len(selection["highlight"]["rects"]) == 1
+    assert selection["highlight"]["rects"][0]["rect"][0] >= half - 30
+    assert selection["chunk"] == whole["chunk"]
+
+
 @pytest.mark.parametrize("body", [
+    {"rects": [{"page": 2, "rect": [60, 100, 280, 130]}], "lines": [{"page": 999, "rect": [60, 100, 280, 130]}]},
     {"rects": [{"page": 2, "rect": [60, 100, 280, 130]}, {"page": 2, "rect": [320, 100, 540, 130]}], "mode": "area"},
     {"rects": [{"page": 2, "rect": [60, 100, 280, 130]}], "mode": "lasso"},
-], ids=["area with two rects", "unknown mode"])
+], ids=["a line outside the document", "area with two rects", "unknown mode"])
 def test_text_refuses_a_malformed_mode(client, resnet_id, body):
     response = client.post(f"/api/papers/{resnet_id}/text", json=body)
     assert response.status_code == 422

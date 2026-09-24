@@ -32,7 +32,7 @@ from paperboard.geometry import (
     union,
 )
 from paperboard.source_model import LayoutRegion, PageRect, SourceDocument
-from paperboard.words import line_rects_under, text_under
+from paperboard.words import line_rects, line_rects_under, lines_under, text_under
 
 SNAP_THRESHOLD = 0.6   # a rough drag covering this share of a region's characters, or of its area, takes it
 END_CHARS = 64         # a chunk's start and end selectors quote this many characters
@@ -57,18 +57,16 @@ def _smallest_region_at(doc: SourceDocument, page: int, point: tuple[float, floa
     return min(inside, key=lambda r: area(r.rect)) if inside else None
 
 
-def _snap_rect(pdf: pymupdf.Document, rect: PageRect, region) -> PageRect:
-    """Grown to take in the whole region if the selection covers enough of the
-    region's characters, else exactly what was selected. Coverage counts only the
-    region's characters inside the selection, and the result is the union of the
-    two, so a drag that runs past the region is never cut back to it."""
+def _takes_region(pdf: pymupdf.Document, rect: PageRect, region) -> bool:
+    """Whether the selection covers enough of the region's characters to take the
+    whole region. Coverage counts only the region's characters inside the
+    selection. A snapped selection is the union of the two, so a drag that runs
+    past the region is never cut back to it."""
     page = pdf[rect.page]
     inside = intersection(rect.rect, region.rect)
     covered, _ = strip_whitespace(text_under(page, inside)) if inside else ("", [])
     whole, _ = strip_whitespace(text_under(page, region.rect))
-    if whole and len(covered) / len(whole) >= SNAP_THRESHOLD:
-        return PageRect(page=rect.page, rect=union(rect.rect, region.rect))
-    return rect
+    return bool(whole) and len(covered) / len(whole) >= SNAP_THRESHOLD
 
 
 def _occurrence_under(page: pymupdf.Page, page_index: PageIndex, needle: str, rect: Rect) -> int:
@@ -114,30 +112,59 @@ def _chunk_anchor(pdf: pymupdf.Document, index: list[PageIndex], rects: list[Pag
     return ChunkAnchor(rects=rects, start=start, end=end, position=global_position(index, first.page, start_at))
 
 
-def _select_text(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRect], snap: bool) -> Selection:
+def _run_highlight(pdf: pymupdf.Document, index: list[PageIndex], rects: list[PageRect],
+                   pieces: list[str]) -> HighlightAnchor:
+    """The highlight of whole lines under the column runs. The quote is the whole
+    selection. Its prefix and position come from where its first run starts, its
+    suffix from where its last run ends, so a quote that crosses columns or pages
+    is placed from both ends (D1)."""
+    first, last = rects[0], rects[-1]
+    head, head_at = quote_under(pdf[first.page], index[first.page], pieces[0].strip(), first.rect)
+    tail, _ = quote_under(pdf[last.page], index[last.page], pieces[-1].strip(), last.rect)
+    quote = QuoteSelector(exact="\n".join(pieces).strip(), prefix=head.prefix, suffix=tail.suffix)
+    lines = [PageRect(page=r.page, rect=line) for r in rects for line in line_rects_under(pdf[r.page], r.rect)]
+    return HighlightAnchor(rects=lines or rects, quote=quote, position=global_position(index, first.page, head_at))
+
+
+def _line_highlight(pdf: pymupdf.Document, index: list[PageIndex], lines: list[PageRect]) -> HighlightAnchor | None:
+    """The highlight of exactly the words on the browser's own line rects, one
+    rect per printed line, so a selection that starts or ends mid-line leaves the
+    rest of that line unpainted (D1, addendum section 6). Each line is quoted
+    under its own rect, the first for the prefix and position and the last for
+    the suffix, as the runs are. None when no word lies under any line."""
+    picked = [(line, lines_under(pdf[line.page], line.rect)) for line in lines]
+    picked = [(line, words) for line, words in picked if words]
+    if not picked:
+        return None
+    texts = [[" ".join(w[4] for w in text_line) for text_line in words] for _, words in picked]
+    (first, _), (last, _) = picked[0], picked[-1]
+    head, head_at = quote_under(pdf[first.page], index[first.page], " ".join(texts[0]), first.rect)
+    tail, _ = quote_under(pdf[last.page], index[last.page], " ".join(texts[-1]), last.rect)
+    exact = "\n".join(text for line_texts in texts for text in line_texts)
+    rects = [PageRect(page=line.page, rect=r) for line, words in picked for r in line_rects(words)]
+    return HighlightAnchor(rects=rects, quote=QuoteSelector(exact=exact, prefix=head.prefix, suffix=tail.suffix),
+                           position=global_position(index, first.page, head_at))
+
+
+def _select_text(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRect], snap: bool,
+                 lines: list[PageRect] | None) -> Selection:
     label: str | None = None
+    took = False
     if len(rects) == 1:
         region = _smallest_region_at(doc, rects[0].page, midpoint(rects[0].rect))
         label = region.label if region else None
-        if snap and region is not None:
-            rects = [_snap_rect(pdf, rects[0], region)]
+        took = snap and region is not None and _takes_region(pdf, rects[0], region)
+        if took:
+            rects = [PageRect(page=rects[0].page, rect=union(rects[0].rect, region.rect))]
 
     pieces = [text_under(pdf[r.page], r.rect) for r in rects]
-    text = "\n".join(pieces)
     index = build_index(doc)
-    first, last = rects[0], rects[-1]
-    chunk = _chunk_anchor(pdf, index, rects, pieces)
-
-    # The highlight's quote is the whole selection. Its prefix and position come
-    # from where its first run starts, its suffix from where its last run ends, so
-    # a quote that crosses columns or pages is placed from both ends (D1).
-    head, head_at = quote_under(pdf[first.page], index[first.page], pieces[0].strip(), first.rect)
-    tail, _ = quote_under(pdf[last.page], index[last.page], pieces[-1].strip(), last.rect)
-    quote = QuoteSelector(exact=text.strip(), prefix=head.prefix, suffix=tail.suffix)
-    lines = [PageRect(page=r.page, rect=line) for r in rects for line in line_rects_under(pdf[r.page], r.rect)]
-    highlight = HighlightAnchor(rects=lines or rects, quote=quote, position=global_position(index, first.page, head_at))
-    return Selection(text=text, rects=rects, region_label=label, highlight=highlight, chunk=chunk,
-                     blocks=chunk_blocks(doc, pdf, rects))
+    # A snap that took the whole region highlights the whole region; otherwise the
+    # browser's own lines, when it sent them, decide the first and last line.
+    highlight = _line_highlight(pdf, index, lines) if lines and not took else None
+    return Selection(text="\n".join(pieces), rects=rects, region_label=label,
+                     highlight=highlight or _run_highlight(pdf, index, rects, pieces),
+                     chunk=_chunk_anchor(pdf, index, rects, pieces), blocks=chunk_blocks(doc, pdf, rects))
 
 
 def _caption_of(doc: SourceDocument, region: LayoutRegion) -> PageRect | None:
@@ -181,15 +208,17 @@ def _select_area(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRec
 
 
 def select(doc: SourceDocument, pdf: pymupdf.Document, rects: list[PageRect], snap: bool,
-           mode: Literal["text", "area"] = "text") -> Selection:
+           mode: Literal["text", "area"] = "text", lines: list[PageRect] | None = None) -> Selection:
     """`POST /text`: the raw selection, one rect per column run for `"text"` or the
     dragged rectangle for `"area"`, becomes the snapped rects, both anchor shapes
-    and the blocks a cut of it would show (addendum section 6)."""
+    and the blocks a cut of it would show (addendum section 6). `lines`, the
+    browser's own rect per printed line, narrows a text highlight to the words on
+    them; an area selection ignores it."""
     if not rects:
         raise ValueError("a selection needs at least one rectangle")
-    for r in rects:
+    for r in [*rects, *(lines or [])]:
         if not 0 <= r.page < len(doc.pages):
             raise ValueError(f"page {r.page} is outside the document")
     if mode == "area":
         return _select_area(doc, pdf, rects, snap)
-    return _select_text(doc, pdf, rects, snap)
+    return _select_text(doc, pdf, rects, snap, lines)

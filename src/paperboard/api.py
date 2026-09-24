@@ -38,6 +38,7 @@ class TextRequest(BaseModel):
     rects: list[PageRect] = Field(min_length=1)
     snap: bool = True
     mode: Literal["text", "area"] = "text"
+    lines: list[PageRect] | None = None   # the browser's own rect per printed line (addendum section 6)
 
     @model_validator(mode="after")
     def _area_is_one_rect(self) -> "TextRequest":
@@ -243,7 +244,7 @@ def create_app(root: Path) -> FastAPI:
     def post_text(paper_id: str, body: TextRequest):
         doc = store.read_source(paper_id)
         with opened(paper_id) as pdf:
-            return select(doc, pdf, body.rects, body.snap, body.mode)
+            return select(doc, pdf, body.rects, body.snap, body.mode, body.lines)
 
     @app.put("/api/papers/{paper_id}/clips/{node_id}")
     def put_clip(paper_id: str, node_id: str, body: ClipRequest):
