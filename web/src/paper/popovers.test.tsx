@@ -47,7 +47,42 @@ describe("NoteEditor", () => {
     expect((getByRole("textbox") as HTMLTextAreaElement).readOnly).toBe(true);
     note.text = "saved";
     rerender(<NoteEditor noteId="n-1" origin="reader" />);
+    fireEvent.click(getByRole("button", { name: "Edit note" }));
     expect((getByRole("textbox") as HTMLTextAreaElement).readOnly).toBe(false);
+  });
+  it("an empty note is a field ready for typing, and stays one while it is typed into", () => {
+    note.text = "";
+    const { getByRole, rerender } = render(<NoteEditor noteId="n-1" origin="reader" />);
+    const field = getByRole("textbox");
+    fireEvent.focus(field);
+    note.text = "F";
+    rerender(<NoteEditor noteId="n-1" origin="reader" />);
+    expect(getByRole("textbox")).toBe(field);
+  });
+  it("shows a written note rendered, with its maths (D22)", () => {
+    note.text = "It learns $F(x)$.";
+    const { container, queryByRole } = render(<NoteEditor noteId="n-1" origin="reader" />);
+    expect(queryByRole("textbox")).toBeNull();
+    expect(container.querySelector(".katex")).not.toBeNull();
+  });
+  it("a click edits it as plain text; leaving the field saves and shows it rendered again", () => {
+    note.text = "It learns $F(x)$.";
+    const { getByRole, queryByRole } = render(<NoteEditor noteId="n-1" origin="reader" />);
+    fireEvent.click(getByRole("button", { name: "Edit note" }));
+    const field = getByRole("textbox") as HTMLTextAreaElement;
+    expect(field.value).toBe("It learns $F(x)$.");
+    expect(document.activeElement).toBe(field);
+    fireEvent.blur(field);
+    expect(note.commit).toHaveBeenCalledTimes(1);
+    expect(queryByRole("textbox")).toBeNull();
+  });
+  it("Escape leaves the field, not the popover", () => {
+    note.text = "words";
+    const { getByRole, queryByRole } = render(<NoteEditor noteId="n-1" origin="reader" />);
+    fireEvent.click(getByRole("button", { name: "Edit note" }));
+    fireEvent.keyDown(getByRole("textbox"), { key: "Escape" });
+    expect(queryByRole("textbox")).toBeNull();
+    expect(note.commit).toHaveBeenCalled();
   });
 });
 
