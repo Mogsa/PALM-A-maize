@@ -1,4 +1,4 @@
-import type { LayoutRegion, PageInfo, Rect } from "../model/types";
+import type { LayoutRegion, PageInfo, PageRect, Rect, Source } from "../model/types";
 import { destinationTop } from "./links";
 
 /** Citation cards (D24): hovering one of the paper's own internal links shows the words at its destination. The
@@ -16,7 +16,7 @@ function destinationLeft(dest: unknown[]): number | null {
   return typeof left === "number" ? left : null;
 }
 
-const sideways = (region: LayoutRegion, x: number) => Math.max(region.rect[0] - x, x - region.rect[2], 0);
+const sideways = (region: { rect: Rect }, x: number) => Math.max(region.rect[0] - x, x - region.rect[2], 0);
 
 /** The column a band starts in: the region the band crosses nearest the destination's left, widened to that left;
  *  else the half of the page holding it. */
@@ -37,6 +37,24 @@ export function cardRect(dest: unknown, page: PageInfo, regions: LayoutRegion[])
   const bottom = Math.min(top + CARD_DEPTH_PT, page.height);
   const [x0, x1] = column(destinationLeft(dest) ?? 0, top, bottom, page, regions);
   return [x0, top, x1, bottom];
+}
+
+/** A destination "lands on" a figure, table or formula whose body or caption crosses its first CLIP_REACH_PT: hyperref
+ *  puts the destination a line or so above what it names. */
+export const CLIP_REACH_PT = 2 * CARD_LINE_PT;
+
+/** Where a destination lands, when it is a figure, a table or a formula (D26): its clip, and the figure's caption as
+ *  the words (none for a formula). Null for a destination that lands on text, which D24 reads as words. */
+export function clipAt(dest: unknown, page: PageInfo, source: Pick<Source, "figures" | "regions">): { clip: PageRect; text: string } | null {
+  if (!Array.isArray(dest) || dest.length < 2) return null;
+  const top = destinationTop(dest, page.height) ?? 0;
+  const left = destinationLeft(dest) ?? 0;
+  const lands = (at: PageRect | null) => at !== null && at.page === page.index && at.rect[1] < top + CLIP_REACH_PT && at.rect[3] > top
+    && sideways(at, left) <= COLUMN_REACH_PT;
+  const figure = source.figures.find((f) => lands(f.rect) || lands(f.caption_rect));
+  if (figure) return { clip: figure.rect, text: figure.caption };
+  const formula = source.regions.find((r) => r.label === "formula" && lands({ page: r.page, rect: r.rect }));
+  return formula ? { clip: { page: formula.page, rect: formula.rect }, text: "" } : null;
 }
 
 /** What resolveLink needs of pdf.js's document: its pages' annotations and its destinations. */

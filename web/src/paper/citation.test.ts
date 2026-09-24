@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { LayoutRegion, PageInfo } from "../model/types";
-import { CARD_DEPTH_PT, cardRect, firstEntry, resolveLink } from "./citation";
+import type { Figure, LayoutRegion, PageInfo, Rect } from "../model/types";
+import { CARD_DEPTH_PT, cardRect, clipAt, firstEntry, resolveLink } from "./citation";
 
 const ref = { num: 40, gen: 0 };
 const page: PageInfo = { index: 8, width: 612, height: 792, rotation: 0 };
@@ -78,6 +78,35 @@ describe("firstEntry (D24): the words at a destination, trimmed to one reference
   });
   it("is empty for no words", () => {
     expect(firstEntry("")).toBe("");
+  });
+});
+
+describe("clipAt (D26): a link that lands on a figure, table or formula shows its clip", () => {
+  // ResNet p5 (index 4), as extracted: Table 1 above Figure 4, Table 2 below it in the left column.
+  const p4: PageInfo = { index: 4, width: 612, height: 792, rotation: 0 };
+  const figure = (id: string, kind: "figure" | "table", label: string, rect: Rect, caption: Rect): Figure => ({
+    id, kind, label, caption: `${label}. Its caption.`, caption_rect: { page: 4, rect: caption }, rect: { page: 4, rect }, confidence: "region",
+  });
+  const tab1 = figure("tab-1", "table", "Table 1", [123.914, 69.785, 471.308, 220.705], [50.112, 225.306, 545.111, 244.389]);
+  const fig4 = figure("fig-4", "figure", "Figure 4", [80, 247, 515, 394], [50.112, 393.047, 545.117, 423.035]);
+  const tab2 = figure("tab-2", "table", "Table 2", [97.469, 441.668, 239.006, 482.255], [50.112, 486.284, 286.359, 516.281]);
+  const eq1: LayoutRegion = { page: 2, rect: [123, 626, 287, 637], label: "formula" };
+  const source = { figures: [tab1, fig4, tab2], regions: [eq1] };
+  const at = (x: number, top: number) => [ref, { name: "XYZ" }, x, 792 - top, null];
+
+  it("takes the figure or table whose caption or body the destination's first lines cross, with its caption", () => {
+    expect(clipAt(at(81.3, 220.5), p4, source)).toEqual({ clip: tab1.rect, text: tab1.caption });   // table.1
+    expect(clipAt(at(84.7, 388.2), p4, source)).toEqual({ clip: fig4.rect, text: fig4.caption });   // figure.4
+    expect(clipAt(at(81.3, 481.4), p4, source)).toEqual({ clip: tab2.rect, text: tab2.caption });   // table.2
+  });
+  it("takes a formula region there, with no words", () => {
+    const p2: PageInfo = { ...p4, index: 2 };
+    expect(clipAt(at(123.5, 622.3), p2, source)).toEqual({ clip: { page: 2, rect: eq1.rect }, text: "" });   // equation.3.1
+  });
+  it("is null where the destination lands on text, and for what is not an explicit destination", () => {
+    expect(clipAt(at(50.1, 127.5), { ...p4, index: 2 }, source)).toBeNull();   // subsection.3.1
+    expect(clipAt(at(84.7, 600), p4, source)).toBeNull();
+    expect(clipAt("figure.4", p4, source)).toBeNull();
   });
 });
 

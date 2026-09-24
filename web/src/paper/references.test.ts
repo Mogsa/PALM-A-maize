@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Figure, Section, Source } from "../model/types";
-import { findReferences, formulaNumbered, resolveReference, type Reference } from "./references";
+import type { Figure, PageRect, Section, Source } from "../model/types";
+import { findReferences, formulaNumbered, referenceCard, resolveReference, type Reference } from "./references";
 
 const spans = (text: string) => findReferences(text).map((r) => [r.kind, r.key, text.slice(r.start, r.end)]);
 
@@ -94,6 +94,33 @@ describe("resolveReference (D26): a reference matched to the paper's own thing, 
   it("does not take a line of running text that starts with a marker for the entry", () => {
     expect(resolveReference(ref("citation", "16"), resnet)).toBeNull();
     expect(resolveReference(ref("citation", "40"), resnet)).toBeNull();
+  });
+});
+
+describe("referenceCard (D26): what the card shows for a matched reference", () => {
+  const noRead = async () => { throw new Error("nothing to read"); };
+  it("shows a figure's clip and caption", async () => {
+    const f = resnet.figures[1];
+    expect(await referenceCard({ kind: "figure", figure: f }, noRead)).toEqual({ text: f.caption, clip: f.rect, go: f.rect });
+  });
+  it("shows a section's heading and first lines, joined as Tier 1 joins a reference", async () => {
+    const s = { ...resnet.sections[1], text: "We adopt residual learning to every few stacked layers.\nA building block is shown in Fig. 2. Formally, in this paper\nwe consider a building block defined as:\n\ny = F(x, {Wi}) + x." };
+    expect(await referenceCard({ kind: "section", section: s }, noRead)).toEqual({
+      text: "3.1. Residual Learning\nWe adopt residual learning to every few stacked layers. A building block is shown in Fig. 2. Formally, in this paper we consider a building block defined as:",
+      clip: null, go: s.heading_rect,
+    });
+  });
+  it("shows a citation's entry, and goes to its page", async () => {
+    expect(await referenceCard({ kind: "citation", entry: "[22] Y. LeCun.", page: 8 }, noRead))
+      .toEqual({ text: "[22] Y. LeCun.", clip: null, go: { page: 8, rect: [0, 0, 0, 0] } });
+  });
+  it("shows the clip of the first candidate formula whose words carry the equation's number", async () => {
+    const [a, b] = resnet.regions;
+    const words = new Map([[a.rect[1], "y = F(x, {Wi}) + x. (1)"], [b.rect[1], "y = F(x, {Wi}) + Wsx. (2)"]]);
+    const read = async (at: PageRect) => words.get(at.rect[1]) ?? "";
+    expect(await referenceCard({ kind: "equation", key: "2", regions: [a, b] }, read))
+      .toEqual({ text: "", clip: { page: 2, rect: b.rect }, go: { page: 2, rect: b.rect } });
+    expect(await referenceCard({ kind: "equation", key: "3", regions: [a, b] }, read)).toBeNull();
   });
 });
 

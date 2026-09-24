@@ -1,5 +1,5 @@
-import type { Figure, LayoutRegion, Section, Source } from "../model/types";
-import { firstEntry } from "./citation";
+import type { Figure, LayoutRegion, PageRect, Section, Source } from "../model/types";
+import { CARD_LINES, firstEntry } from "./citation";
 
 /** References on a board card (D26): a chunk's text has no PDF links, so the paper's own pointers ("Figure 2",
  *  "Eq. (3)", "Sec. 4.1", "[12]") are found by simple, named patterns and matched to what the paper has. Nothing is
@@ -76,6 +76,31 @@ function bibliographyEntry(key: string, source: Source): { entry: string; page: 
     if (at) found = { entry: firstEntry(text.slice(at.index)), page };
   }
   return found;
+}
+
+/** What a card shows (D24, D26): the paper's own words, a clip of the paper when it points at a figure, table or
+ *  formula, and where Go there goes. */
+export type WordsCard = { text: string; clip: PageRect | null; go: PageRect };
+
+/** A section's heading and its first CARD_LINES lines, up to its first paragraph's end. */
+const sectionWords = (section: Section) =>
+  `${section.title}\n${firstEntry(section.text.split("\n").slice(0, CARD_LINES).join("\n"))}`;
+
+/** The card for a matched reference. An equation's candidate formulas are read, in order, by `read` (the existing
+ *  `POST /text`) until one carries its number; null when none does. */
+export async function referenceCard(target: Target, read: (at: PageRect) => Promise<string>): Promise<WordsCard | null> {
+  switch (target.kind) {
+    case "figure": return { text: target.figure.caption, clip: target.figure.rect, go: target.figure.rect };
+    case "section": return { text: sectionWords(target.section), clip: null, go: target.section.heading_rect };
+    case "citation": return { text: target.entry, clip: null, go: { page: target.page, rect: [0, 0, 0, 0] } };
+    case "equation": {
+      for (const region of target.regions) {
+        const at = { page: region.page, rect: region.rect };
+        if (formulaNumbered(await read(at), target.key)) return { text: "", clip: at, go: at };
+      }
+      return null;
+    }
+  }
 }
 
 /** The paper's own figure, section, formula regions or bibliography entry for `ref`, or null when there is none:

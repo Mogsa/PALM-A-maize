@@ -5,7 +5,7 @@ import "react-pdf/dist/Page/TextLayer.css";
 import { api } from "../api/client";
 import type { XY } from "../model/reparent";
 import type { Board, PageRect, PaperScroll, SelectionMode, Source } from "../model/types";
-import { CitationCard } from "./CitationCard";
+import { ContextCard } from "./ContextCard";
 import type { LinkDocument } from "./citation";
 import type { PaperHit } from "./hit";
 import { destinationTop } from "./links";
@@ -14,6 +14,7 @@ import { PageOverlay } from "./PageOverlay";
 import { bandBox } from "./rectangleDrag";
 import { usePaperScroll } from "./scroll";
 import { useCitationCard } from "./useCitationCard";
+import { useHoverCard } from "./useHoverCard";
 import { useFindMark, type FindMark } from "./useFindMark";
 import { usePaperMouse } from "./usePaperMouse";
 
@@ -48,7 +49,8 @@ export function PaperView(props: Props) {
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const pdf = useRef<LinkDocument | null>(null);
-  const citation = useCitationCard(pdf, source, paperId);
+  const hover = useHoverCard();
+  const citation = useCitationCard(pdf, source, paperId, hover);
   const mouse = usePaperMouse(container, source, board, props);
   const findProps = useFindMark(container, findMark);
   const onScrollSave = usePaperScroll(container, { ready, source, pageWidthPx: PAGE_WIDTH_PX, paperScroll, onScrollSettled });
@@ -70,13 +72,12 @@ export function PaperView(props: Props) {
   /** The paper's own internal links (D10): to the destination's page and height. Stable, so pages do not redraw. */
   const followLink = useCallback(({ dest, pageIndex }: { dest?: unknown; pageIndex: number }) =>
     scrollToPoint(pageIndex, destinationTop(dest, source.pages[pageIndex].height) ?? 0), [scrollToPoint, source]);
-  const onScroll = () => { onScrollSave(); citation.hide(); };
-  const card = citation.card;
+  const onScroll = () => { onScrollSave(); hover.hide(); };
 
   return (
     <>
       <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseDown={mouse.onMouseDown} onMouseUp={mouse.onMouseUp}
-           onScroll={onScroll} {...citation.paper}>
+           onScroll={onScroll} {...citation}>
         <Document file={api.pdfUrl(paperId)} onLoadSuccess={(doc) => { pdf.current = doc; setReady(true); }}
                   loading={<div className="loading">Loading the paper</div>}
                   onItemClick={followLink} externalLinkTarget="_blank" externalLinkRel="noopener noreferrer">
@@ -90,8 +91,7 @@ export function PaperView(props: Props) {
         </Document>
         {mouse.band && <div className="rubber-band" style={bandStyle(mouse.band.start, mouse.band.end)} />}
       </div>
-      {card && <CitationCard at={card.at} text={card.text} failed={card.failed} {...citation.cardHandlers}
-                             onGo={() => { followLink(card.target); citation.close(); }} />}
+      {hover.card && <ContextCard card={hover.card} hover={hover} onGo={(at) => scrollToPoint(at.page, at.rect[1])} />}
     </>
   );
 }

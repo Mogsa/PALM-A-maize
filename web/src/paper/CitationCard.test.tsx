@@ -23,6 +23,22 @@ describe("CitationCard (D24)", () => {
     rerender(<CitationCard at={at} text={null} failed={true} {...handlers()} />);
     expect(getByRole("dialog").textContent).toContain("Could not read");
   });
+  it("shows a clip of the paper above the words when it points at a figure, table or formula (D26)", () => {
+    const { getByRole } = render(<CitationCard at={at} text="Figure 4. Training on ImageNet." failed={false} clip="/render?page=4" {...handlers()} />);
+    const image = getByRole("img");
+    expect(image.getAttribute("src")).toBe("/render?page=4");
+    expect(getByRole("dialog").textContent).toContain("Figure 4. Training on ImageNet.");
+  });
+  it("shows only the clip for a formula, which has no words of its own", () => {
+    const { getByRole } = render(<CitationCard at={at} text="" failed={false} clip="/render" {...handlers()} />);
+    expect(getByRole("dialog").querySelector(".citation-text")).toBeNull();
+  });
+  it("takes its own label and body, and no Go there without somewhere to go (D27)", () => {
+    const { onGo: _onGo, ...h } = handlers();
+    const { getByRole, queryByRole } = render(<CitationCard at={at} label="Term" {...h}><p>body</p></CitationCard>);
+    expect(getByRole("dialog", { name: "Term" }).textContent).toContain("body");
+    expect(queryByRole("button", { name: "Go there" })).toBeNull();
+  });
   it("closes on Escape, and holds open while the mouse is on it", () => {
     const h = handlers();
     const { getByRole } = render(<CitationCard at={at} text="x" failed={false} {...h} />);

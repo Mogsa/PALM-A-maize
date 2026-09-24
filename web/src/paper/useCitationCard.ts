@@ -1,31 +1,26 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useRef, type RefObject } from "react";
 import { api } from "../api/client";
-import type { Source } from "../model/types";
-import { cardRect, firstEntry, resolveLink, type LinkDocument, type LinkTarget } from "./citation";
+import type { PageRect, Source } from "../model/types";
+import { cardRect, clipAt, firstEntry, resolveLink, type LinkDocument, type LinkTarget } from "./citation";
+import { destinationTop } from "./links";
+import type { HoverCard } from "./useHoverCard";
 
-/** A pass over a link on the way elsewhere opens nothing. */
-export const CARD_OPEN_DELAY_MS = 250;
-/** Time to move the mouse from the link onto its card. */
-export const CARD_CLOSE_DELAY_MS = 250;
 /** The paper's own internal links, as pdf.js's annotation layer draws them. */
 const INTERNAL_LINK = "section.linkAnnotation[data-internal-link]";
 
-export type OpenCard = { link: Element; at: DOMRect; target: LinkTarget; text: string | null; failed: boolean };
-
 const linkOf = (target: EventTarget | null) => (target instanceof Element ? target.closest(INTERNAL_LINK) : null);
 
-/** Citation cards (D24): hovering or focusing an internal link shows the words at its destination, read once per
- *  destination by the existing `POST /text`. Returns the open card, the paper's handlers and the card's own. */
-export function useCitationCard(pdf: RefObject<LinkDocument | null>, source: Source, paperId: string) {
-  const [card, setCard] = useState<OpenCard | null>(null);
-  const words = useRef(new Map<string, Promise<string>>());
-  const hovered = useRef<Element | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+/** Where Go there goes: the destination's page and height, as following the link does (D10). */
+const goTo = (target: LinkTarget, source: Source): PageRect => {
+  const top = destinationTop(target.dest, source.pages[target.pageIndex].height) ?? 0;
+  return { page: target.pageIndex, rect: [0, top, 0, top] };
+};
 
-  const clear = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; };
-  const later = (then: () => void, ms: number) => { clear(); timer.current = setTimeout(then, ms); };
-  useEffect(() => clear, []);
-  const close = useCallback(() => { clear(); hovered.current = null; setCard((c) => (c ? null : c)); }, []);
+/** Citation cards (D24): hovering or focusing an internal link shows the words at its destination, read once per
+ *  destination by the existing `POST /text`; a destination on a figure, table or formula shows its clip (D26).
+ *  Returns the paper's handlers; the card is `hover`'s. */
+export function useCitationCard(pdf: RefObject<LinkDocument | null>, source: Source, paperId: string, hover: HoverCard) {
+  const words = useRef(new Map<string, Promise<string>>());
 
   const wordsAt = (target: LinkTarget): Promise<string> => {
     const rect = cardRect(target.dest, source.pages[target.pageIndex], source.regions);
@@ -43,47 +38,35 @@ export function useCitationCard(pdf: RefObject<LinkDocument | null>, source: Sou
     const pageNumber = Number(link.closest(".react-pdf__Page")?.getAttribute("data-page-number"));
     const id = link.getAttribute("data-annotation-id");
     if (!pdf.current || !id || !pageNumber) return;
-    const mine = (c: OpenCard | null) => c?.link === link;
     try {
       const target = await resolveLink(pdf.current, pageNumber, id);
-      if (!target || !source.pages[target.pageIndex] || hovered.current !== link) return;
-      setCard({ link, at: link.getBoundingClientRect(), target, text: null, failed: false });
+      const page = target && source.pages[target.pageIndex];
+      if (!target || !page) return;
+      const go = goTo(target, source);
+      const clip = clipAt(target.dest, page, source);
+      if (clip) return hover.open(link, link.getBoundingClientRect(), { kind: "words", text: clip.text, clip: clip.clip, failed: false, go });
+      hover.open(link, link.getBoundingClientRect(), { kind: "words", text: null, clip: null, failed: false, go });
       const text = await wordsAt(target);
-      setCard((c) => (mine(c) ? { ...c!, text } : c));
+      hover.update(link, (c) => (c.kind === "words" ? { ...c, text } : c));
     } catch (failure) {
       console.error("Could not read the words at a link's destination", failure);
-      setCard((c) => (mine(c) ? { ...c!, failed: true } : c));
+      hover.update(link, (c) => (c.kind === "words" ? { ...c, failed: true } : c));
     }
   };
 
-  const paper = {
+  return {
     onMouseOver: (e: React.MouseEvent) => {
       const link = linkOf(e.target);
-      if (!link) return;
-      if (link === hovered.current) return clear();
-      hovered.current = link;
-      setCard((c) => (c && c.link !== link ? null : c));   // another link's card never shows by this one
-      later(() => void show(link), CARD_OPEN_DELAY_MS);
+      if (link) hover.arrive(link, () => void show(link));
     },
     onMouseOut: (e: React.MouseEvent) => {
       const link = linkOf(e.target);
-      if (link && linkOf(e.relatedTarget) !== link) later(close, CARD_CLOSE_DELAY_MS);
+      if (link && linkOf(e.relatedTarget) !== link) hover.depart();
     },
     onFocus: (e: React.FocusEvent) => {
       const link = linkOf(e.target);
-      if (!link) return;
-      clear();
-      hovered.current = link;
-      void show(link);
+      if (link) hover.arrive(link, () => void show(link), true);
     },
-    onBlur: (e: React.FocusEvent) => { if (linkOf(e.target)) later(close, CARD_CLOSE_DELAY_MS); },
+    onBlur: (e: React.FocusEvent) => { if (linkOf(e.target)) hover.depart(); },
   };
-  /** The paper moved: the open card no longer sits by its link. A card waiting to open for another link still opens. */
-  const hide = () => {
-    if (!card) return;
-    if (hovered.current === card.link) { clear(); hovered.current = null; }
-    setCard(null);
-  };
-  const cardHandlers = { onEnter: clear, onLeave: () => later(close, CARD_CLOSE_DELAY_MS), onClose: close };
-  return { card, paper, cardHandlers, close, hide };
 }
