@@ -31,7 +31,8 @@ function GroupName({ id, name }: { id: string; name: string | null | undefined }
 export function GroupNode({ id, data, selected }: NodeProps<GroupNodeType>) {
   const { state, dispatch } = useBoard();
   const { setEditing } = useBoardActions();
-  const answer = () => {
+  const answer = (event: React.MouseEvent) => {
+    event.stopPropagation();   // answering a slot does not select the slot
     const note = newNote({ position: SLOT_NOTE_AT, parentId: id, origin: "reader" });
     dispatch({ type: "add", nodes: [note] });
     setEditing(note.id);

@@ -13,7 +13,10 @@ export function TrayRows({ trayId }: { trayId: string }) {
     <>
       {rows.map((row) => (
         <button key={row.sectionId} type="button" className="ghost-row nodrag" style={{ top: row.y, left: TRAY_PAD, width: TRAY_PIECE_WIDTH }}
-                onClick={() => (row.nodeId ? focusNode(row.nodeId) : openInPaper(row.headingRect))}
+                onClick={(event) => {
+                  event.stopPropagation();   // a click on the row is not a click on the tray: it must not select it
+                  if (row.nodeId) focusNode(row.nodeId); else openInPaper(row.headingRect);
+                }}
                 title={row.nodeId ? "Show this section's piece" : "Show this section in the paper"}>
           {row.text}
         </button>

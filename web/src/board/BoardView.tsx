@@ -34,13 +34,18 @@ const DELETE_KEYS = ["Backspace", "Delete"];
 function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Props) {
   const { state, dispatch } = useBoard();
   const { byId } = useTags();
-  const { getInternalNode, fitView, getZoom, screenToFlowPosition } = useReactFlow<BoardNode>();
+  const { getInternalNode, getNodes, fitView, getZoom, screenToFlowPosition } = useReactFlow<BoardNode>();
   const boardRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const initialized = useNodesInitialized();
   const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(() => new Set());
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; at: DOMRect } | null>(null);
-  const hidden = useMemo(() => hiddenNodeIds(state.board), [state.board]);
+  // The note being written stays in sight whatever the filter: a new note carries no tag yet (D8).
+  const hidden = useMemo(() => {
+    const ids = hiddenNodeIds(state.board);
+    if (editing) ids.delete(editing);
+    return ids;
+  }, [state.board, editing]);
   useEffect(() => {
     if (!initialized || !focusNode) return;
     void fitView({ nodes: [{ id: focusNode }], minZoom: 0.2, maxZoom: getZoom() });
@@ -75,8 +80,10 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
 
   const focusOn = useCallback((id: string) => {
     void fitView({ nodes: [{ id }], minZoom: 0.2, maxZoom: getZoom(), duration: 300 });
-    dispatch({ type: "nodes", changes: [{ type: "select", id, selected: true }] });
-  }, [fitView, getZoom, dispatch]);
+    // Only the piece shown is selected, so a Delete next removes that piece and nothing chosen before.
+    const others = getNodes().filter((n) => n.selected && n.id !== id).map((n) => ({ type: "select" as const, id: n.id, selected: false }));
+    dispatch({ type: "nodes", changes: [...others, { type: "select", id, selected: true }] });
+  }, [fitView, getZoom, getNodes, dispatch]);
   const actions = useMemo(() => ({ focusNode: focusOn, openInPaper: onOpenInPaper, editing, setEditing }), [focusOn, onOpenInPaper, editing]);
 
   const addNote = () => {

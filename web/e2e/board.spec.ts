@@ -5,7 +5,7 @@ test.afterEach(async ({request}) => {
   const path = `/api/papers/${papers[0].paper_id}/board`;
   const board = await (await request.get(path)).json();
   board.nodes = []; board.edges = []; board.highlights = [];
-  board.viewport = {x: 0, y: 0, zoom: 1};
+  board.viewport = {x: 0, y: 0, zoom: 1}; board.active_tags = [];
   await request.put(path, {data: board, headers: {'If-Match': String(board.version)}});
 });
 const quote = { exact: 'Review chunk', prefix: '', suffix: '' };
@@ -19,12 +19,12 @@ async function seed(page: Page, x = 40) {
 }
 
 /** Saves a board with these nodes and highlights, and opens it in the paper view. */
-async function seedBoard(page: Page, { nodes = [], highlights = [] }: { nodes?: object[]; highlights?: object[] }) {
+async function seedBoard(page: Page, { nodes = [], highlights = [], activeTags = [] }: { nodes?: object[]; highlights?: object[]; activeTags?: string[] }) {
   const papers = await (await page.request.get(`/api/papers`)).json();
   const id = papers[0].paper_id;
   const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
   board.nodes = nodes;
-  board.edges = []; board.highlights = highlights; board.viewport = { x: 0, y: 0, zoom: 1 };
+  board.edges = []; board.highlights = highlights; board.viewport = { x: 0, y: 0, zoom: 1 }; board.active_tags = activeTags;
   const saved = await page.request.put(`/api/papers/${id}/board`, {data: board, headers: {'If-Match': String(board.version)}});
   expect(saved.ok()).toBeTruthy();
   await page.goto('/');
@@ -259,4 +259,29 @@ test('New note and a slot\'s question each open a note ready for typing', async 
   const notes = board.nodes.filter((n: { type: string }) => n.type === 'note');
   const texts = await Promise.all(notes.map(async (n: { id: string }) => (await (await page.request.get(`/api/papers/${id}/notes/${n.id}`)).json()).markdown));
   expect(texts.sort()).toEqual(['In my own words', 'The answer']);
+});
+
+test('a ghost row or a slot question does not select the group it sits in', async ({page}) => {
+  const papers = await (await page.request.get('/api/papers')).json();
+  const source = await (await page.request.get(`/api/papers/${papers[0].paper_id}/source`)).json();
+  const tray = { id: 'n-tray', type: 'group', position: { x: 0, y: 0 }, width: 360, height: 400, data: { tags: [], name: 'Paper', tray: true } };
+  const slot = { id: 'n-slot', type: 'group', position: { x: 1000, y: 0 }, width: 400, height: 300, data: { tags: [], name: 'Main point', prompt: 'What is the one thing?' } };
+  const base = chunk('n-out', 500, 0, 'Moved out.');
+  const out = { ...base, data: { ...base.data, source_id: source.sections[0].id, collapsed: true } };
+  await seedBoard(page, { nodes: [tray, slot, out] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await page.locator('.ghost-row', { hasText: '→ on the board' }).click();
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(1);
+  await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', 'n-out');
+  await page.locator('.slot-prompt').click();
+  await expect(page.locator('.react-flow__node[data-id="n-slot"].selected')).toHaveCount(0);
+});
+
+test('a note made while a tag filter is on stays in sight, ready for typing', async ({page}) => {
+  const base = chunk('n-tagged', 40, 100, 'Tagged.');
+  await seedBoard(page, { nodes: [{ ...base, data: { ...base.data, tags: ['t-shown'] } }], activeTags: ['t-shown'] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await expect(page.locator('.react-flow__node[data-id="n-tagged"]')).toBeVisible();
+  await page.getByRole('button', {name: 'New note'}).click();
+  await expect(page.locator('textarea.note-text')).toBeFocused();
 });
