@@ -15,12 +15,14 @@ import { useBoard } from "../state/BoardProvider";
 import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
 import { BoardTools } from "./BoardTools";
+import { readCardSelection, type CardSelection } from "./cardSelection";
 import { EdgePopover } from "./EdgePopover";
 import { applySelection, endOf, flowEdges, type FlowEdge } from "./handles";
 import { ChunkNode } from "./nodes/ChunkNode";
 import { FigureNode } from "./nodes/FigureNode";
 import { GroupNode } from "./nodes/GroupNode";
 import { NoteNode } from "./nodes/NoteNode";
+import { TextPopover } from "./TextPopover";
 import { tidyPositions } from "./tidy";
 
 const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group: GroupNode };
@@ -40,6 +42,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   const initialized = useNodesInitialized();
   const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(() => new Set());
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; at: DOMRect } | null>(null);
+  const [textMenu, setTextMenu] = useState<CardSelection | null>(null);
   // The note being written stays in sight whatever the filter: a new note carries no tag yet (D8).
   const hidden = useMemo(() => {
     const ids = hiddenNodeIds(state.board);
@@ -109,6 +112,13 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
     dispatch({ type: "addNode", node });
   };
 
+  /** Words selected on a card offer Highlight, Split here and Cut out (D20, D21). */
+  const onBoardMouseUp = () => {
+    const read = readCardSelection(boardRef.current!);
+    if (read) setTextMenu(read);
+  };
+  const closeTextMenu = useCallback(() => setTextMenu(null), []);
+
   const onNodeClick = (event: React.MouseEvent, node: Node) => {
     if ((event.target as HTMLElement).closest("[data-testid=open-source]") && (node.type === "chunk" || node.type === "figure")) {
       onOpenInPaper((node as BoardNode & { data: { region: { rects: PageRect[] } } }).data.region.rects[0]);
@@ -144,7 +154,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
 
   return (
     <BoardActionsProvider value={actions}>
-    <div className="board" ref={boardRef}>
+    <div className="board" ref={boardRef} onMouseUp={onBoardMouseUp}>
       <BoardTools onAddGroup={addGroup} onAddNote={addNote} onTidy={tidy} />
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
       <ReactFlow<BoardNode, FlowEdge>
@@ -152,7 +162,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
         onNodesChange={(changes) => dispatch({ type: "nodes", changes })}
         onEdgesChange={onEdgesChange} onConnect={onConnect}
         onEdgeClick={(event, edge) => setEdgeMenu({ id: edge.id, at: new DOMRect(event.clientX, event.clientY, 0, 0) })}
-        onPaneClick={closeEdgeMenu}
+        onPaneClick={() => { closeEdgeMenu(); closeTextMenu(); }}
         onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onBeforeDelete={onBeforeDelete}
         defaultViewport={state.board.viewport}
         onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
@@ -162,6 +172,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
         <Controls />
       </ReactFlow>
       {edgeMenu && <EdgePopover edgeId={edgeMenu.id} at={edgeMenu.at} onClose={closeEdgeMenu} />}
+      {textMenu && <TextPopover selection={textMenu} onClose={closeTextMenu} />}
     </div>
     </BoardActionsProvider>
   );

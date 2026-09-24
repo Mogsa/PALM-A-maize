@@ -16,7 +16,7 @@ export function ChunkBody({ painted, dimmed }: { painted: PaintedBlock[]; dimmed
         ? <img key={i} className="block-clip" src={api.renderUrl(paperId, { page: block.page, rect: block.rect })}
                width={clipPx(block.rect[2] - block.rect[0])} height={clipPx(block.rect[3] - block.rect[1])}
                alt={block.label ?? "part of the paper"} loading="lazy" draggable={false} />
-        : <p key={i} className="block-text">
+        : <p key={i} className="block-text nodrag">
             {runs.map((run, j) => (run.highlightId
               ? <mark key={j} data-highlight-id={run.highlightId} className={dimmed(run.highlightId) ? "dim" : undefined}>{run.text}</mark>
               : <span key={j}>{run.text}</span>))}

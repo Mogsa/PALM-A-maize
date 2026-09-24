@@ -92,3 +92,8 @@ input.group-name { font: inherit; font-weight: 600; font-size: 12px; outline: no
 .ghost-row { position: absolute; height: 32px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius); background: transparent; opacity: var(--ghost); text-align: left; font-size: var(--text-ui-small); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .ghost-row:hover { opacity: 1; border-color: var(--cut-edge); }
 .board-tools .tool-note { align-self: center; padding: 0 8px; font-size: var(--text-ui-small); color: var(--ink-muted); }
+
+/* live text on the board (addendum 4.10): a chunk's text is selectable, and a drag on it selects rather than moves */
+.node-body .block-text { user-select: text; cursor: text; }
+.text-popover { width: 320px; }
+.popover-note { margin: 8px 4px 0; font-size: var(--text-ui-small); color: var(--ink-muted); }
