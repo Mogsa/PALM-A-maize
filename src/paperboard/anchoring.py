@@ -428,12 +428,21 @@ def _holds(found: tuple[int, Rect], stored: list[PageRect]) -> bool:
 
 
 def _recover_rect(pdf: pymupdf.Document, index: list[PageIndex], match: Match) -> Rect | None:
-    """The matched occurrence's own rectangle: character boxes first (exact to
-    the occurrence, ruling R6), the old text-search as a fallback for the rare
-    case a character box cannot be read (for instance a character PyMuPDF
-    reports in the text stream but does not place, such as certain ligature
-    or hyphenation artifacts)."""
+    """The matched occurrence's own rectangle: the ink boxes of its words first,
+    then its character boxes (both exact to the occurrence, ruling R6), and the
+    old text-search as a fallback for the rare case neither can be read (for
+    instance a character PyMuPDF reports in the text stream but does not place,
+    such as certain ligature or hyphenation artifacts). Ink before character
+    boxes because a math accent's character box is far taller than its ink
+    (the hat of m-hat in Adam is 36 pt tall), which pushed a quote's box out of
+    the rect it was quoted from."""
     page_index = index[match.page]
+    lines = line_rects_for_offsets(pdf[match.page], page_index, match.start, match.end)
+    if lines:
+        box = lines[0]
+        for line in lines[1:]:
+            box = union(box, line)
+        return box
     rect = rect_for_offsets(pdf[match.page], page_index, match.start, match.end)
     if rect is not None:
         return rect
