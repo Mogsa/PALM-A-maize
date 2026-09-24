@@ -56,3 +56,11 @@
 .react-flow__attribution { display: none; }
 
 button.quiet { border: 0; background: none; cursor: pointer; font: inherit; }
+
+/* a chunk's blocks: text as text, formulas, figures and tables as images of the page (D2) */
+.node-body .block-text { margin: 0 0 8px; }
+.node-body .block-text:last-child { margin-bottom: 0; }
+.node-body .block-clip { display: block; max-width: 100%; height: auto; margin: 6px auto 10px; }
+.node-body mark.dim { background: var(--hl); opacity: var(--dim); }
+.node-head .note-count { flex: none; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--surface-muted); color: var(--ink-muted); font-size: 10.5px; font-weight: 600; }
+.node .react-flow__handle-top { top: -5px; }

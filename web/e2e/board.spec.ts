@@ -105,7 +105,28 @@ test('a chunk counts only the marks it paints, and keeps a handle for every mark
   const card = page.locator('.react-flow__node[data-id="n-marks"]');
   await expect(card.locator('mark')).toHaveCount(1);
   await expect(card.locator('.count')).toHaveText('1');
-  await expect(card.locator('.react-flow__handle.source')).toHaveCount(2);
+  await expect(card.locator('.react-flow__handle[data-handleid^="h-"]')).toHaveCount(2);
+});
+
+test('a chunk shows its text and clip blocks in reading order, painting a mark only in its own block', async ({page}) => {
+  const block = (rect: number[], text: string) => ({ kind: 'text', page: 0, rect, text });
+  const base = chunk('n-mixed', 40, 100, '');
+  const mixed = { ...base, data: { ...base.data,
+    blocks: [block([50, 130, 280, 180], 'Before the formula.'), { kind: 'clip', page: 0, rect: [50, 190, 280, 230], label: 'formula' },
+             block([50, 240, 280, 300], 'After the formula.')] } };
+  const mark = { id: 'h-after', tags: [],
+    anchor: { rects: [{ page: 0, rect: [60, 250, 200, 260] }], quote: { exact: 'After the formula', prefix: '', suffix: '' }, position: 0, state: 'anchored' } };
+  await seedBoard(page, { nodes: [mixed], highlights: [mark] });
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  const body = page.locator('.react-flow__node[data-id="n-mixed"] .node-body');
+  await expect(body.locator(':scope > *')).toHaveCount(3);
+  await expect(body.locator(':scope > :nth-child(2)')).toHaveClass('block-clip');
+  const clip = body.locator('img.block-clip');
+  await expect(clip).toHaveAttribute('src', /\/render\?page=0&x0=50&y0=190&x1=280&y1=230&dpi=216$/);
+  await expect(clip).toHaveAttribute('alt', 'formula');
+  await expect.poll(() => clip.evaluate((img) => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  await expect(body.locator('p.block-text').nth(0).locator('mark')).toHaveCount(0);
+  await expect(body.locator('p.block-text').nth(1).locator('mark[data-highlight-id="h-after"]')).toHaveText('After the formula');
 });
 
 test('a jump to the paper happens once, not again on every return to the paper', async ({page}) => {
