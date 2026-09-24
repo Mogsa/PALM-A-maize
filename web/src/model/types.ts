@@ -87,6 +87,13 @@ export type SplitDraft =
   | { type: "chunk"; position: { x: number; y: number }; data: ChunkData }
   | { type: "figure"; position: { x: number; y: number }; data: FigureData };
 export type ReextractResult = { changed: string[]; states: Record<string, AnchorState> };
+/** Split here or Cut out on a card (addendum 4.10). */
+export type RecutMode = "split" | "cut";
+/** A chunk the chunk routes propose: no id, position or parentId; the client takes those from the chunk it replaces
+ *  (addendum 6). */
+export type Piece = { type: "chunk"; data: ChunkData };
+/** `POST /chunks/join`: the joined piece, and the indices of the regions sent, in paper order. */
+export type JoinResult = { node: Piece; order: number[] };
 
 /** A note's file (addendum 4.4): its text, and whether it has a sketch (D23). */
 export type NoteFile = { markdown: string; has_sketch: boolean };

@@ -3,7 +3,7 @@ import { planDelete } from "./dissolve";
 import { begin, emptyHistory, patchNodes, record, redo, snapshot, undo, type History } from "./history";
 import { isNewConnection } from "./links";
 import { absoluteIn } from "./reparent";
-import { emptyBoard, type Board, type BoardEdge, type BoardNode, type Highlight, type PaperScroll, type View, type Viewport } from "./types";
+import { emptyBoard, type Board, type BoardEdge, type BoardNode, type ChunkNode, type Highlight, type PaperScroll, type View, type Viewport } from "./types";
 
 /** `revision` counts the reader's saveable changes. It never resets, so a "saved" can tell whether the
  *  snapshot it saved is still the latest one. */
@@ -13,6 +13,9 @@ export const initialBoardState: BoardState = { board: emptyBoard(""), dirty: fal
 export type TagTarget = "node" | "highlight" | "edge";
 export type Removal = { nodeIds?: string[]; edgeIds?: string[]; highlightIds?: string[] };
 export type FigureClip = { id: string; clip: string; clip_size: { width: number; height: number } };
+/** Split here, Cut out and Join (addendum 4.10): `keep` replaces the chunk with its id, `add` goes in just after it,
+ *  `removeIds` go, and their edges move to `keep`. */
+export type Reshape = { keep: ChunkNode; add?: ChunkNode[]; removeIds?: string[] };
 
 /** What the reader made or changed: one undo step each, unless `merge` joins it to the gesture in progress. */
 type EditAction =
@@ -23,7 +26,8 @@ type EditAction =
   | { type: "upsertNodes"; nodes: BoardNode[]; merge?: boolean }
   | ({ type: "remove" } & Removal)
   | { type: "removeNode"; id: string }
-  | { type: "setTags"; target: TagTarget; id: string; tags: string[] };
+  | { type: "setTags"; target: TagTarget; id: string; tags: string[] }
+  | ({ type: "reshape" } & Reshape);
 
 export type BoardAction =
   | EditAction
@@ -116,6 +120,21 @@ function removeThings(board: Board, { nodeIds = [], edgeIds = [], highlightIds =
   return { ...board, nodes: board.nodes.filter((n) => !removed.has(n.id)).map((n) => lifted.get(n.id) ?? n), edges, highlights };
 }
 
+/** One undo step for Split here, Cut out or Join. An edge end on a removed chunk moves to `keep`; a line that would
+ *  then join `keep` to itself, or repeat a connection, is dropped (isNewConnection). Nothing happens if `keep` is gone. */
+function reshape(board: Board, { keep, add = [], removeIds = [] }: Reshape): Board {
+  if (!board.nodes.some((n) => n.id === keep.id)) return board;
+  const removed = new Set(removeIds.filter((id) => id !== keep.id));
+  const nodes = board.nodes.flatMap((n) => (n.id === keep.id ? [keep, ...add] : removed.has(n.id) ? [] : [n]));
+  const moved = (id: string) => (removed.has(id) ? keep.id : id);
+  const edges: BoardEdge[] = [];
+  for (const e of board.edges) {
+    const edge = removed.has(e.from) || removed.has(e.to) ? { ...e, from: moved(e.from), to: moved(e.to) } : e;
+    if (isNewConnection(edges, edge)) edges.push(edge);
+  }
+  return { ...board, nodes, edges };
+}
+
 function setTags(board: Board, target: TagTarget, id: string, tags: string[]): Board {
   if (target === "node") return { ...board, nodes: board.nodes.map((n) => (n.id === id ? ({ ...n, data: { ...n.data, tags } } as BoardNode) : n)) };
   if (target === "highlight") return { ...board, highlights: board.highlights.map((h) => (h.id === id ? { ...h, tags } : h)) };
@@ -132,6 +151,7 @@ function applyEdit(board: Board, action: EditAction): Board {
     case "remove": return removeThings(board, action);
     case "removeNode": return removeThings(board, { nodeIds: [action.id] });
     case "setTags": return setTags(board, action.target, action.id, action.tags);
+    case "reshape": return reshape(board, action);
   }
 }
 
