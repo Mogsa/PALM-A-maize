@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/TextLayer.css";
 import { api } from "../api/client";
 import type { XY } from "../model/reparent";
-import type { Board, PageRect, Source } from "../model/types";
+import type { Board, PageRect, SelectionMode, Source } from "../model/types";
 import { headingAt, isClick, markAt, pagePoint, type PaperHit } from "./hit";
 import { PageOverlay } from "./PageOverlay";
+import { bandBox, useRectangleDrag } from "./rectangleDrag";
 import { pageFrames, readSelection } from "./selection";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
@@ -20,7 +21,7 @@ type Props = {
   board: Board;
   focus: PageRect | null;                       // scroll here once, then onFocusHandled
   onFocusHandled: () => void;
-  onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean) => void;
+  onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode) => void;
   onClickPaper: (hit: PaperHit) => void;
   onOutlineClick: (nodeId: string) => void;
 };
@@ -35,10 +36,14 @@ function selectionAnchor(): DOMRect | undefined {
   return undefined;
 }
 
+const bandStyle = (a: XY, b: XY) => { const r = bandBox(a, b); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
+
 export function PaperView({ paperId, source, board, focus, onFocusHandled, onSelect, onClickPaper, onOutlineClick }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const down = useRef<XY | null>(null);
+  const onRect = useCallback((rect: PageRect, at: DOMRect, exact: boolean) => onSelect([rect], at, exact, "area"), [onSelect]);
+  const rectangle = useRectangleDrag(container, source, onRect);
 
   useEffect(() => {
     if (!focus || !container.current || !ready) return;
@@ -53,7 +58,7 @@ export function PaperView({ paperId, source, board, focus, onFocusHandled, onSel
 
   const selectText = (rects: PageRect[], exact: boolean) => {
     const anchor = selectionAnchor();
-    if (anchor) onSelect(rects, anchor, exact);
+    if (anchor) onSelect(rects, anchor, exact, "text");
   };
   const clickAt = (event: React.MouseEvent) => {
     if (!container.current || !isClick(down.current, { x: event.clientX, y: event.clientY })) return;
@@ -64,9 +69,13 @@ export function PaperView({ paperId, source, board, focus, onFocusHandled, onSel
     const heading = mark ? null : headingAt(point, source.sections);
     if (mark || heading) onClickPaper({ mark, heading, at: new DOMRect(event.clientX, event.clientY, 0, 0) });
   };
-  const onMouseDown = (event: React.MouseEvent) => { down.current = { x: event.clientX, y: event.clientY }; };
+  const onMouseDown = (event: React.MouseEvent) => {
+    down.current = null;
+    if (rectangle.begin(event)) return;
+    down.current = { x: event.clientX, y: event.clientY };
+  };
   const onMouseUp = (event: React.MouseEvent) => {
-    if (!container.current) return;
+    if (!container.current || rectangle.band) return;   // the rectangle's own mouse-up handles it
     const rects = readSelection(container.current, source);
     if (rects) selectText(rects, event.altKey);
     else clickAt(event);
@@ -82,6 +91,7 @@ export function PaperView({ paperId, source, board, focus, onFocusHandled, onSel
           </div>
         ))}
       </Document>
+      {rectangle.band && <div className="rubber-band" style={bandStyle(rectangle.band.start, rectangle.band.end)} />}
     </div>
   );
 }
