@@ -88,7 +88,7 @@ describe("api, schema 2 routes", () => {
 
   it("notes, clips, questions and re-extraction go to their routes", async () => {
     const fn = mockFetch(200, { markdown: "hi" });
-    expect(await api.getNote("p", "n-1")).toEqual({ markdown: "hi" });
+    expect(await api.getNote("p", "n-1")).toEqual({ markdown: "hi", has_sketch: false });   // a server without sketches
     expect(lastCall(fn).url).toBe("/api/papers/p/notes/n-1");
     await api.putClip("p", "n-1", { page: 1, rect: [1, 2, 3, 4] });
     expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/clips/n-1", init: { method: "PUT" }, body: { page: 1, rect: [1, 2, 3, 4], dpi: 216 } });
@@ -106,6 +106,26 @@ describe("api, schema 2 routes", () => {
     vi.stubGlobal("fetch", fn);
     await api.putNote("p", "n-1", "text");
     expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/notes/n-1", init: { method: "PUT" }, body: { markdown: "text" } });
+  });
+
+  it("getNote says whether the note has a sketch; a note never written is empty and has none", async () => {
+    mockFetch(200, { markdown: "", has_sketch: true });
+    expect(await api.getNote("p", "n-1")).toEqual({ markdown: "", has_sketch: true });
+    mockFetch(404, { error: { code: "note_not_found", message: "no note" } });
+    expect(await api.getNote("p", "n-1")).toEqual({ markdown: "", has_sketch: false });
+  });
+
+  it("a sketch is put, read, removed and shown at its own routes (D23)", async () => {
+    const sketch = { width: 600, height: 400, strokes: [{ points: [[1, 2, 0.5]] as [number, number, number][], size: 4 }] };
+    const fn = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fn);
+    await api.putSketch("p", "n-1", { ...sketch, paths: ["M1 2Z"] });
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/notes/n-1/sketch", init: { method: "PUT" }, body: { ...sketch, paths: ["M1 2Z"] } });
+    await api.deleteSketch("p", "n-1");
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/notes/n-1/sketch", init: { method: "DELETE" } });
+    mockFetch(200, sketch);
+    expect(await api.getSketch("p", "n-1")).toEqual(sketch);
+    expect(api.sketchUrl("p", "n-1", 3)).toBe("/api/papers/p/notes/n-1/sketch.svg?v=3");
   });
 
   it("addPaper uploads the PDF as multipart, without a JSON content type", async () => {
