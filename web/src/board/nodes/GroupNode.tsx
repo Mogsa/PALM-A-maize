@@ -7,6 +7,7 @@ import { useBoardActions } from "../BoardActions";
 import { inHandle, outHandle } from "../handles";
 import { hasNote, SLOT_NOTE_AT } from "../slots";
 import { NodeTags } from "./NodeTags";
+import { TrayRows } from "./TrayRows";
 
 function GroupName({ id, name }: { id: string; name: string | null | undefined }) {
   const { state, dispatch } = useBoard();
@@ -43,6 +44,7 @@ export function GroupNode({ id, data, selected }: NodeProps<GroupNodeType>) {
       {data.prompt && !hasNote(state.board.nodes, id) && (
         <button type="button" className="slot-prompt nodrag" onClick={answer} title="Answer it in a note of your own">{data.prompt}</button>
       )}
+      {data.tray && <TrayRows trayId={id} />}
       <Handle id={inHandle(id)} type="target" position={Position.Left} />
       <Handle id={outHandle(id)} type="source" position={Position.Right} />
     </div>

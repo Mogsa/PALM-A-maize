@@ -86,3 +86,9 @@ button.quiet { border: 0; background: none; cursor: pointer; font: inherit; }
 input.group-name { font: inherit; font-weight: 600; font-size: 12px; outline: none; }
 .slot-prompt { position: absolute; top: 48px; left: 16px; right: 16px; padding: 0; border: 0; background: none; text-align: left; font-family: var(--font-read); font-size: 14px; line-height: 1.4; color: var(--ink-faint); font-style: italic; cursor: text; }
 .slot-prompt:hover { color: var(--ink-muted); }
+
+/* the tray: the group named Paper, and the rows of sections that moved out of it (D18) */
+.node.group.tray { background: var(--bg-paper); }
+.ghost-row { position: absolute; height: 32px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius); background: transparent; opacity: var(--ghost); text-align: left; font-size: var(--text-ui-small); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.ghost-row:hover { opacity: 1; border-color: var(--cut-edge); }
+.board-tools .tool-note { align-self: center; padding: 0 8px; font-size: var(--text-ui-small); color: var(--ink-muted); }

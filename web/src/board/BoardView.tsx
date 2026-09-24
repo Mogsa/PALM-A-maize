@@ -14,6 +14,7 @@ import type { BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/t
 import { useBoard } from "../state/BoardProvider";
 import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
+import { BoardTools } from "./BoardTools";
 import { EdgePopover } from "./EdgePopover";
 import { applySelection, endOf, flowEdges, type FlowEdge } from "./handles";
 import { ChunkNode } from "./nodes/ChunkNode";
@@ -125,10 +126,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   return (
     <BoardActionsProvider value={actions}>
     <div className="board" ref={boardRef}>
-      <div className="board-tools">
-        <button onClick={addGroup} title="A rectangle to pile pieces in. Drag pieces wholly inside it."><span aria-hidden="true">▢</span> New group</button>
-        <button onClick={addNote} title="A note in your own words"><span aria-hidden="true">✎</span> New note</button>
-      </div>
+      <BoardTools onAddGroup={addGroup} onAddNote={addNote} />
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
       <ReactFlow<BoardNode, FlowEdge>
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
