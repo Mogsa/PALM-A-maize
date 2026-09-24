@@ -21,6 +21,7 @@ import { ChunkNode } from "./nodes/ChunkNode";
 import { FigureNode } from "./nodes/FigureNode";
 import { GroupNode } from "./nodes/GroupNode";
 import { NoteNode } from "./nodes/NoteNode";
+import { tidyPositions } from "./tidy";
 
 const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group: GroupNode };
 
@@ -85,6 +86,17 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
     setEditing(note.id);
   };
 
+  const tidy = () => {
+    const sizeOf = (id: string) => {
+      const measured = getInternalNode(id)?.measured;
+      const stored = state.board.nodes.find((n) => n.id === id);
+      return { width: measured?.width ?? stored?.width ?? 0, height: measured?.height ?? stored?.height ?? 0 };
+    };
+    const moved = tidyPositions(state.board, sizeOf);
+    if (!moved.size) return;
+    dispatch({ type: "upsertNodes", nodes: state.board.nodes.filter((n) => moved.has(n.id)).map((n) => ({ ...n, position: moved.get(n.id)! })) });
+  };
+
   const addGroup = () => {
     const node: GroupNodeType = { id: newId("n"), type: "group", position: { x: 400, y: 40 }, width: 480, height: 320, data: { tags: [], name: null } };
     dispatch({ type: "addNode", node });
@@ -126,7 +138,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   return (
     <BoardActionsProvider value={actions}>
     <div className="board" ref={boardRef}>
-      <BoardTools onAddGroup={addGroup} onAddNote={addNote} />
+      <BoardTools onAddGroup={addGroup} onAddNote={addNote} onTidy={tidy} />
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
       <ReactFlow<BoardNode, FlowEdge>
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
