@@ -202,7 +202,7 @@ def test_board_with_runtime_fields_is_422(client, resnet_id):
 def test_notes_round_trip_and_404(client, resnet_id):
     assert client.get(f"/api/papers/{resnet_id}/notes/{NOTE}").status_code == 404
     assert client.put(f"/api/papers/{resnet_id}/notes/{NOTE}", json={"markdown": "hello *there*\n"}).status_code == 204
-    assert client.get(f"/api/papers/{resnet_id}/notes/{NOTE}").json() == {"markdown": "hello *there*\n"}
+    assert client.get(f"/api/papers/{resnet_id}/notes/{NOTE}").json() == {"markdown": "hello *there*\n", "has_sketch": False}
 
 
 def test_questions_lists_unanswered_marks_and_pieces(client, resnet_id):

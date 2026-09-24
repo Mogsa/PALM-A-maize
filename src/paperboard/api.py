@@ -19,6 +19,7 @@ from paperboard.board_model import Board, ChunkNode, FigureNode, NoteNode, TagFi
 from paperboard.clips import DEFAULT_DPI, render_clip, render_etag
 from paperboard.export import ExportOrder, export_markdown
 from paperboard.extract import extract
+from paperboard.sketch import SketchBody, SketchFile, sketch_svg
 from paperboard.snap import Selection, select
 from paperboard.source_model import PageRect
 from paperboard.split import split
@@ -26,6 +27,7 @@ from paperboard.store import (
     NodeNotFound,
     NoteNotFound,
     PaperNotFound,
+    SketchNotFound,
     Store,
     VersionConflict,
     atomic_write,
@@ -37,6 +39,9 @@ LOCAL_HOSTS = ["127.0.0.1", "localhost"]
 # on another origin can send it: a form posted from elsewhere is refused.
 APP_HEADER = "X-Paperboard"
 READ_METHODS = {"GET", "HEAD"}
+# A sketch's SVG is built by the server from checked path data (D23); this policy is a second lock: were anything
+# in it to try, no script, fetch or external resource would run.
+SKETCH_CSP = "default-src 'none'; style-src 'unsafe-inline'"
 
 
 class TextRequest(BaseModel):
@@ -154,6 +159,10 @@ def create_app(root: Path) -> FastAPI:
     async def _note_missing(_: Request, exc: NoteNotFound):
         return _error(404, "note_not_found", f"no note {exc}")
 
+    @app.exception_handler(SketchNotFound)
+    async def _sketch_missing(_: Request, exc: SketchNotFound):
+        return _error(404, "sketch_not_found", f"no sketch for {exc}")
+
     @app.exception_handler(NodeNotFound)
     async def _node_missing(_: Request, exc: NodeNotFound):
         return _error(404, "node_not_found", f"no node {exc!r}")
@@ -243,11 +252,39 @@ def create_app(root: Path) -> FastAPI:
 
     @app.get("/api/papers/{paper_id}/notes/{node_id}")
     def get_note(paper_id: str, node_id: str):
-        return {"markdown": store.read_note(paper_id, node_id)}
+        """A note is missing only when it has neither text nor a sketch."""
+        has_sketch = store.has_sketch(paper_id, node_id)
+        try:
+            markdown = store.read_note(paper_id, node_id)
+        except NoteNotFound:
+            if not has_sketch:
+                raise
+            markdown = ""
+        return {"markdown": markdown, "has_sketch": has_sketch}
 
     @app.put("/api/papers/{paper_id}/notes/{node_id}", status_code=204)
     def put_note(paper_id: str, node_id: str, body: NoteBody):
         store.write_note(paper_id, node_id, body.markdown)
+        return Response(status_code=204)
+
+    @app.put("/api/papers/{paper_id}/notes/{node_id}/sketch", status_code=204)
+    def put_sketch(paper_id: str, node_id: str, body: SketchBody):
+        sketch = SketchFile(width=body.width, height=body.height, strokes=body.strokes)
+        store.write_sketch(paper_id, node_id, sketch, sketch_svg(body.width, body.height, body.paths))
+        return Response(status_code=204)
+
+    @app.get("/api/papers/{paper_id}/notes/{node_id}/sketch")
+    def get_sketch(paper_id: str, node_id: str):
+        return Response(store.read_sketch(paper_id, node_id).model_dump_json(), media_type="application/json")
+
+    @app.get("/api/papers/{paper_id}/notes/{node_id}/sketch.svg")
+    def get_sketch_svg(paper_id: str, node_id: str):
+        path = store.sketch_svg_path(paper_id, node_id)
+        return FileResponse(path, media_type="image/svg+xml", headers={"Content-Security-Policy": SKETCH_CSP})
+
+    @app.delete("/api/papers/{paper_id}/notes/{node_id}/sketch", status_code=204)
+    def delete_sketch(paper_id: str, node_id: str):
+        store.delete_sketch(paper_id, node_id)
         return Response(status_code=204)
 
     # -- text, clips --------------------------------------------------------
@@ -325,9 +362,10 @@ def create_app(root: Path) -> FastAPI:
         doc = store.read_source(paper_id)
         board = resolved_board(paper_id)
         notes = {n.id: note_markdown(paper_id, n.id) for n in board.nodes if isinstance(n, NoteNode)}
+        sketches = {note_id for note_id in notes if store.has_sketch(paper_id, note_id)}
         tag_names = {t.id: t.name for t in store.read_tags().tags}
         with opened(paper_id) as pdf:
-            markdown = export_markdown(doc, board, notes, pdf, body.tags, body.order, tag_names)
+            markdown = export_markdown(doc, board, notes, pdf, body.tags, body.order, tag_names, sketches)
         path = store.paper_dir(paper_id) / "export.md"
         atomic_write(path, markdown.encode("utf-8"))
         return {"path": str(path), "markdown": markdown}

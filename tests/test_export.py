@@ -484,3 +484,39 @@ def test_every_note_in_a_slot_that_carries_a_wanted_tag_is_written(resnet):
     md = export_markdown(doc, board, TEMPLATE_NOTES, pdf, tags=["t-question"], order="template")
     main = md[md.index("## Main point"):md.index("## How it works")]
     assert "It adds identity shortcuts." in main and "A note in a plain group." in main
+
+
+def test_maths_in_a_note_passes_through_as_written(resnet):
+    """D22: notes render LaTeX in the app; the export keeps the source, for any Markdown reader with maths."""
+    doc, pdf = resnet
+    maths = "Inline $F(x) = H(x) - x$ and display:\n\n$$\\sum_{i=1}^{n} x_i^2$$\n"
+    board = Board(paper_id=doc.paper_id, nodes=[_note_node("n-1")])
+    md = export_markdown(doc, board, {"n-1": maths}, pdf, tags=[])
+    assert maths.strip() in md
+
+
+@pytest.mark.parametrize("order", ["paper", "template"])
+def test_a_notes_sketch_is_an_image_above_its_text(resnet, order):
+    """D23: the sketch is `notes/<id>.svg` in export.md's own folder, so the image line is relative."""
+    doc, pdf = resnet
+    board = _template_board(doc) if order == "template" else _board(doc)
+    note_id = "n-answer" if order == "template" else "n-loose"
+    notes = TEMPLATE_NOTES if order == "template" else NOTES
+    md = export_markdown(doc, board, notes, pdf, tags=[], order=order, sketches={note_id})
+    assert f"![sketch](notes/{note_id}.svg)\n\n{notes[note_id].strip()}" in md
+    assert md.count("![sketch]") == 1
+
+
+def test_a_note_with_only_a_sketch_is_still_written(resnet):
+    doc, pdf = resnet
+    board = Board(paper_id=doc.paper_id, nodes=[_note_node("n-1")])
+    md = export_markdown(doc, board, {"n-1": ""}, pdf, tags=[], sketches={"n-1"})
+    assert "## Notes\n\n![sketch](notes/n-1.svg)" in md
+
+
+def test_an_ai_notes_text_keeps_its_label_under_the_sketch(resnet):
+    """The reader draws a sketch, never the AI (D14): the label stays on the AI's words."""
+    doc, pdf = resnet
+    board = Board(paper_id=doc.paper_id, nodes=[_note_node("n-ai", origin="ai")])
+    md = export_markdown(doc, board, {"n-ai": "An answer.\n"}, pdf, tags=[], sketches={"n-ai"})
+    assert "![sketch](notes/n-ai.svg)\n\n**AI:** An answer." in md

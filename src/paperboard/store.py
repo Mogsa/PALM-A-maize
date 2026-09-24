@@ -28,6 +28,7 @@ from paperboard.board_model import (
 )
 from paperboard.extract import extract
 from paperboard.migrate import is_v1, migrate_board
+from paperboard.sketch import SketchFile
 from paperboard.source_model import SourceDocument
 
 _FRONT_MATTER = re.compile(r"\A---\nid: (?P<id>[^\n]+)\n---\n", re.DOTALL)
@@ -48,6 +49,10 @@ class PaperNotFound(Exception):
 
 
 class NoteNotFound(Exception):
+    pass
+
+
+class SketchNotFound(Exception):
     pass
 
 
@@ -218,6 +223,41 @@ class Store:
         _check_node_id(node_id)
         body = f"---\nid: {node_id}\n---\n{markdown}"
         atomic_write(self.paper_dir(paper_id) / "notes" / f"{node_id}.md", body.encode("utf-8"))
+
+    # -- sketches (D23) -----------------------------------------------------
+
+    def _sketch_files(self, paper_id: str, node_id: str) -> tuple[Path, Path]:
+        """`notes/<id>.sketch.json`, the strokes, and `notes/<id>.svg`, the picture."""
+        _check_node_id(node_id)
+        notes = self.paper_dir(paper_id) / "notes"
+        return notes / f"{node_id}.sketch.json", notes / f"{node_id}.svg"
+
+    def has_sketch(self, paper_id: str, node_id: str) -> bool:
+        return bool(_NODE_ID.fullmatch(node_id)) and self._sketch_files(paper_id, node_id)[1].exists()
+
+    def write_sketch(self, paper_id: str, node_id: str, sketch: SketchFile, svg: str) -> None:
+        """The strokes first, then the picture: a note has a sketch once its SVG is there."""
+        data, picture = self._sketch_files(paper_id, node_id)
+        atomic_write(data, sketch.model_dump_json(indent=2).encode())
+        atomic_write(picture, svg.encode("utf-8"))
+
+    def read_sketch(self, paper_id: str, node_id: str) -> SketchFile:
+        data, _ = self._sketch_files(paper_id, node_id)
+        if not data.exists():
+            raise SketchNotFound(node_id)
+        return SketchFile.model_validate_json(data.read_bytes())
+
+    def sketch_svg_path(self, paper_id: str, node_id: str) -> Path:
+        _, picture = self._sketch_files(paper_id, node_id)
+        if not picture.exists():
+            raise SketchNotFound(node_id)
+        return picture
+
+    def delete_sketch(self, paper_id: str, node_id: str) -> None:
+        """The picture first, so a note never shows a sketch whose strokes are gone."""
+        data, picture = self._sketch_files(paper_id, node_id)
+        picture.unlink(missing_ok=True)
+        data.unlink(missing_ok=True)
 
     # -- tags ---------------------------------------------------------------
 
