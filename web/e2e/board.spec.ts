@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { WRITE } from './headers';
 
 test.afterEach(async ({request}) => {
   const papers = await (await request.get(`/api/papers`)).json();
@@ -7,7 +8,7 @@ test.afterEach(async ({request}) => {
   board.nodes = []; board.edges = []; board.highlights = [];
   board.viewport = {x: 0, y: 0, zoom: 1}; board.active_tags = [];
   board.view = 'paper'; delete board.paper_scroll;   // view state is saved (D5): don't leak it into the next test
-  await request.put(path, {data: board, headers: {'If-Match': String(board.version)}});
+  await request.put(path, {data: board, headers: {'If-Match': String(board.version), ...WRITE}});
 });
 const quote = { exact: 'Review chunk', prefix: '', suffix: '' };
 const region = { rects: [{ page: 0, rect: [50, 130, 280, 300] }], start: quote, end: quote, position: 0, state: 'anchored' };
@@ -27,7 +28,7 @@ async function seedBoard(page: Page, { nodes = [], highlights = [], activeTags =
   board.nodes = nodes;
   board.edges = []; board.highlights = highlights; board.viewport = { x: 0, y: 0, zoom: 1 }; board.active_tags = activeTags;
   board.view = 'paper'; delete board.paper_scroll;
-  const saved = await page.request.put(`/api/papers/${id}/board`, {data: board, headers: {'If-Match': String(board.version)}});
+  const saved = await page.request.put(`/api/papers/${id}/board`, {data: board, headers: {'If-Match': String(board.version), ...WRITE}});
   expect(saved.ok()).toBeTruthy();
   await page.goto('/');
   await page.locator('select').selectOption(id);

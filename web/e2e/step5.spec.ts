@@ -1,4 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { WRITE } from "./headers";
 
 /** The acceptance checks of the features plan (Task 3D), and SPEC.md section 11's mechanical items 4 and 5
  *  (item 6 is step3.spec.ts). Specs run in file order with one worker and this one runs last, so the specs before it
@@ -26,7 +27,7 @@ test.beforeAll(async ({ playwright }, info) => {
   const request = await playwright.request.newContext({ baseURL: info.project.use.baseURL });
   const before: { paper_id: string }[] = await (await request.get("/api/papers")).json();
   const upload = await request.post("/api/papers", {
-    multipart: { file: { name: "attention.pdf", mimeType: "application/pdf", buffer: await readPdf(ATTENTION_PDF) } }, timeout: UPLOAD_TIMEOUT_MS,
+    multipart: { file: { name: "attention.pdf", mimeType: "application/pdf", buffer: await readPdf(ATTENTION_PDF) } }, headers: WRITE, timeout: UPLOAD_TIMEOUT_MS,
   });
   expect(upload.ok()).toBeTruthy();
   attention = (await upload.json()).paper_id;
@@ -40,7 +41,7 @@ type Json = Record<string, any>;
 const boardOf = async (request: APIRequestContext, id: string): Promise<Json> => (await request.get(`/api/papers/${id}/board`)).json();
 const sourceOf = async (request: APIRequestContext, id: string): Promise<Json> => (await request.get(`/api/papers/${id}/source`)).json();
 /** What split would add to the board as saved; the endpoint writes nothing. */
-const splitOf = async (request: APIRequestContext, id: string): Promise<Json[]> => (await (await request.post(`/api/papers/${id}/split`)).json()).nodes;
+const splitOf = async (request: APIRequestContext, id: string): Promise<Json[]> => (await (await request.post(`/api/papers/${id}/split`, { headers: WRITE })).json()).nodes;
 
 const paperPicker = (page: Page) => page.getByRole("combobox", { name: "Paper", exact: true });
 
@@ -57,7 +58,7 @@ async function save(request: APIRequestContext, id: string, parts: { nodes?: Jso
   const next: Json = { ...current, nodes: parts.nodes ?? [], edges: parts.edges ?? [], highlights: parts.highlights ?? [], active_tags: [], view: "paper",
     viewport: { x: 0, y: 0, zoom: 1 } };
   delete next.paper_scroll;
-  const put = await request.put(`/api/papers/${id}/board`, { data: next, headers: { "If-Match": String(current.version) } });
+  const put = await request.put(`/api/papers/${id}/board`, { data: next, headers: { "If-Match": String(current.version), ...WRITE } });
   expect(put.ok()).toBeTruthy();
 }
 

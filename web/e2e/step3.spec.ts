@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { WRITE } from "./headers";
 
 /** Every test here starts from a saved, empty board: first open (D15) never runs, and no earlier spec's pieces remain. */
 test.beforeEach(async ({ request }) => {
@@ -7,7 +8,7 @@ test.beforeEach(async ({ request }) => {
   const board = await (await request.get(path)).json();
   const empty = { ...board, nodes: [], edges: [], highlights: [], active_tags: [], view: "paper" };
   delete empty.paper_scroll;
-  const saved = await request.put(path, { data: empty, headers: { "If-Match": String(board.version) } });
+  const saved = await request.put(path, { data: empty, headers: { "If-Match": String(board.version), ...WRITE } });
   expect(saved.ok()).toBeTruthy();
 });
 

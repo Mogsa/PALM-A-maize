@@ -109,3 +109,16 @@ describe("api, schema 2 routes", () => {
     expect(new Headers(init.headers).get("content-type")).toBeNull();
   });
 });
+
+describe("every request says it comes from Paper Board (contract 2)", () => {
+  it.each([
+    ["a read", () => api.getBoard("p")],
+    ["a JSON write", () => api.putNote("p", "n-1", "text")],
+    ["a board save", () => api.putBoard("p", { paper_id: "p" } as never, 3)],
+    ["an upload", () => api.addPaper(new Blob(["%PDF-"]), "paper.pdf")],
+  ])("%s carries X-Paperboard: 1", async (_, send) => {
+    const fn = mockFetch(200, { version: 1, paper_id: "p" });
+    await send();
+    expect(new Headers(lastCall(fn).init.headers).get("X-Paperboard")).toBe("1");
+  });
+});
