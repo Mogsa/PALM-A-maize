@@ -374,6 +374,27 @@ test("a question with only an AI note stays on the list, and a note of your own 
   await expect(page.locator(".question-list li")).toHaveCount(0);
 });
 
+test("a note typed into and never left is saved as it is typed, and is there after a reload (I1)", async ({ page }) => {
+  await seed(page, resnet);
+  const id = await highlight(page, 3, 20, 22);
+  await clickMark(page, id);
+  await page.locator(".mark-popover").getByRole("button", { name: "Add note", exact: true }).click();
+  const field = page.locator(".mark-popover .note-editor.reader textarea");
+  const words = "Typed and never left: the field keeps its focus.";
+  await field.click();
+  await page.keyboard.type(words);
+  await expect(field).toBeFocused();
+  await expect.poll(async () => (await boardOf(page.request, resnet)).nodes.filter((n: Json) => n.type === "note").length).toBe(1);
+  const noteId = (await boardOf(page.request, resnet)).nodes.find((n: Json) => n.type === "note").id;
+  await expect.poll(async () => (await (await page.request.get(`/api/papers/${resnet}/notes/${noteId}`)).json()).markdown).toBe(words);
+  await expect(field).toBeFocused();   // saved while typing, not because the field lost focus
+
+  await page.reload();
+  await paperPicker(page).selectOption(resnet);
+  await clickMark(page, id);
+  await expect(page.locator(".mark-popover .note-editor.reader textarea")).toHaveValue(words);
+});
+
 test("Cmd-Z undoes a group dissolve in one step", async ({ page }) => {
   await seed(page, resnet, { nodes: [
     group("n-g", 450, 40, 700, 560, { name: "Pile" }),
