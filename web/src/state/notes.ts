@@ -1,4 +1,5 @@
 import { api } from "../api/client";
+import type { NoteFile } from "../model/types";
 import { SAVE_DELAY_MS } from "./persistence";
 
 /** Note text is not in board.json (addendum 4.4). One store per paper, so the paper's margin, the mark popover and
@@ -20,12 +21,16 @@ export type NoteStore = {
   hasUnsaved: () => boolean;
   /** True while this note's last write has failed. */
   failed: (nodeId: string) => boolean;
+  /** 0 when the note has no sketch (D23); otherwise a number that changes with every save, for the image's URL. */
+  sketchVersion: (nodeId: string) => number;
+  /** The note's sketch was just written (`present`) or removed. Not a board change, so not an undo step. */
+  sketchSaved: (nodeId: string, present: boolean) => void;
   subscribe: (listener: () => void) => () => void;
 };
-export type NoteIO = { get: (nodeId: string) => Promise<string>; put: (nodeId: string, markdown: string) => Promise<void> };
+export type NoteIO = { get: (nodeId: string) => Promise<NoteFile>; put: (nodeId: string, markdown: string) => Promise<void> };
 
 export function noteIO(paperId: string): NoteIO {
-  return { get: async (id) => (await api.getNote(paperId, id)).markdown, put: (id, markdown) => api.putNote(paperId, id, markdown) };
+  return { get: (id) => api.getNote(paperId, id), put: (id, markdown) => api.putNote(paperId, id, markdown) };
 }
 
 export function createNoteStore(io: NoteIO, delayMs = SAVE_DELAY_MS): NoteStore {
@@ -34,6 +39,8 @@ export function createNoteStore(io: NoteIO, delayMs = SAVE_DELAY_MS): NoteStore 
   const listeners = new Set<() => void>();
   const failedIds = new Set<string>();   // notes whose last write did not land
   const pending = new Map<string, ReturnType<typeof setTimeout>>();   // notes edited and not yet written
+  const sketches = new Map<string, number>();   // a note's sketch version; 0 for none
+  let sketchCount = 0;
   let inFlight = 0;
   let writes: Promise<void> = Promise.resolve();
   const emit = () => listeners.forEach((listener) => listener());
@@ -43,12 +50,13 @@ export function createNoteStore(io: NoteIO, delayMs = SAVE_DELAY_MS): NoteStore 
     const inFlightLoad = loading.get(id);
     if (inFlightLoad) return inFlightLoad;
     const request = io.get(id).then(
-      (text) => {
+      ({ markdown, has_sketch }) => {
         loading.delete(id);
-        if (texts.has(id)) return texts.get(id)!;   // saved while loading: the reader's text is newer
-        texts.set(id, text);
+        if (!sketches.has(id)) sketches.set(id, has_sketch ? ++sketchCount : 0);   // else drawn while loading: newer
+        if (texts.has(id)) { emit(); return texts.get(id)!; }   // saved while loading: the reader's text is newer
+        texts.set(id, markdown);
         emit();
-        return text;
+        return markdown;
       },
       (error: unknown) => { loading.delete(id); throw error; });
     loading.set(id, request);
@@ -93,6 +101,8 @@ export function createNoteStore(io: NoteIO, delayMs = SAVE_DELAY_MS): NoteStore 
     peek: (id) => texts.get(id), load, save, edit, commit, flush, settled,
     hasUnsaved: () => pending.size > 0 || inFlight > 0 || failedIds.size > 0,
     failed: (id) => failedIds.has(id),
+    sketchVersion: (id) => sketches.get(id) ?? 0,
+    sketchSaved: (id, present) => { sketches.set(id, present ? ++sketchCount : 0); emit(); },
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
   };
 }

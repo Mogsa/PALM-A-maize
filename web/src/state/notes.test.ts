@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNoteStore } from "./notes";
 import { SAVE_DELAY_MS } from "./persistence";
+import type { NoteFile } from "../model/types";
+
+const file = (markdown: string, has_sketch = false): NoteFile => ({ markdown, has_sketch });
 
 describe("the note store", () => {
   it("loads a note once and shares it", async () => {
-    const get = vi.fn(async () => "text");
+    const get = vi.fn(async () => file("text"));
     const store = createNoteStore({ get, put: vi.fn() });
     await Promise.all([store.load("n-1"), store.load("n-1")]);
     expect(get).toHaveBeenCalledTimes(1);
@@ -29,7 +32,7 @@ describe("the note store", () => {
   });
   it("a load that lands after a save keeps the saved text", async () => {
     let answer: (text: string) => void = () => undefined;
-    const get = vi.fn(() => new Promise<string>((resolve) => { answer = resolve; }));
+    const get = vi.fn(() => new Promise<NoteFile>((resolve) => { answer = (text) => resolve(file(text)); }));
     const store = createNoteStore({ get, put: vi.fn(async () => undefined) });
     const loading = store.load("n-1");
     await store.save("n-1", "typed");
@@ -49,7 +52,7 @@ describe("the note store", () => {
     expect(store.hasUnsaved()).toBe(false);
   });
   it("a failed load can be tried again", async () => {
-    const get = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue("ok");
+    const get = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue(file("ok"));
     const store = createNoteStore({ get, put: vi.fn() });
     await expect(store.load("n-1")).rejects.toThrow("down");
     expect(await store.load("n-1")).toBe("ok");
@@ -67,7 +70,7 @@ describe("the note store, while typing (I1)", () => {
   }
 
   it("nothing is unsaved in a store only read from", async () => {
-    const store = createNoteStore({ get: vi.fn(async () => "text"), put: vi.fn() });
+    const store = createNoteStore({ get: vi.fn(async () => file("text")), put: vi.fn() });
     await store.load("n-1");
     expect(store.hasUnsaved()).toBe(false);
   });
@@ -136,5 +139,38 @@ describe("the note store, while typing (I1)", () => {
     expect(store.failed("n-1")).toBe(false);
     expect(listener).toHaveBeenCalled();
     expect(store.hasUnsaved()).toBe(false);
+  });
+});
+
+describe("the note store, sketches (D23)", () => {
+  it("a loaded note says whether it has a sketch", async () => {
+    const store = createNoteStore({ get: vi.fn(async (id: string) => file("", id === "n-drawn")), put: vi.fn() });
+    await Promise.all([store.load("n-drawn"), store.load("n-plain")]);
+    expect(store.sketchVersion("n-drawn")).toBeGreaterThan(0);
+    expect(store.sketchVersion("n-plain")).toBe(0);
+  });
+  it("every saved sketch has a new version, so its image is fetched again; a removed one has none", async () => {
+    const store = createNoteStore({ get: vi.fn(async () => file("", true)), put: vi.fn() });
+    await store.load("n-1");
+    const listener = vi.fn();
+    store.subscribe(listener);
+    const first = store.sketchVersion("n-1");
+    store.sketchSaved("n-1", true);
+    const second = store.sketchVersion("n-1");
+    expect(second).toBeGreaterThan(first);
+    expect(listener).toHaveBeenCalled();
+    store.sketchSaved("n-1", false);
+    expect(store.sketchVersion("n-1")).toBe(0);
+    store.sketchSaved("n-1", true);
+    expect(store.sketchVersion("n-1")).toBeGreaterThan(second);
+  });
+  it("a load that lands after a sketch was saved or removed keeps what the reader did", async () => {
+    let answer: (f: NoteFile) => void = () => undefined;
+    const store = createNoteStore({ get: vi.fn(() => new Promise<NoteFile>((resolve) => { answer = resolve; })), put: vi.fn() });
+    const loading = store.load("n-1");
+    store.sketchSaved("n-1", false);
+    answer(file("old", true));
+    await loading;
+    expect(store.sketchVersion("n-1")).toBe(0);
   });
 });

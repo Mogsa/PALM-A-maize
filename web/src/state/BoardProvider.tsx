@@ -157,6 +157,10 @@ export type NoteHandle = {
   text: string | undefined; error: string | null; edit: (markdown: string) => void; commit: () => Promise<void>;
   /** The saved text could not be read: nothing may be typed over it until `retry` loads it. */
   loadFailed: boolean; retry: () => void;
+  /** The note has a sketch (D23); `sketchVersion` changes with every save of it, for its image's URL. */
+  hasSketch: boolean; sketchVersion: number;
+  /** Tells every view the sketch was just written (`present`) or removed. Not a board change, so not an undo step. */
+  sketchSaved: (present: boolean) => void;
 };
 
 /** One note's text, shared by every view that shows it. Loads on first use. `edit` is a keystroke: every view shows it
@@ -178,6 +182,8 @@ export function useNote(nodeId: string): NoteHandle {
   const edit = useCallback((markdown: string) => notes.edit(nodeId, markdown), [notes, nodeId]);
   const commit = useCallback(() => notes.commit(nodeId), [notes, nodeId]);
   const retry = useCallback(() => { setLoadFailed(false); setAttempt((n) => n + 1); }, []);
+  const sketchVersion = useSyncExternalStore(notes.subscribe, () => notes.sketchVersion(nodeId));
+  const sketchSaved = useCallback((present: boolean) => notes.sketchSaved(nodeId, present), [notes, nodeId]);
   const error = loadFailed ? NOTE_LOAD_FAILED_MESSAGE : failed ? NOTE_SAVE_FAILED_MESSAGE : null;
-  return { text, error, edit, commit, loadFailed, retry };
+  return { text, error, edit, commit, loadFailed, retry, hasSketch: sketchVersion > 0, sketchVersion, sketchSaved };
 }
