@@ -17,11 +17,13 @@ import { BoardActionsProvider } from "./BoardActions";
 import { BoardTools } from "./BoardTools";
 import { readCardSelection, type CardSelection } from "./cardSelection";
 import { EdgePopover } from "./EdgePopover";
+import { groupAround } from "./grouping";
 import { applySelection, endOf, flowEdges, type FlowEdge } from "./handles";
 import { ChunkNode } from "./nodes/ChunkNode";
 import { FigureNode } from "./nodes/FigureNode";
 import { GroupNode } from "./nodes/GroupNode";
 import { NoteNode } from "./nodes/NoteNode";
+import { SelectionBar } from "./SelectionBar";
 import { TextPopover } from "./TextPopover";
 import { tidyPositions } from "./tidy";
 
@@ -55,6 +57,11 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
     onFocusHandled?.();
   }, [initialized, focusNode, fitView, getZoom, onFocusHandled]);
 
+  const box = useCallback((id: string): Box => {
+    const internal = getInternalNode(id)!;
+    return { ...internal.internals.positionAbsolute, width: internal.measured?.width ?? 0, height: internal.measured?.height ?? 0 };
+  }, [getInternalNode]);
+
   /** On drop, a node belongs to the smallest group that wholly contains it, or to none. This one rule
    *  covers dropping in, dragging out, moving between groups, and nesting groups. Whole containment,
    *  not intersection, because a partial overlap is where the spike saw nodes jump (findings, section 2).
@@ -62,10 +69,6 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
    *  calls onNodeDragStop for a multi-selection and for a dragged selection box too, with all of them in `nodes`.
    *  The re-parenting joins the drag's undo step. */
   const onNodeDragStop: OnNodeDrag<BoardNode> = useCallback((_, __, draggedNodes) => {
-    const box = (id: string): Box => {
-      const internal = getInternalNode(id)!;
-      return { ...internal.internals.positionAbsolute, width: internal.measured?.width ?? 0, height: internal.measured?.height ?? 0 };
-    };
     const moved: BoardNode[] = [];
     for (const dragged of draggedNodes) {
       const me = box(dragged.id);
@@ -79,7 +82,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
       moved.push(reparent(stored, target?.id ?? null, { x: me.x, y: me.y }, target ? { x: target.box.x, y: target.box.y } : null));
     }
     if (moved.length) dispatch({ type: "upsertNodes", nodes: moved, merge: true });
-  }, [dispatch, getInternalNode, state.board.nodes]);
+  }, [box, dispatch, state.board.nodes]);
 
   const focusOn = useCallback((id: string) => {
     void fitView({ nodes: [{ id }], minZoom: 0.2, maxZoom: getZoom(), duration: 300 });
@@ -119,6 +122,13 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   };
   const closeTextMenu = useCallback(() => setTextMenu(null), []);
 
+  /** Group, one gesture (addendum 4.10): a new group just around the selected pieces, one undo step. */
+  const group = (ids: string[]) => {
+    const nodes = groupAround(state.board.nodes, ids, box);
+    if (nodes.length) dispatch({ type: "upsertNodes", nodes });
+  };
+  const selectedNodes = useMemo(() => state.board.nodes.filter((n) => n.selected), [state.board.nodes]);
+
   const onNodeClick = (event: React.MouseEvent, node: Node) => {
     if ((event.target as HTMLElement).closest("[data-testid=open-source]") && (node.type === "chunk" || node.type === "figure")) {
       onOpenInPaper((node as BoardNode & { data: { region: { rects: PageRect[] } } }).data.region.rects[0]);
@@ -156,6 +166,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
     <BoardActionsProvider value={actions}>
     <div className="board" ref={boardRef} onMouseUp={onBoardMouseUp}>
       <BoardTools onAddGroup={addGroup} onAddNote={addNote} onTidy={tidy} />
+      <SelectionBar selected={selectedNodes} onGroup={group} />
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
       <ReactFlow<BoardNode, FlowEdge>
         nodes={nodes} edges={edges} nodeTypes={nodeTypes} connectionMode={ConnectionMode.Loose}
