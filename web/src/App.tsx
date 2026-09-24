@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api } from "./api/client";
 import { BoardView } from "./board/BoardView";
-import type { PageRect, PaperSummary, View } from "./model/types";
+import type { PageRect, PaperSummary, Question, View } from "./model/types";
+import { QuestionList } from "./panels/QuestionList";
 import { useUndoKeys } from "./panels/undoKeys";
 import { PaperScreen } from "./PaperScreen";
 import { BoardProvider, useBoard } from "./state/BoardProvider";
@@ -31,8 +32,9 @@ function PanelButton({ panel, open, label, onToggle }: { panel: Panel; open: Pan
 }
 
 /** The side panel's contents. 3C.2 to 3C.5 each add one case; until then a panel shows nothing. */
-function SidePanel({ panel }: { panel: Panel }) {
+function SidePanel({ panel, onQuestion }: { panel: Panel; onQuestion: (question: Question) => void }) {
   switch (panel) {
+    case "questions": return <QuestionList onPick={onQuestion} />;
     case "tags": return <TagManager />;
     default: return null;
   }
@@ -52,6 +54,12 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
   const openOnBoard = (id: string) => { setFocusNode(id); show("board"); };
   // A fresh object every time, so the paper scrolls again even for the same rect.
   const openInPaper = (rect: PageRect) => { setFocusRect({ ...rect }); show("paper"); };
+  /** A highlight opens in the paper, anything else on the board. */
+  const onQuestion = (q: Question) => {
+    if (q.kind !== "highlight") return openOnBoard(q.id);
+    const rect = state.board.highlights.find((h) => h.id === q.id)?.anchor.rects[0];
+    if (rect) openInPaper(rect);
+  };
   const toggle = (p: Panel) => setPanel((current) => (current === p ? null : p));
   return (
     <>
@@ -63,6 +71,7 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
           <button aria-pressed={view === "board"} onClick={() => show("board")}>Board</button>
         </div>
         <div className="panel-buttons">
+          <PanelButton panel="questions" open={panel} label="Questions" onToggle={toggle} />
           <PanelButton panel="tags" open={panel} label="Tags" onToggle={toggle} />
         </div>
         <Notice />
@@ -82,7 +91,7 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
             <BoardView active={view === "board"} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={openInPaper} />
           </div>
         </div>
-        {panel && <aside className="panel"><SidePanel panel={panel} /></aside>}
+        {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} /></aside>}
       </div>
     </>
   );

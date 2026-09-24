@@ -69,3 +69,10 @@ button { cursor: pointer; }
 .tag-manager li { display: flex; align-items: center; gap: 6px; }
 .tag-manager input[type="text"] { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--radius-small); }
 .tag-manager input[type="color"] { width: 26px; height: 22px; padding: 0; border: 0; background: none; }
+
+/* the question list (side panel) */
+.question-list ul { list-style: none; margin: 0; padding: 0; }
+.question-list li { border-top: 1px solid var(--border); }
+.question-list li button { width: 100%; padding: 6px 0; border: 0; background: none; text-align: left; font-family: var(--font-read); font-size: 13px; }
+.question-list li button:hover { color: var(--cut); }
+.question-list .kind { margin-right: 6px; font-family: var(--font-ui); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); }
