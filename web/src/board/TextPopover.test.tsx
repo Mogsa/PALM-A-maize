@@ -18,6 +18,15 @@ beforeEach(() => { vi.spyOn(console, "error").mockImplementation(() => undefined
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("TextPopover (D20, D21)", () => {
+  it("offers Highlight on a selection, and Split here and Cut out only on a right-click", () => {
+    const { queryByRole, rerender } = render(<TextPopover selection={selection} onClose={vi.fn()} />);
+    expect(queryByRole("button", { name: "Highlight" })).not.toBeNull();
+    expect(queryByRole("button", { name: "Split here" })).toBeNull();
+    rerender(<TextPopover selection={selection} actions="recut" onClose={vi.fn()} />);
+    expect(queryByRole("button", { name: "Highlight" })).toBeNull();
+    expect(queryByRole("button", { name: "Cut out" })).not.toBeNull();
+  });
+
   it("Highlight asks the server for the anchor inside the chunk and adds it as one highlight", async () => {
     const anchor = { rects: region.rects, quote: q("residual learning"), position: 9, state: "anchored" as const };
     vi.mocked(api.highlightInChunk).mockResolvedValue(anchor);
@@ -31,7 +40,7 @@ describe("TextPopover (D20, D21)", () => {
 
   it("Cut out replaces the chunk by its pieces as one reshape", async () => {
     vi.mocked(api.recut).mockResolvedValue([piece(0), piece(1), piece(2)]);
-    const { getByRole } = render(<TextPopover selection={selection} onClose={vi.fn()} />);
+    const { getByRole } = render(<TextPopover selection={selection} actions="recut" onClose={vi.fn()} />);
     fireEvent.click(getByRole("button", { name: "Cut out" }));
     await waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1));
     expect(api.recut).toHaveBeenCalledWith("p", region, selection.quote, "cut");
@@ -43,7 +52,7 @@ describe("TextPopover (D20, D21)", () => {
 
   it("changes nothing and says so when there is nothing to divide (Review Focus 4)", async () => {
     vi.mocked(api.recut).mockResolvedValue([piece(0)]);
-    const { getByRole, findByRole } = render(<TextPopover selection={selection} onClose={vi.fn()} />);
+    const { getByRole, findByRole } = render(<TextPopover selection={selection} actions="recut" onClose={vi.fn()} />);
     fireEvent.click(getByRole("button", { name: "Split here" }));
     expect((await findByRole("status")).textContent).toBe(NOTHING_TO_DIVIDE.split);
     expect(dispatch).not.toHaveBeenCalled();

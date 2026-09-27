@@ -15,14 +15,15 @@ import { TermBody } from "./TermBody";
 afterEach(cleanup);
 
 describe("TermBody (D27): a term's card", () => {
-  it("shows the reader's definition, then the paper's likely definition with Go there, then Look up elsewhere", () => {
+  it("shows the reader's definition, then the paper's likely definition with Go there, and no Look up elsewhere", () => {
     board = { ...emptyBoard("p"), highlights: [h], nodes: [{ id: "n-mine", type: "note", position: { x: 0, y: 0 }, data: { tags: [], collapsed: false, note: "notes/n-mine.md", origin: "reader" } }],
       edges: [{ id: "e-1", from: "h-1", to: "n-mine", data: { tags: [] } }] };
     const onGo = vi.fn();
     const onOpenNote = vi.fn();
     const { container, getByRole } = render(<TermBody highlight={h} onGo={onGo} onOpenNote={onOpenNote} />);
     const text = container.textContent!;
-    const order = ["Your definition", "what to add", "In this paper", "residual nets (ResNets)", "Look up elsewhere"].map((s) => text.indexOf(s));
+    const order = ["Your definition", "what to add", "In this paper", "residual nets (ResNets)"].map((s) => text.indexOf(s));
+    expect(text).not.toContain("Look up elsewhere");
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(container.querySelector("strong")?.textContent).toBe("what to add");   // rendered as Markdown
@@ -31,11 +32,11 @@ describe("TermBody (D27): a term's card", () => {
     fireEvent.click(getByRole("button", { name: "Open your note" }));
     expect(onOpenNote).toHaveBeenCalledWith("n-mine");
   });
-  it("offers only Look up elsewhere when there is neither", () => {
+  it("shows nothing when there is neither", () => {
     board = { ...emptyBoard("p"), highlights: [{ ...h, anchor: { ...h.anchor, quote: { ...h.anchor.quote, exact: "Then" } } }] };
     const { container } = render(<TermBody highlight={board.highlights[0]} onGo={vi.fn()} onOpenNote={vi.fn()} />);
     expect(container.textContent).not.toContain("Your definition");
     expect(container.textContent).not.toContain("In this paper");
-    expect(container.textContent).toContain("Look up elsewhere");
+    expect(container.textContent).toBe("");
   });
 });

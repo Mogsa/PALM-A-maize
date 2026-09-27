@@ -63,8 +63,7 @@ export type InkAction =
   | { type: "extend"; point: Point }
   | { type: "end" }
   | { type: "erase"; point: [number, number] }
-  | { type: "undo" }
-  | { type: "clear" };
+  | { type: "undo" };
 
 export const initialInk: Ink = { strokes: [], past: [], drawing: null };
 
@@ -81,6 +80,5 @@ export function inkReducer(ink: Ink, action: InkAction): Ink {
       return kept.length === ink.strokes.length ? ink : changed(ink, kept);
     }
     case "undo": return ink.past.length ? { strokes: ink.past[ink.past.length - 1], past: ink.past.slice(0, -1), drawing: null } : ink;
-    case "clear": return ink.strokes.length ? changed(ink, []) : ink;
   }
 }

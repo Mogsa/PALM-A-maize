@@ -1,9 +1,6 @@
 /* the board: pieces of the paper laid out on a table */
 .board { height: 100%; position: relative; background: var(--bg-board); }
 .board .react-flow__background { color: var(--bg-board-dot); }
-.board-tools { position: absolute; z-index: 5; top: 12px; left: 12px; display: flex; gap: 6px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); }
-.board-tools button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; border-radius: var(--radius-small); background: transparent; font-weight: 500; }
-.board-tools button:hover { background: var(--surface-muted); }
 
 /* cards */
 .node { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); font-size: var(--text-ui); min-width: 200px; transition: box-shadow 120ms ease, border-color 120ms ease; }
@@ -21,8 +18,11 @@
 .node-head .note-badge { text-transform: uppercase; letter-spacing: 0.04em; font-family: var(--font-ui); }
 .node-head .count { flex: none; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--hl); color: var(--ink); font-size: 10.5px; font-weight: 600; }
 .node-head .toggle { width: 18px; color: var(--ink-muted); }
-.node-head .open-source { color: var(--ink-faint); opacity: 0; transition: opacity 120ms ease; }
-.node:hover .node-head .open-source, .react-flow__node.selected .open-source { opacity: 1; }
+.node-head .open-source { color: var(--ink-faint); }
+/* a card's buttons (open, tags, collapse, sketch) show only on hover or keyboard focus, so a card at rest is its words */
+.node-head .open-source, .node-head .tags-toggle, .node-head .toggle, .node-head .sketch-action { opacity: 0; transition: opacity 120ms ease; }
+.react-flow__node:hover .node-head :is(.open-source, .tags-toggle, .toggle, .sketch-action),
+.react-flow__node:focus-within .node-head :is(.open-source, .tags-toggle, .toggle, .sketch-action) { opacity: 1; }
 .node-head .open-source:hover { color: var(--cut); }
 
 .node-body { position: relative; padding: 8px 10px 10px; font-family: var(--font-read); font-size: var(--text-read); line-height: var(--leading-read); white-space: pre-line; max-height: 320px; overflow: auto; user-select: none; }
@@ -91,7 +91,6 @@ input.group-name { font: inherit; font-weight: 600; font-size: 12px; outline: no
 .node.group.tray { background: var(--bg-paper); }
 .ghost-row { position: absolute; height: 32px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius); background: transparent; opacity: var(--ghost); text-align: left; font-size: var(--text-ui-small); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .ghost-row:hover { opacity: 1; border-color: var(--cut-edge); }
-.board-tools .tool-note { align-self: center; padding: 0 8px; font-size: var(--text-ui-small); color: var(--ink-muted); }
 
 /* live text on the board (addendum 4.10): a chunk's text is selectable, and a drag on it selects rather than moves */
 .node-body .block-text { user-select: text; cursor: text; }
@@ -100,7 +99,7 @@ input.group-name { font: inherit; font-weight: 600; font-size: 12px; outline: no
 .node-body .ref { text-decoration: underline dotted var(--ink-faint); text-underline-offset: 2px; }
 .node-body .ref:hover, .node-body .ref:focus-visible { text-decoration-color: var(--cut); outline: none; }
 .popover-note { margin: 8px 4px 0; font-size: var(--text-ui-small); color: var(--ink-muted); }
-.selection-bar { position: absolute; z-index: 5; top: 60px; left: 12px; display: flex; gap: 6px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); }
+.selection-bar { position: absolute; z-index: 5; top: 12px; left: 12px; display: flex; gap: 6px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); }
 .selection-bar button { padding: 5px 10px; border: 0; border-radius: var(--radius-small); background: transparent; font-weight: 500; }
 .selection-bar button:hover { background: var(--surface-muted); }
 .selection-bar .tool-note { align-self: center; padding: 0 8px; font-size: var(--text-ui-small); color: var(--ink-muted); }

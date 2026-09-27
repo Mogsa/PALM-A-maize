@@ -4,7 +4,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { api } from "../api/client";
 import type { XY } from "../model/reparent";
-import type { Board, PageRect, PaperScroll, SelectionMode, Source } from "../model/types";
+import type { Board, Highlight, PageRect, PaperScroll, SelectionMode, Source } from "../model/types";
 import { ContextCard } from "./ContextCard";
 import type { LinkDocument } from "./citation";
 import type { PaperHit } from "./hit";
@@ -48,6 +48,7 @@ type Props = {
   /** `lines` (a text selection only) is the selection one rect per printed line (contract 1). */
   onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode, lines?: PageRect[]) => void;
   onClickPaper: (hit: PaperHit) => void;
+  onMarkMenu: (mark: Highlight, at: DOMRect) => void;   // a right-click on a mark
   onOutlineClick: (nodeId: string) => void;
   connecting: boolean;                          // choosing the other end of a connection
   onJump: (target: JumpTarget) => void;
@@ -96,7 +97,7 @@ export function PaperView(props: Props) {
 
   return (
     <>
-      <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseUp={mouse.onMouseUp}
+      <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseUp={mouse.onMouseUp} onContextMenu={mouse.onContextMenu}
            onMouseDown={(e) => { hover.close(); mouse.onMouseDown(e); }} onScroll={onScroll} {...citation} {...termHover}>
         <Document file={api.pdfUrl(paperId)} onLoadSuccess={(doc) => { pdf.current = doc; setReady(true); }}
                   loading={<div className="loading">Loading the paper</div>}

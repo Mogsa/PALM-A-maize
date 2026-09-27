@@ -28,14 +28,8 @@ describe("the tag manager", () => {
     fireEvent.blur(name);
     expect(update).toHaveBeenCalledTimes(1);
   });
-  it("saves a new colour once, when the picker is left, not on every step of the drag", () => {
+  it("offers no colour picker", () => {
     render(<TagManager />);
-    const colour = screen.getByLabelText("Colour of claim");
-    fireEvent.change(colour, { target: { value: "#00ff00" } });
-    fireEvent.change(colour, { target: { value: "#0000ff" } });
-    expect(update).not.toHaveBeenCalled();
-    fireEvent.blur(colour);
-    expect(update).toHaveBeenCalledTimes(1);
-    expect(update).toHaveBeenCalledWith({ ...tag, colour: "#0000ff" });
+    expect(screen.queryByLabelText("Colour of claim")).toBeNull();
   });
 });

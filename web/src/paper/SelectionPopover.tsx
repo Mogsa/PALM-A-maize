@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useRef } from "react";
+import { useDismiss } from "../ui/useDismiss";
 import { popoverPlace } from "./place";
 
 type Props = {
@@ -12,14 +13,11 @@ const POPOVER_HEIGHT = 92;   // preview line plus the action row, measured at th
 /** One selection, then a choice. No modes (SPEC.md section 4). A selection that crosses a column or a page is
  *  several rects; a highlight holds them all and is painted line by line (D1). */
 export function SelectionPopover({ at, preview, busy, canHighlight, onHighlight, onCut, onDismiss, onOpen, onFind }: Props) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onDismiss(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onDismiss]);
+  const box = useRef<HTMLDivElement>(null);
+  useDismiss(box, onDismiss);
   const { left, top } = popoverPlace(at, POPOVER_WIDTH, POPOVER_HEIGHT);
   return (
-    <div className="popover" role="dialog" aria-label="Selection" style={{ left, top }} onMouseDown={(e) => e.stopPropagation()}>
+    <div ref={box} className="popover" role="dialog" aria-label="Selection" style={{ left, top }} onMouseDown={(e) => e.stopPropagation()}>
       <div className="popover-preview" title={preview}>{preview}</div>
       <div className="popover-actions">
         <button className="action highlight" disabled={busy || !canHighlight} title="Mark this on the paper" onClick={onHighlight}>
@@ -30,7 +28,6 @@ export function SelectionPopover({ at, preview, busy, canHighlight, onHighlight,
         </button>
         {onOpen && <button className="action" onClick={onOpen} title="This section is already a piece">Open on board</button>}
         {onFind && <button className="quiet" onClick={onFind} title="Every place these words appear in the paper">Find</button>}
-        <button className="quiet close" aria-label="Dismiss" onClick={onDismiss}>×</button>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { carriesActive, hiddenNodeIds, markDimmed } from "./filter";
+import { anyTagged, carriesActive, hiddenNodeIds, markDimmed } from "./filter";
 import { emptyBoard, type BoardNode, type Highlight, type Rect } from "./types";
 
 const q = { exact: "x", prefix: "", suffix: "" };
@@ -33,5 +33,15 @@ describe("the filter rule (D8)", () => {
   it("a mark dims unless it carries an active tag", () => {
     expect(markDimmed(["t-a"], mark([]))).toBe(true);
     expect(markDimmed(["t-a"], mark(["t-a"]))).toBe(false);
+  });
+});
+
+describe("anyTagged: whether the filter chips are worth showing", () => {
+  it("is false on a board with no tag anywhere, true once a piece, a mark or a connection carries one", () => {
+    const plain = { ...emptyBoard("p"), nodes: [chunk("n-1", [])], highlights: [mark([])] };
+    expect(anyTagged(plain)).toBe(false);
+    expect(anyTagged({ ...plain, nodes: [chunk("n-1", ["t-a"])] })).toBe(true);
+    expect(anyTagged({ ...plain, highlights: [mark(["t-a"])] })).toBe(true);
+    expect(anyTagged({ ...plain, edges: [{ id: "e", from: "a", to: "b", data: { tags: ["t-a"] } }] })).toBe(true);
   });
 });

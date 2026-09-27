@@ -59,12 +59,10 @@ describe("api, schema 2 routes", () => {
     expect(api.renderUrl("p", target, 100)).toBe("/api/papers/p/render?page=3&x0=10&y0=20.5&x1=30&y1=40&dpi=100");
   });
 
-  it("postExport sends tags and the order, paper by default", async () => {
+  it("postExport sends tags and always the paper's order", async () => {
     const fn = mockFetch(200, { path: "/x/export.md", markdown: "# x" });
     expect(await api.postExport("p", ["t-claim"])).toEqual({ path: "/x/export.md", markdown: "# x" });
     expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/export", body: { tags: ["t-claim"], order: "paper" } });
-    await api.postExport("p", [], "template");
-    expect(lastCall(fn).body).toEqual({ tags: [], order: "template" });
   });
 
   it("split posts and returns the drafts", async () => {

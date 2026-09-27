@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDismiss } from "../ui/useDismiss";
 import { api } from "../api/client";
 import { newId } from "../model/ids";
 import type { ChunkNode, RecutMode } from "../model/types";
@@ -13,19 +14,19 @@ export const NOT_FOUND_MESSAGE = "These words could not be found in this piece's
 export const NOTHING_TO_DIVIDE = { split: "This is already where the piece starts.", cut: "The selection is already the whole piece." };
 const FAILED_MESSAGE = "That did not work. Nothing was changed.";
 
-/** Words selected on a card, then a choice (D20, D21): Highlight, Split here, Cut out. The server finds the words
- *  inside the chunk; each action is one undo step. */
-export function TextPopover({ selection, onClose }: { selection: CardSelection; onClose: () => void }) {
+/** What words selected on a card offer: Highlight when they are selected, Split here and Cut out on a right-click. */
+export type TextActions = "highlight" | "recut";
+
+/** Words selected on a card, then a choice (D20, D21). The server finds the words inside the chunk; each action is
+ *  one undo step. */
+export function TextPopover({ selection, actions = "highlight", onClose }: { selection: CardSelection; actions?: TextActions; onClose: () => void }) {
   const { state, dispatch, paperId } = useBoard();
   const [busy, setBusy] = useState(false);
   // What was said belongs to the selection it was said about; a new selection starts with nothing said.
   const [said, setSaid] = useState<{ about: CardSelection; text: string } | null>(null);
   const chunk = state.board.nodes.find((n): n is ChunkNode => n.id === selection.nodeId && n.type === "chunk");
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const box = useRef<HTMLDivElement>(null);
+  useDismiss(box, onClose);
   useEffect(() => { if (!chunk) onClose(); }, [chunk, onClose]);   // undone or deleted meanwhile
   if (!chunk) return null;
 
@@ -56,17 +57,19 @@ export function TextPopover({ selection, onClose }: { selection: CardSelection; 
 
   const { left, top } = popoverPlace(selection.at, POPOVER_WIDTH, POPOVER_HEIGHT);
   return (
-    <div className="popover text-popover" role="dialog" aria-label="Words on the card" style={{ left, top }} onMouseDown={(e) => e.stopPropagation()}>
+    <div ref={box} className="popover text-popover" role="dialog" aria-label="Words on the card" style={{ left, top }} onMouseDown={(e) => e.stopPropagation()}>
       <div className="popover-preview" title={selection.quote.exact}>{selection.quote.exact}</div>
       <div className="popover-actions">
-        <button className="action highlight" disabled={busy} title="Mark these words, here and on the paper" onClick={() => void highlight()}>
-          <span className="swatch" aria-hidden="true" />Highlight
-        </button>
-        <button className="action" disabled={busy} title="Divide this piece where the selection starts" onClick={() => void recut("split")}>Split here</button>
-        <button className="action" disabled={busy} title="Make the selected lines a piece of their own" onClick={() => void recut("cut")}>
-          <span className="glyph" aria-hidden="true">✂</span>Cut out
-        </button>
-        <button className="quiet close" aria-label="Dismiss" onClick={onClose}>×</button>
+        {actions === "highlight" ? (
+          <button className="action highlight" disabled={busy} title="Mark these words, here and on the paper" onClick={() => void highlight()}>
+            <span className="swatch" aria-hidden="true" />Highlight
+          </button>
+        ) : (<>
+          <button className="action" disabled={busy} title="Divide this piece where the selection starts" onClick={() => void recut("split")}>Split here</button>
+          <button className="action" disabled={busy} title="Make the selected lines a piece of their own" onClick={() => void recut("cut")}>
+            <span className="glyph" aria-hidden="true">✂</span>Cut out
+          </button>
+        </>)}
       </div>
       {said?.about === selection && <p className="popover-note" role="status">{said.text}</p>}
     </div>

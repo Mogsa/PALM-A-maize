@@ -7,7 +7,9 @@ import { makeCut } from "./paper/cut";
 import { FindPanel, useFind } from "./paper/FindPanel";
 import type { PaperHit } from "./paper/hit";
 import type { JumpTarget } from "./paper/margin";
+import { AskElsewhere } from "./paper/AskElsewhere";
 import { MarkPopover } from "./paper/MarkPopover";
+import { ContextMenu } from "./ui/ContextMenu";
 import { PaperView } from "./paper/PaperView";
 import { SelectionPopover } from "./paper/SelectionPopover";
 import { previewText } from "./paper/preview";
@@ -29,6 +31,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   const { state, dispatch, source, paperId, view, setView } = useBoard();
   const [pending, setPending] = useState<Pending | null>(null);
   const [openMark, setOpenMark] = useState<OpenMark | null>(null);
+  const [markMenu, setMarkMenu] = useState<OpenMark | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [jump, setJump] = useState<PageRect | null>(null);
@@ -42,6 +45,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
     if (active) return;
     setPending(null);
     setOpenMark(null);
+    setMarkMenu(null);
     cancelConnect();
   }, [active, cancelConnect]);
 
@@ -87,6 +91,9 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   const existingPiece = (section: Section | undefined) =>
     section ? state.board.nodes.find((n) => n.type === "chunk" && n.data.source_id === section.id) : undefined;
   const markOpen = openMark && state.board.highlights.find((h) => h.id === openMark.id);
+  const menuMark = markMenu && state.board.highlights.find((h) => h.id === markMenu.id);
+  const onMarkMenu = (mark: { id: string }, at: DOMRect) => { setPending(null); setOpenMark(null); setMarkMenu({ id: mark.id, at }); };
+  const closeMarkMenu = useCallback(() => setMarkMenu(null), []);
 
   const selectionPopover = (p: Pending) => {
     const piece = existingPiece(p.section);
@@ -99,7 +106,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   return (
     <>
       <PaperView paperId={paperId} source={source} board={state.board} focus={jump ?? focus} onFocusHandled={onJumpHandled}
-                 onSelect={onSelect} onClickPaper={onClickPaper} onOutlineClick={onOpenOnBoard}
+                 onSelect={onSelect} onClickPaper={onClickPaper} onMarkMenu={onMarkMenu} onOutlineClick={onOpenOnBoard}
                  connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark}
                  paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} />
       {pending && selectionPopover(pending)}
@@ -107,6 +114,9 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
       {markOpen && openMark && (
         <MarkPopover highlight={markOpen} at={openMark.at} onClose={() => setOpenMark(null)}
                      onConnect={() => { connect.start(openMark.id); setOpenMark(null); }} />
+      )}
+      {menuMark && markMenu && (
+        <ContextMenu at={markMenu.at} label="Mark" onClose={closeMarkMenu}><AskElsewhere highlight={menuMark} /></ContextMenu>
       )}
       {connect.connectingFrom && (
         <p className="connect-hint" role="status">Click another mark or a section heading to connect. <button className="quiet" onClick={connect.cancel}>Cancel</button></p>

@@ -69,11 +69,6 @@ describe("inkReducer", () => {
     expect(inkReducer(ink, { type: "erase", point: [590, 390] })).toBe(ink);   // touches nothing: no step
     expect(inkReducer(ink, { type: "undo" }).strokes).toEqual([line(10), line(300)]);
   });
-  it("Clear removes every stroke in one step", () => {
-    const ink = inkReducer(drawn([10, 300]), { type: "clear" });
-    expect(ink.strokes).toEqual([]);
-    expect(inkReducer(ink, { type: "undo" }).strokes).toHaveLength(2);
-  });
   it("a loaded sketch is where Undo stops, and is not a change", () => {
     const ink = inkReducer(drawn([10]), { type: "load", strokes: [line(300)] });
     expect(ink.strokes).toEqual([line(300)]);

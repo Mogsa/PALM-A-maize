@@ -24,11 +24,10 @@ const readerNote = (board: Board, highlight: Highlight) =>
 
 export type TermPart =
   | { kind: "note"; noteId: string }
-  | { kind: "definition"; page: number; sentence: string; section: string | null }
-  | { kind: "lookup" };
+  | { kind: "definition"; page: number; sentence: string; section: string | null };
 
-/** What a term's card shows, in order (D27): the reader's own definition, the paper's likely definition by Tier 1's
- *  rules (D25), then Look up elsewhere. A part with nothing in it is left out, but Look up always stays. */
+/** What a term's card shows, in order (D27): the reader's own definition, then the paper's likely definition by
+ *  Tier 1's rules (D25). A part with nothing in it is left out. */
 export function termCard(board: Board, source: Source, highlight: Highlight): TermPart[] {
   const parts: TermPart[] = [];
   const noteId = readerNote(board, highlight);
@@ -39,7 +38,6 @@ export function termCard(board: Board, source: Source, highlight: Highlight): Te
     const { before, after } = sentenceAround(source.page_text.find((p) => p.page === hit.page)?.text ?? "", hit.start, hit.end);
     parts.push({ kind: "definition", page: hit.page, sentence: `${before}${hit.match}${after}`.trim(), section: hit.section?.title ?? null });
   }
-  parts.push({ kind: "lookup" });
   return parts;
 }
 

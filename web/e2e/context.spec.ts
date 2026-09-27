@@ -131,13 +131,12 @@ test("hovering a term shows the reader's definition first, on a card and on the 
   const card = page.getByRole("dialog", { name: "underlying mapping" });
   await expect(card).toContainText("Your definition");
   await expect(card.locator("strong")).toHaveText("we want");
-  await expect(card.getByRole("button", { name: "Look up elsewhere" })).toBeVisible();
-  const text = await card.textContent();
-  expect(text!.indexOf("Your definition")).toBeLessThan(text!.indexOf("Look up elsewhere"));
+  await expect(card.getByRole("button", { name: "Look up elsewhere" })).toHaveCount(0);   // on the mark's right-click
   await page.mouse.move(5, 500);
   await expect(card).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Glossary" }).click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Glossary" }).click();
   const glossary = page.getByRole("region", { name: "Glossary" });
   await expect(glossary.getByRole("listitem")).toHaveCount(1);
   await expect(glossary.getByRole("listitem")).toContainText("The mapping we want the layers to fit.");
@@ -149,6 +148,12 @@ test("hovering a term shows the reader's definition first, on a card and on the 
   const box = (await onPaper.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
   await expect(card).toContainText("Your definition");
+  // A term's Look up elsewhere is on the mark's right-click, as Ask elsewhere is on any other mark's.
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: "right" });
+  const menu = page.getByRole("menu", { name: "Mark" });
+  await expect(menu.getByRole("button", { name: "Look up elsewhere" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).toHaveCount(0);
 });
 
 test("more context on a card shows the paper's lines around it, and collapses again, changing nothing (D28)", async ({ page, request }) => {

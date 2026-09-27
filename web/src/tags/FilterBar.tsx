@@ -20,7 +20,6 @@ export function FilterBar() {
         <button key={t.id} type="button" className={`chip ${active.includes(t.id) ? "on" : ""}`} aria-pressed={active.includes(t.id)}
                 style={{ borderColor: t.colour, color: t.colour }} onClick={() => toggle(t.id)}>{t.name}</button>
       ))}
-      {active.length > 0 && <button type="button" className="quiet clear" onClick={() => set([])}>clear</button>}
     </div>
   );
 }
