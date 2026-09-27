@@ -32,3 +32,9 @@ export function hiddenNodeIds(board: Board, active: string[]): Set<string> {
   };
   return new Set(board.nodes.filter((n) => !isShown(n)).map((n) => n.id));
 }
+
+/** Whether anything on the board carries a tag: until something does, there is nothing to filter by. */
+export function anyTagged(board: Board): boolean {
+  return board.nodes.some((n) => n.data.tags.length > 0) || board.highlights.some((h) => h.tags.length > 0)
+    || board.edges.some((e) => e.data.tags.length > 0);
+}

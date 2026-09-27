@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
@@ -7,14 +7,17 @@ import { Glossary } from "./panels/Glossary";
 import { QuestionList } from "./panels/QuestionList";
 import { TemplateEditor } from "./panels/TemplateEditor";
 import { useUndoKeys } from "./panels/undoKeys";
+import { anyTagged } from "./model/filter";
+import { MoreMenu, type Panel } from "./MoreMenu";
+import { clampSplit } from "./model/paperView";
 import { PaperPicker } from "./PaperPicker";
 import { PaperScreen } from "./PaperScreen";
+import { bothColumns, SplitDivider } from "./SplitDivider";
 import { BoardProvider, useBoard } from "./state/BoardProvider";
 import { FilterBar } from "./tags/FilterBar";
 import { TagManager } from "./tags/TagManager";
 import "./styles.css";
 
-export type Panel = "questions" | "glossary" | "export" | "tags" | "template";
 
 function Notice() {
   const { notice, state } = useBoard();
@@ -43,15 +46,19 @@ type ShellProps = { papers: PaperSummary[]; paperId: string; onChoose: (id: stri
 
 /** Everything that depends on the open board. The view is the board's (D5): the one you left is the one that opens. */
 function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
-  const { state, dispatch, view: { view }, setView } = useBoard();
+  const { state, dispatch, view: { view, split: savedSplit }, setView } = useBoard();
+  const views = useRef<HTMLDivElement>(null);
+  const split = clampSplit(savedSplit);
   const [focusNode, setFocusNode] = useState<string | null>(null);
   const [focusRect, setFocusRect] = useState<PageRect | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [noteRequests, setNoteRequests] = useState(0);
   useUndoKeys(dispatch);
   const show = (next: View) => setView({ view: next });
-  const openOnBoard = (id: string) => { setFocusNode(id); show("board"); };
+  // In the both view each side is already in sight: going to the other only scrolls it there.
+  const openOnBoard = (id: string) => { setFocusNode(id); if (view !== "both") show("board"); };
   // A fresh object every time, so the paper scrolls again even for the same rect.
-  const openInPaper = (rect: PageRect) => { setFocusRect({ ...rect }); show("paper"); };
+  const openInPaper = (rect: PageRect) => { setFocusRect({ ...rect }); if (view !== "both") show("paper"); };
   /** A highlight opens in the paper, anything else on the board. */
   const onQuestion = (q: Question) => {
     if (q.kind !== "highlight") return openOnBoard(q.id);
@@ -59,6 +66,8 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
     if (rect) openInPaper(rect);
   };
   const toggle = (p: Panel) => setPanel((current) => (current === p ? null : p));
+  /** A new note is made on the board: from the paper alone, the board is shown first. */
+  const newNote = () => { if (view === "paper") show("board"); setNoteRequests((n) => n + 1); };
   return (
     <>
       <div className="topbar">
@@ -66,31 +75,30 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
         <div className="paper-title"><PaperPicker papers={papers} value={paperId} onChange={onChoose} onAdded={onAdded} /></div>
         <div className="segmented" role="group" aria-label="View">
           <button aria-pressed={view === "paper"} onClick={() => show("paper")}>Paper</button>
+          <button aria-pressed={view === "both"} onClick={() => show("both")}>Both</button>
           <button aria-pressed={view === "board"} onClick={() => show("board")}>Board</button>
         </div>
+        <input className="goal" aria-label="Reading goal" placeholder="Why am I reading this?" value={state.board.goal}
+               onChange={(e) => dispatch({ type: "setGoal", goal: e.target.value })} />
         <div className="panel-buttons">
           <PanelButton panel="questions" open={panel} label="Questions" onToggle={toggle} />
-          <PanelButton panel="glossary" open={panel} label="Glossary" onToggle={toggle} />
-          <PanelButton panel="export" open={panel} label="Export" onToggle={toggle} />
-          <PanelButton panel="tags" open={panel} label="Tags" onToggle={toggle} />
-          <PanelButton panel="template" open={panel} label="Template" onToggle={toggle} />
+          <button type="button" className="panel-button" onClick={newNote} title="A note in your own words">New note</button>
+          <MoreMenu onPanel={toggle} />
         </div>
         <Notice />
       </div>
-      <div className="subbar">
-        <input className="goal" aria-label="Reading goal" placeholder="Why am I reading this?" value={state.board.goal}
-               onChange={(e) => dispatch({ type: "setGoal", goal: e.target.value })} />
-        <FilterBar />
-      </div>
+      {/* The tag filter only once something carries a tag: until then there is nothing to filter by. */}
+      {anyTagged(state.board) && <div className="subbar"><FilterBar /></div>}
       <div className="workspace">
         {/* Both views stay mounted and the inactive one is only hidden: switching never moves anything (SPEC 4). */}
-        <div className="views">
-          <div className={`view ${view === "paper" ? "" : "inactive"}`}>
+        <div ref={views} className={`views ${view === "both" ? "both" : ""}`} style={view === "both" ? { gridTemplateColumns: bothColumns(split) } : undefined}>
+          <div className={`view paper-pane ${view === "board" ? "inactive" : ""}`}>
             <PaperScreen focus={focusRect} onFocusHandled={() => setFocusRect(null)} onOpenOnBoard={openOnBoard} />
           </div>
-          <div className={`view ${view === "board" ? "" : "inactive"}`}>
-            <BoardView active={view === "board"} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={openInPaper} />
+          <div className={`view board-pane ${view === "paper" ? "inactive" : ""}`}>
+            <BoardView active={view !== "paper"} noteRequests={noteRequests} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={openInPaper} />
           </div>
+          {view === "both" && <SplitDivider views={views} split={split} onCommit={(next) => setView({ split: next })} />}
         </div>
         {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} onJump={openInPaper} onOpenNote={openOnBoard} /></aside>}
       </div>

@@ -30,7 +30,7 @@ function useSavedStrokes(paperId: string, noteId: string, hasSketch: boolean, di
   return state;
 }
 
-/** Draws a note's sketch (D23): Pen, Eraser (a whole stroke at a touch), Undo, Clear, Done. Pointer events serve a
+/** Draws a note's sketch (D23): Pen, Eraser (a whole stroke at a touch), Undo, Done. Pointer events serve a
  *  mouse, a finger and a pen, and only a pen's pressure is used. Saving is not a board change, so not an undo step. */
 export function SketchEditor({ noteId, onClose }: { noteId: string; onClose: () => void }) {
   const { paperId } = useBoard();
@@ -95,7 +95,6 @@ export function SketchEditor({ noteId, onClose }: { noteId: string; onClose: () 
           <button className={tool === "pen" ? "active" : ""} aria-pressed={tool === "pen"} onClick={() => setTool("pen")}>Pen</button>
           <button className={tool === "eraser" ? "active" : ""} aria-pressed={tool === "eraser"} onClick={() => setTool("eraser")}>Eraser</button>
           <button onClick={() => dispatch({ type: "undo" })} disabled={blocked || !ink.past.length}>Undo</button>
-          <button onClick={() => dispatch({ type: "clear" })} disabled={blocked || !ink.strokes.length}>Clear</button>
           <button className="primary" onClick={() => void done()} disabled={blocked}>Done</button>
         </div>
         <svg ref={surface} className={`sketch-surface ${tool}`} aria-label="Drawing surface" role="img"

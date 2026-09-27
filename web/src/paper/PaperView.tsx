@@ -4,7 +4,7 @@ import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { api } from "../api/client";
 import type { XY } from "../model/reparent";
-import type { Board, PageRect, PaperScroll, SelectionMode, Source } from "../model/types";
+import type { Board, Highlight, PageRect, PaperScroll, SelectionMode, Source } from "../model/types";
 import { ContextCard } from "./ContextCard";
 import type { LinkDocument } from "./citation";
 import type { PaperHit } from "./hit";
@@ -24,6 +24,20 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worke
 export const PAGE_WIDTH_PX = 760;
 /** A jump lands this far below the top of the view, so the line above it is still in sight. */
 export const FOCUS_OFFSET_PX = 80;
+/** How long a place gone to from the board stays flashed. */
+export const FLASH_MS = 1200;
+
+/** The place last gone to, flashed briefly so the eye finds it; a page-only jump (no area) is not flashed. */
+function useFlash() {
+  const [flash, setFlash] = useState<PageRect | null>(null);
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(null), FLASH_MS);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
+  const show = useCallback((at: PageRect) => { if (at.rect[2] > at.rect[0] && at.rect[3] > at.rect[1]) setFlash({ ...at }); }, []);
+  return { flash, show };
+}
 
 type Props = {
   paperId: string;
@@ -34,6 +48,7 @@ type Props = {
   /** `lines` (a text selection only) is the selection one rect per printed line (contract 1). */
   onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode, lines?: PageRect[]) => void;
   onClickPaper: (hit: PaperHit) => void;
+  onMarkMenu: (mark: Highlight, at: DOMRect) => void;   // a right-click on a mark
   onOutlineClick: (nodeId: string) => void;
   connecting: boolean;                          // choosing the other end of a connection
   onJump: (target: JumpTarget) => void;
@@ -43,6 +58,8 @@ type Props = {
   onScrollSettled: (scroll: PaperScroll | null) => void;
 };
 
+const flashStyle = ({ rect }: PageRect, scale: number) =>
+  ({ left: rect[0] * scale, top: rect[1] * scale, width: (rect[2] - rect[0]) * scale, height: (rect[3] - rect[1]) * scale });
 const bandStyle = (a: XY, b: XY) => { const r = bandBox(a, b); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
 
 export function PaperView(props: Props) {
@@ -55,6 +72,7 @@ export function PaperView(props: Props) {
   const termHover = useTermHover(container, source, board, hover);
   const mouse = usePaperMouse(container, source, board, props);
   const findProps = useFindMark(container, findMark);
+  const { flash, show: showFlash } = useFlash();
   const onScrollSave = usePaperScroll(container, { ready, source, pageWidthPx: PAGE_WIDTH_PX, paperScroll, onScrollSettled });
 
   const scrollToPoint = useCallback((page: number, y: number) => {
@@ -68,8 +86,9 @@ export function PaperView(props: Props) {
   useEffect(() => {
     if (!focus || !ready) return;
     scrollToPoint(focus.page, focus.rect[1]);
+    showFlash(focus);
     onFocusHandled();   // a jump is an event: consumed, so it never re-applies
-  }, [focus, ready, scrollToPoint, onFocusHandled]);
+  }, [focus, ready, scrollToPoint, onFocusHandled, showFlash]);
 
   /** The paper's own internal links (D10): to the destination's page and height. Stable, so pages do not redraw. */
   const followLink = useCallback(({ dest, pageIndex }: { dest?: unknown; pageIndex: number }) =>
@@ -78,7 +97,7 @@ export function PaperView(props: Props) {
 
   return (
     <>
-      <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseUp={mouse.onMouseUp}
+      <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseUp={mouse.onMouseUp} onContextMenu={mouse.onContextMenu}
            onMouseDown={(e) => { hover.close(); mouse.onMouseDown(e); }} onScroll={onScroll} {...citation} {...termHover}>
         <Document file={api.pdfUrl(paperId)} onLoadSuccess={(doc) => { pdf.current = doc; setReady(true); }}
                   loading={<div className="loading">Loading the paper</div>}
@@ -88,6 +107,7 @@ export function PaperView(props: Props) {
               <Page pageIndex={p.index} width={PAGE_WIDTH_PX} renderAnnotationLayer renderTextLayer {...findProps(p.index)} />
               <PageOverlay page={p.index} scale={PAGE_WIDTH_PX / p.width} board={board} source={source}
                            onOutlineClick={onOutlineClick} onJump={onJump} onOpenNote={onOpenNote} />
+              {flash?.page === p.index && <div className="focus-flash" style={flashStyle(flash, PAGE_WIDTH_PX / p.width)} />}
             </div>
           ))}
         </Document>

@@ -20,6 +20,7 @@
   --cut: #2f6fed;                        /* a cut region and its card */
   --cut-tint: rgba(47, 111, 237, 0.07);
   --cut-edge: rgba(47, 111, 237, 0.6);
+  --bracket-gutter: 170px;               /* room left of a page for the cut brackets and their names */
   --moved: #b7791f;                      /* a piece the paper's text moved under */
   --lost: #c53030;                       /* a piece whose text is gone */
   --ok: #2f855a;

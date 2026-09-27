@@ -16,9 +16,8 @@ import { useHoverCard } from "../paper/useHoverCard";
 import { useBoard } from "../state/BoardProvider";
 import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
-import { BoardTools } from "./BoardTools";
 import { noteAtDrop, onEmptyBoard } from "./dropNote";
-import { clearCardSelection, textMenuAfterMouseUp, type CardSelection } from "./cardSelection";
+import { clearCardSelection, readCardSelection, textMenuAfterMouseUp, type CardSelection } from "./cardSelection";
 import { EdgePopover } from "./EdgePopover";
 import { groupAround } from "./grouping";
 import { applySelection, endOf, flowEdges, type FlowEdge } from "./handles";
@@ -27,20 +26,25 @@ import { FigureNode } from "./nodes/FigureNode";
 import { GroupNode } from "./nodes/GroupNode";
 import { NoteNode } from "./nodes/NoteNode";
 import { SelectionBar } from "./SelectionBar";
-import { TextPopover } from "./TextPopover";
+import { TextPopover, type TextActions } from "./TextPopover";
+import { ContextMenu } from "../ui/ContextMenu";
 import { useBoardCards } from "./useBoardCards";
 
 const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group: GroupNode };
 
 /** `active` is false while the paper view is shown: the board stays mounted but hidden, and must not
  *  take the delete key from the paper. */
-type Props = { onOpenInPaper: (rect: PageRect) => void; active?: boolean; focusNode?: string | null; onFocusHandled?: () => void };
+type Props = {
+  onOpenInPaper: (rect: PageRect) => void; active?: boolean; focusNode?: string | null; onFocusHandled?: () => void;
+  /** Counts the New note presses in the top bar: each new count makes a note in the middle of the board. */
+  noteRequests?: number;
+};
 
 const DELETE_KEYS = ["Backspace", "Delete"];
 /** Where a board never moved opens. */
 const ORIGIN = { x: 0, y: 0, zoom: 1 };
 
-function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Props) {
+function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRequests = 0 }: Props) {
   const { state, dispatch, source, paperId, view, setView } = useBoard();
   const { byId } = useTags();
   const hover = useHoverCard();
@@ -51,7 +55,8 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   const initialized = useNodesInitialized();
   const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(() => new Set());
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; at: DOMRect } | null>(null);
-  const [textMenu, setTextMenu] = useState<CardSelection | null>(null);
+  const [textMenu, setTextMenu] = useState<(CardSelection & { actions: TextActions }) | null>(null);
+  const [paneMenu, setPaneMenu] = useState<{ at: DOMRect; flow: { x: number; y: number } } | null>(null);
   // The note being written stays in sight whatever the filter: a new note carries no tag yet (D8).
   const hidden = useMemo(() => {
     const ids = hiddenNodeIds(state.board, view.active_tags);
@@ -99,23 +104,56 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   }, [fitView, getZoom, getNodes, dispatch]);
   const actions = useMemo(() => ({ focusNode: focusOn, openInPaper: onOpenInPaper, editing, setEditing }), [focusOn, onOpenInPaper, editing]);
 
-  const addNote = () => {
-    const box = boardRef.current!.getBoundingClientRect();
+  const handledNotes = useRef(noteRequests);
+  useEffect(() => {
+    if (noteRequests === handledNotes.current || !boardRef.current) return;
+    handledNotes.current = noteRequests;
+    const box = boardRef.current.getBoundingClientRect();
     const note = newNote({ position: screenToFlowPosition({ x: box.left + box.width / 2, y: box.top + box.height / 2 }), origin: "reader" });
     dispatch({ type: "add", nodes: [note] });
     setEditing(note.id);
+  }, [noteRequests, screenToFlowPosition, dispatch]);
+
+  /** New group, from the empty board's right-click menu: where the menu was opened. */
+  const addGroup = (at: { x: number; y: number }) => {
+    const node: GroupNodeType = { id: newId("n"), type: "group", position: at, width: 480, height: 320, data: { tags: [], name: null } };
+    dispatch({ type: "addNode", node });
+    setPaneMenu(null);
   };
 
-  const addGroup = () => {
-    const node: GroupNodeType = { id: newId("n"), type: "group", position: { x: 400, y: 40 }, width: 480, height: 320, data: { tags: [], name: null } };
-    dispatch({ type: "addNode", node });
+  /** A right-click (or the menu key) on words selected on a card offers Split here and Cut out; on the empty board,
+   *  New group. Anywhere else the browser keeps its own menu. A menu key press has no pointer: the board's middle. */
+  const openMenu = (event: React.SyntheticEvent, point: { x: number; y: number }, keyboard: boolean) => {
+    const words = readCardSelection(boardRef.current!);
+    if (words) {
+      event.preventDefault();
+      setTextMenu({ ...words, at: new DOMRect(point.x, point.y, 0, 0), actions: "recut" });
+      return;
+    }
+    const target = event.target as Element;
+    if (keyboard ? target.closest(".react-flow__node") : !target.closest(".react-flow__pane")) return;
+    event.preventDefault();
+    setPaneMenu({ at: new DOMRect(point.x, point.y, 0, 0), flow: screenToFlowPosition(point) });
   };
+  const middle = () => {
+    const box = boardRef.current!.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  };
+  const onContextMenu = (event: React.MouseEvent) => {
+    const keyboard = event.clientX === 0 && event.clientY === 0;
+    openMenu(event, keyboard ? middle() : { x: event.clientX, y: event.clientY }, keyboard);
+  };
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) openMenu(event, middle(), true);
+  };
+  const closePaneMenu = useCallback(() => setPaneMenu(null), []);
 
   /** Words selected on a card offer Highlight, Split here and Cut out (D20, D21). The popover follows the selection:
    *  it closes when the words are no longer selected, and closing it clears them so it does not come back. */
   const onBoardMouseUp = (event: React.MouseEvent) => {
+    if (event.button !== 0) return;   // a right-click opens its own menu
     const next = textMenuAfterMouseUp(boardRef.current!, event.target);
-    if (next !== undefined) setTextMenu(next);
+    if (next !== undefined) setTextMenu(next && { ...next, actions: "highlight" });
   };
   const closeTextMenu = useCallback(() => {
     clearCardSelection(boardRef.current);
@@ -129,10 +167,17 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   };
   const selectedNodes = useMemo(() => state.board.nodes.filter((n) => n.selected), [state.board.nodes]);
 
+  /** ↗ opens a piece's place in the paper. With the paper beside the board (both), clicking the piece or a mark on
+   *  it does too: the paper scrolls there and flashes it, and the view stays as it is. */
   const onNodeClick = (event: React.MouseEvent, node: Node) => {
-    if ((event.target as HTMLElement).closest("[data-testid=open-source]") && (node.type === "chunk" || node.type === "figure")) {
-      onOpenInPaper((node as BoardNode & { data: { region: { rects: PageRect[] } } }).data.region.rects[0]);
-    }
+    if (node.type !== "chunk" && node.type !== "figure") return;
+    const target = event.target as HTMLElement;
+    const region = (node as BoardNode & { data: { region: { rects: PageRect[] } } }).data.region;
+    if (target.closest("[data-testid=open-source]")) return onOpenInPaper(region.rects[0]);
+    if (view.view !== "both" || !window.getSelection()?.isCollapsed || target.closest("button")) return;
+    const markId = target.closest<HTMLElement>("mark[data-highlight-id]")?.dataset.highlightId;
+    const mark = markId ? state.board.highlights.find((h) => h.id === markId) : undefined;
+    onOpenInPaper(mark?.anchor.rects[0] ?? region.rects[0]);
   };
 
   // Every path into <ReactFlow> goes through parentsFirst, not only saving: a node re-parented into a
@@ -173,8 +218,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
 
   return (
     <BoardActionsProvider value={actions}>
-    <div className="board" ref={boardRef} onMouseUp={onBoardMouseUp} {...cards}>
-      <BoardTools onAddGroup={addGroup} onAddNote={addNote} />
+    <div className="board" ref={boardRef} tabIndex={0} aria-label="Board" onMouseUp={onBoardMouseUp} onContextMenu={onContextMenu} onKeyDown={onKeyDown} {...cards}>
       <SelectionBar selected={selectedNodes} onGroup={group} />
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
       <ReactFlow<BoardNode, FlowEdge>
@@ -192,7 +236,14 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
         <Controls />
       </ReactFlow>
       {edgeMenu && <EdgePopover edgeId={edgeMenu.id} at={edgeMenu.at} onClose={closeEdgeMenu} />}
-      {textMenu && <TextPopover selection={textMenu} onClose={closeTextMenu} />}
+      {textMenu && <TextPopover selection={textMenu} actions={textMenu.actions} onClose={closeTextMenu} />}
+      {paneMenu && (
+        <ContextMenu at={paneMenu.at} label="Board" onClose={closePaneMenu}>
+          <button type="button" className="action" role="menuitem" onClick={() => addGroup(paneMenu.flow)}>
+            <span aria-hidden="true">▢</span> New group
+          </button>
+        </ContextMenu>
+      )}
       {hover.card && <ContextCard card={hover.card} hover={hover} onGo={onOpenInPaper} onOpenNote={focusOn} />}
     </div>
     </BoardActionsProvider>

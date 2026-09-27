@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Slot } from "../model/types";
-import { BLANK_SLOT, cleanTemplate, moveSlot, setSlot, withoutSlot } from "./template";
+import { BLANK_SLOT, cleanTemplate, setSlot, withoutSlot } from "./template";
 
 export const TEMPLATE_FAILED_MESSAGE = "Could not load or save the template.";
 export const TEMPLATE_SAVED_MESSAGE = "Saved. Papers opened for the first time from now on start with these slots.";
@@ -27,8 +27,6 @@ export function TemplateEditor() {
             <input aria-label={`Slot ${i + 1} name`} value={slot.name} onChange={(e) => setSlots(setSlot(slots, i, { name: e.target.value }))} />
             <textarea aria-label={`Slot ${i + 1} question`} value={slot.prompt} onChange={(e) => setSlots(setSlot(slots, i, { prompt: e.target.value }))} />
             <div className="row-tools">
-              <button type="button" aria-label="Move up" disabled={i === 0} onClick={() => setSlots(moveSlot(slots, i, -1))}>↑</button>
-              <button type="button" aria-label="Move down" disabled={i === slots.length - 1} onClick={() => setSlots(moveSlot(slots, i, 1))}>↓</button>
               <button type="button" aria-label="Delete slot" onClick={() => setSlots(withoutSlot(slots, i))}>×</button>
             </div>
           </li>

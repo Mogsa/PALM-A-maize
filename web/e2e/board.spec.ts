@@ -65,10 +65,10 @@ test('vertical resizing grows the visible chunk', async ({page}) => {
   await expect.poll(async () => (await inner.boundingBox())!.height).toBeCloseTo(after.height, 0);
 });
 
-test('opening an outline brings its offscreen chunk into view', async ({page}) => {
+test('opening a cut bracket brings its offscreen chunk into view', async ({page}) => {
   await seed(page, 4000);
-  await expect(page.locator('.outline-tab')).toBeVisible();
-  await page.locator('.outline-tab').click();
+  await expect(page.locator('.cut-bracket')).toBeVisible();
+  await page.locator('.cut-bracket').click();
   const chunk = page.locator('.react-flow__node[data-id="n-review"]');
   await expect(chunk).toBeAttached();
 
@@ -284,4 +284,32 @@ test('a note made while a tag filter is on stays in sight, ready for typing', as
   await expect(page.locator('.react-flow__node[data-id="n-tagged"]')).toBeVisible();
   await page.getByRole('button', {name: 'New note'}).click();
   await expect(page.locator('textarea.note-text')).toBeFocused();
+});
+
+test('the top bar keeps six controls; New group is on the empty board\'s right-click; the filter shows once a tag is used', async ({page}) => {
+  await seedBoard(page, { nodes: [] });
+  const bar = page.locator('.topbar');
+  await expect(bar.getByRole('combobox', {name: 'Paper', exact: true})).toBeVisible();
+  for (const name of ['Paper', 'Both', 'Board', 'Questions', 'New note', 'More']) await expect(bar.getByRole('button', {name, exact: true})).toBeVisible();
+  await expect(bar.getByRole('textbox', {name: 'Reading goal'})).toBeVisible();
+  for (const name of ['Glossary', 'Export', 'Tags', 'Template', 'Split', 'New group']) await expect(page.getByRole('button', {name, exact: true})).toHaveCount(0);
+  await expect(page.locator('.filter-bar')).toHaveCount(0);
+
+  await page.getByRole('button', {name: 'Board', exact: true}).click();
+  await page.locator('.react-flow__pane').click({ position: { x: 600, y: 400 }, button: 'right' });
+  await page.getByRole('menu', {name: 'Board'}).getByRole('menuitem', {name: /New group/}).click();
+  await expect(page.locator('.node.group')).toHaveCount(1);
+  await expect(page.getByRole('menu', {name: 'Board'})).toHaveCount(0);
+
+  // from the keyboard: the menu key on the board
+  await page.locator('.board').focus();
+  await page.keyboard.press('Shift+F10');
+  await expect(page.getByRole('menuitem', {name: /New group/})).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.node.group')).toHaveCount(2);
+
+  const group = page.locator('.react-flow__node-group').first();
+  await group.getByRole('button', {name: 'Tags', exact: true}).click();
+  await group.getByLabel('question', {exact: true}).check();
+  await expect(page.locator('.filter-bar')).toBeVisible();
 });

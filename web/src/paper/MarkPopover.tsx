@@ -6,7 +6,7 @@ import type { Highlight } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
 import { isTextField } from "../state/keys";
 import { TagPicker } from "../tags/TagPicker";
-import { AskElsewhere } from "./AskElsewhere";
+import { useDismiss } from "../ui/useDismiss";
 import { NoteEditor } from "./NoteEditor";
 import { PeekButton, PeekText, usePeek } from "./PeekLines";
 import { POPOVER_MARGIN, popoverPlace } from "./place";
@@ -52,6 +52,7 @@ export function MarkPopover({ highlight, at, onClose, onConnect }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, remove, peek.open]);
   const { box, height } = useMeasuredHeight(MARK_POPOVER_HEIGHT);
+  useDismiss(box, onClose, { escape: false });   // its own Escape waits for an open peek
   const { left, top } = popoverPlace(at, MARK_POPOVER_WIDTH, Math.min(height, window.innerHeight - 2 * POPOVER_MARGIN));
   return (
     <div ref={box} className="popover mark-popover" role="dialog" aria-label="Mark" style={{ left, top }} onMouseDown={(e) => e.stopPropagation()}>
@@ -63,10 +64,8 @@ export function MarkPopover({ highlight, at, onClose, onConnect }: Props) {
       <div className="popover-actions">
         <button className="action" onClick={onConnect} title="Then click another mark or a section heading">Connect</button>
         <button className="action" onClick={addNote}>Add note</button>
-        <AskElsewhere highlight={highlight} />
         <PeekButton peek={peek} />
         <button className="action" onClick={remove} title="Delete">Remove</button>
-        <button className="quiet close" aria-label="Dismiss" onClick={onClose}>×</button>
       </div>
     </div>
   );

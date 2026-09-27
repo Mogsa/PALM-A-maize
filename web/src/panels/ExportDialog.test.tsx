@@ -15,13 +15,13 @@ import { ExportDialog } from "./ExportDialog";
 afterEach(() => { cleanup(); vi.clearAllMocks(); calls.length = 0; });
 
 describe("export", () => {
-  it("saves what is pending first, then writes in the chosen order with the active filter", async () => {
+  it("saves what is pending first, then writes with the active filter, offering no order to choose", async () => {
     render(<ExportDialog />);
-    fireEvent.change(screen.getByLabelText("Order"), { target: { value: "template" } });
+    expect(screen.queryByLabelText("Order")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Write export" }));
     expect(await screen.findByText("/data/papers/p/export.md")).toBeTruthy();
     expect(calls).toEqual(["flush", "export"]);
-    expect(api.postExport).toHaveBeenCalledWith("p", ["t-pass1"], "template");
+    expect(api.postExport).toHaveBeenCalledWith("p", ["t-pass1"]);
     expect(screen.getByText("# Title")).toBeTruthy();
   });
   it("does not export when pending changes could not be saved, and says why", async () => {

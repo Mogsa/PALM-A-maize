@@ -29,17 +29,17 @@ describe("termTagIds (D27): which tags mark a term", () => {
   });
 });
 
-describe("termCard (D27): the reader's definition first, then the paper's likely one, then look up elsewhere", () => {
-  it("puts a note of the reader's own before the paper's definition, and Look up last", () => {
+describe("termCard (D27): the reader's definition first, then the paper's likely one, nothing more", () => {
+  it("puts a note of the reader's own before the paper's definition, ", () => {
     const h = mark("h-1", "residual nets");
     const parts = termCard(board([h], [note("n-ai", "ai"), note("n-mine", "reader")], [["h-1", "n-ai"], ["n-mine", "h-1"]]), source, h);
-    expect(parts.map((p) => p.kind)).toEqual(["note", "definition", "lookup"]);
+    expect(parts.map((p) => p.kind)).toEqual(["note", "definition"]);
     expect(parts[0]).toEqual({ kind: "note", noteId: "n-mine" });
     expect(parts[1]).toMatchObject({ kind: "definition", page: 4, sentence: "Next we evaluate 18-layer and 34-layer residual nets (ResNets)." });
   });
   it("leaves out what is not there: no note of the reader's, no sentence that reads like a definition", () => {
     const h = mark("h-2", "baseline architectures");
-    expect(termCard(board([h]), source, h).map((p) => p.kind)).toEqual(["lookup"]);
+    expect(termCard(board([h]), source, h).map((p) => p.kind)).toEqual([]);
   });
 });
 

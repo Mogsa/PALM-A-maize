@@ -1,5 +1,5 @@
 import type {
-  Board, ChunkAnchor, ExportOrder, ExportResult, HighlightAnchor, JoinResult, NoteFile, PageRect, PaperSummary, Piece, Question, QuoteSelector,
+  Board, ChunkAnchor, ExportResult, HighlightAnchor, JoinResult, NoteFile, PageRect, PaperSummary, Piece, Question, QuoteSelector,
   RecutMode, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload, Source, SplitDraft, TagFile, TemplateFile,
 } from "../model/types";
 import type { PaperViewState } from "../model/paperView";
@@ -128,8 +128,9 @@ export const api = {
       throw error;
     }
   },
-  postExport: (id: string, tags: string[], order: ExportOrder = "paper") =>
-    send<ExportResult>("POST", `${paper(id)}/export`, { tags, order }),
+  /** The export is always in the paper's order. */
+  postExport: (id: string, tags: string[]) =>
+    send<ExportResult>("POST", `${paper(id)}/export`, { tags, order: "paper" }),
 
   getTags: () => call<TagFile>("/api/tags"),
   putTags: (tags: TagFile) => send<TagFile>("PUT", "/api/tags", tags),

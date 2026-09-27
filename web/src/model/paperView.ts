@@ -13,7 +13,18 @@ export type PaperViewState = {
 };
 
 export const DEFAULT_SPLIT = 0.4;
-export const defaultPaperView: PaperViewState = { view: "paper", paper_scroll: null, active_tags: [], viewport: null, split: DEFAULT_SPLIT };
+export const MIN_SPLIT = 0.15;
+export const MAX_SPLIT = 0.85;
+
+/** A split kept to 0.15..0.85; anything not a number is the default. */
+export const clampSplit = (split: number): number =>
+  Number.isFinite(split) ? Math.min(MAX_SPLIT, Math.max(MIN_SPLIT, split)) : DEFAULT_SPLIT;
+
+/** The split a pointer at `clientX` asks for, across a box starting at `left` of this `width`. */
+export const splitAt = (clientX: number, box: { left: number; width: number }): number =>
+  clampSplit((clientX - box.left) / box.width);
+
+export const defaultPaperView:PaperViewState = { view: "paper", paper_scroll: null, active_tags: [], viewport: null, split: DEFAULT_SPLIT };
 
 const sameViewport = (a: Viewport | null, b: Viewport | null) =>
   a === b || (a !== null && b !== null && a.x === b.x && a.y === b.y && a.zoom === b.zoom);

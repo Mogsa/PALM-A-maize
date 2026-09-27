@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import type { Highlight, PageRect } from "../model/types";
 import { NoteMarkdown } from "../notes/NoteMarkdown";
 import { useBoard, useNote } from "../state/BoardProvider";
-import { AskElsewhere } from "./AskElsewhere";
 import { termCard, type TermPart } from "./term";
 
 type Props = { highlight: Highlight; onGo: (at: PageRect) => void; onOpenNote: (noteId: string) => void };
@@ -31,8 +30,8 @@ function PaperDefinition({ part, onGo }: { part: Extract<TermPart, { kind: "defi
   );
 }
 
-/** A term's card (D27), in this order: the reader's own definition, the paper's likely definition by D25's rules, then
- *  Look up elsewhere, which copies the jargon prompt and makes an AI note for the answer. */
+/** A term's card (D27): the reader's own definition, then the paper's likely definition by D25's rules. Look up
+ *  elsewhere is on the mark's right-click. */
 export function TermBody({ highlight, onGo, onOpenNote }: Props) {
   const { state, source } = useBoard();
   const parts = useMemo(() => termCard(state.board, source, highlight), [state.board, source, highlight]);
@@ -42,7 +41,6 @@ export function TermBody({ highlight, onGo, onOpenNote }: Props) {
         switch (part.kind) {
           case "note": return <ReaderDefinition key="note" noteId={part.noteId} onOpen={onOpenNote} />;
           case "definition": return <PaperDefinition key="definition" part={part} onGo={onGo} />;
-          case "lookup": return <div key="lookup" className="popover-actions"><AskElsewhere highlight={highlight} /></div>;
         }
       })}
     </>

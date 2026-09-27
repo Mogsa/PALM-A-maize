@@ -119,17 +119,24 @@ async function cut(page: Page, pageNo: number, from: number, to: number) {
   await expect(page.getByRole("button", { name: "Cut", exact: true })).toBeHidden();
 }
 
-async function clickMark(page: Page, id: string) {
+async function clickMark(page: Page, id: string, button: "left" | "right" = "left") {
   const mark = page.locator(`.overlay .mark[data-highlight-id="${id}"]`).first();
   await mark.scrollIntoViewIfNeeded();
   const box = (await mark.boundingBox())!;
-  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button });
 }
 
-/** Writes the export in this order and returns the Markdown the dialog shows: what the server wrote to the file it names. */
-async function writeExport(page: Page, order: "paper" | "template"): Promise<string> {
+/** Opens one of the panels kept in the More menu. */
+async function openPanel(page: Page, name: string) {
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name, exact: true }).click();
+}
+
+/** Writes the export (always in the paper's order) and returns the Markdown the dialog shows: what the server wrote
+ *  to the file it names. */
+async function writeExport(page: Page): Promise<string> {
   const dialog = page.locator(".export-dialog");
-  await dialog.getByLabel("Order").selectOption(order);
+  await expect(dialog.getByLabel("Order")).toHaveCount(0);
   const exported = page.waitForResponse((r) => r.url().endsWith("/export") && r.request().method() === "POST");
   await dialog.getByRole("button", { name: "Write export", exact: true }).click();
   const body: Json = await (await exported).json();
@@ -166,17 +173,6 @@ test("first open shows the tray filled by split and nine slots, and one Cmd-Z ta
   await page.keyboard.press("ControlOrMeta+Shift+z");
   await expect(page.locator(".node.group.slot")).toHaveCount(9);
   await expect.poll(async () => (await boardOf(page.request, attention)).nodes.length).toBe(1 + drafts.length + 9);
-});
-
-test("export in the template's order lists the nine slot names, in the template's order", async ({ page }) => {
-  const template: Json = await (await page.request.get("/api/template")).json();
-  const names: string[] = template.slots.map((s: Json) => s.name);
-  expect((await boardOf(page.request, attention)).nodes.filter((n: Json) => n.type === "group" && n.data.prompt)).toHaveLength(9);
-  await open(page, attention);
-  await page.getByRole("button", { name: "Export", exact: true }).click();
-  const markdown = await writeExport(page, "template");
-  const headings = markdown.split("\n").filter((line: string) => line.startsWith("## ")).map((line: string) => line.slice(3));
-  expect(headings.filter((h) => names.includes(h))).toEqual(names);
 });
 
 test("in the paper view the hidden board's tray and slots neither show nor take the paper's clicks", async ({ page }) => {
@@ -379,17 +375,23 @@ test("a question with only an AI note stays on the list, and a note of your own 
   await questions.click();
   await expect(page.locator(".question-list li")).toHaveCount(1);
 
-  await popover.getByRole("button", { name: "Ask elsewhere", exact: true }).click();
+  // Ask elsewhere is on the mark's right-click; the popover closed when Questions was pressed outside it.
+  await expect(popover).toHaveCount(0);
+  await clickMark(page, id, "right");
+  await page.getByRole("menu", { name: "Mark" }).getByRole("button", { name: "Ask elsewhere", exact: true }).click();
   await expect(page.locator(".node.note.ai")).toHaveCount(1);
   await expect.poll(async () => (await boardOf(page.request, resnet)).nodes.filter((n: Json) => n.type === "note").length).toBe(1);
   const marked = (await boardOf(page.request, resnet)).highlights.find((h: Json) => h.id === id).anchor.quote.exact.split(/\s+/)[0];
   expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(marked);
+  await page.keyboard.press("Escape");
+  await clickMark(page, id);
   await popover.locator(".note-editor.ai textarea").fill("It means the block learns a residual.");
   await popover.locator(".note-editor.ai textarea").blur();
   await questions.click();
   await questions.click();   // reopened: a fresh fetch from the server
   await expect(page.locator(".question-list li")).toHaveCount(1);
 
+  await clickMark(page, id);
   await popover.getByRole("button", { name: "Add note", exact: true }).click();
   const mine = popover.locator(".note-editor.reader textarea");
   await mine.fill("The block learns what to add to its input, not the whole mapping.");
@@ -463,7 +465,7 @@ test("a reload returns to the same view and the same place in the paper (SPEC 11
   await expect.poll(async () => Math.abs((await paper.evaluate((el) => el.scrollTop)) - top)).toBeLessThan(3);
 });
 
-test("filtering to one tag shows only its pieces, and export writes them in either order (SPEC 11.4)", async ({ page }) => {
+test("filtering to one tag shows only its pieces, and export writes only them (SPEC 11.4)", async ({ page }) => {
   await seed(page, resnet, { nodes: [chunk("n-alpha", 40, 100, "Alpha claim text."), chunk("n-beta", 40, 500, "Beta other text.")] });
   await showBoard(page);
   const alpha = node(page, "n-alpha");
@@ -473,12 +475,8 @@ test("filtering to one tag shows only its pieces, and export writes them in eith
   await expect(node(page, "n-beta")).toBeHidden();
   await expect(alpha).toBeVisible();
 
-  await page.getByRole("button", { name: "Export", exact: true }).click();
-  const inPaperOrder = await writeExport(page, "paper");
-  expect(inPaperOrder).toContain("Alpha claim");
-  expect(inPaperOrder).not.toContain("Beta other");
-  const inTemplateOrder = await writeExport(page, "template");
-  expect(inTemplateOrder).toContain("## Not in a slot");
-  expect(inTemplateOrder).toContain("Alpha claim");
-  expect(inTemplateOrder).not.toContain("Beta other");
+  await openPanel(page, "Export");
+  const exported = await writeExport(page);
+  expect(exported).toContain("Alpha claim");
+  expect(exported).not.toContain("Beta other");
 });

@@ -64,13 +64,15 @@ describe("SketchEditor (D23)", () => {
     expect(vi.mocked(api.putSketch).mock.calls[0][2].strokes[0].points[0]).toEqual([10, 10, 0.7]);
   });
 
-  it("opens a saved sketch to draw on, and Clear then Done removes it", async () => {
+  it("opens a saved sketch to draw on, and erasing its only stroke then Done removes it", async () => {
     Object.assign(note, { hasSketch: true, sketchVersion: 1 });
     vi.mocked(api.getSketch).mockResolvedValueOnce({ width: 600, height: 400, strokes: [{ points: [[5, 5, 0.5], [50, 50, 0.5]], size: 4 }] });
     const onClose = vi.fn();
     const { getByRole, getByLabelText } = render(<SketchEditor noteId="n-1" onClose={onClose} />);
     await waitFor(() => expect(strokesOn(getByLabelText("Drawing surface"))).toHaveLength(1));
-    fireEvent.click(getByRole("button", { name: "Clear" }));
+    fireEvent.click(getByRole("button", { name: "Eraser" }));
+    draw(getByLabelText("Drawing surface"), [5, 5], [50, 50]);
+    expect(strokesOn(getByLabelText("Drawing surface"))).toHaveLength(0);
     await act(async () => { fireEvent.click(getByRole("button", { name: "Done" })); });
     expect(api.deleteSketch).toHaveBeenCalledWith("p", "n-1");
     expect(api.putSketch).not.toHaveBeenCalled();
