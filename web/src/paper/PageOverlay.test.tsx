@@ -21,26 +21,30 @@ const draw = (onOpen = vi.fn()) => {
   return render(<PageOverlay page={0} scale={2} board={board} source={source} onOutlineClick={onOpen} onJump={() => undefined} onOpenNote={() => undefined} />);
 };
 
-describe("PageOverlay cut brackets", () => {
-  it("brackets every piece, split's and the reader's, grey in the tray and coloured out of it, with no box over the text", () => {
+describe("PageOverlay cut ruler", () => {
+  it("draws one stretch per piece, faint in the tray and solid out of it, with ticks and no label or box over the text", () => {
     const { container } = draw();
-    const brackets = [...container.querySelectorAll(".cut-bracket")];
-    expect(brackets.map((el) => [el.getAttribute("data-node-id"), el.classList.contains("tray")])).toEqual([["n-split", true], ["n-cut", false]]);
-    expect(container.querySelector(".outline")).toBeNull();
+    expect(container.querySelectorAll(".cut-ruler")).toHaveLength(1);
+    const stretches = [...container.querySelectorAll(".cut-stretch")];
+    expect(stretches.map((el) => [el.getAttribute("data-node-id"), el.classList.contains("tray")])).toEqual([["n-split", true], ["n-cut", false]]);
+    expect((stretches[1] as HTMLElement).style.height).toBe("20px");   // 10pt at scale 2
+    expect([...container.querySelectorAll<HTMLElement>(".cut-tick")].map((t) => t.style.top)).toEqual(["0px", "20px"]);
     expect(container.querySelector(".cut-tint")).toBeNull();
-    expect((brackets[1] as HTMLElement).style.height).toBe("20px");   // 10pt at scale 2
-    expect((brackets[1] as HTMLElement).style.right).toContain("18px");   // the second lane: overlapping pieces sit side by side
+    expect(container.querySelector(".cut-tip")).toBeNull();
+    expect(container.textContent).toBe("");
   });
-  it("tints the piece's lines while hovered or focused, and opens it on click", () => {
+  it("shows the name and tints the piece's lines while hovered or focused, and opens it on click", () => {
     const onOpen = vi.fn();
     const { container, getAllByRole } = draw(onOpen);
-    const bracket = getAllByRole("button", { name: /Open this piece/ })[1];
-    fireEvent.mouseEnter(bracket);
+    const stretch = getAllByRole("button", { name: "Open this piece: x" })[1];
+    fireEvent.mouseEnter(stretch);
     expect(container.querySelectorAll(".cut-tint")).toHaveLength(1);
-    fireEvent.mouseLeave(bracket);
-    fireEvent.focus(bracket);
+    expect(container.querySelector(".cut-tip")?.textContent).toBe("x");
+    fireEvent.mouseLeave(stretch);
+    expect(container.querySelector(".cut-tip")).toBeNull();
+    fireEvent.focus(stretch);
     expect(container.querySelectorAll(".cut-tint")).toHaveLength(1);
-    fireEvent.click(bracket);
+    fireEvent.click(stretch);
     expect(onOpen).toHaveBeenCalledWith("n-cut");
   });
 });

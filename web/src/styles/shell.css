@@ -21,6 +21,8 @@ button { cursor: pointer; }
 .view { grid-row: 1; grid-column: 1; min-height: 0; }
 /* both: the paper on the left, a divider, the board on the right; each pane keeps its own scroll and zoom */
 .views.both > .paper-pane { grid-column: 1; min-width: 0; }
+/* the page is fitted to the pane in both: nothing scrolls sideways (margin notes past the pane are cut off) */
+.views.both .paper { overflow-x: hidden; }
 .views.both > .board-pane { grid-column: 3; min-width: 0; }
 .split-divider { grid-row: 1; grid-column: 2; cursor: col-resize; background: var(--border); touch-action: none; }
 .split-divider:hover, .split-divider:focus-visible { background: var(--border-strong); }

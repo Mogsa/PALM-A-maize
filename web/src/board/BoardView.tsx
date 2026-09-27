@@ -14,6 +14,7 @@ import type { BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/t
 import { ContextCard } from "../paper/ContextCard";
 import { useHoverCard } from "../paper/useHoverCard";
 import { useBoard } from "../state/BoardProvider";
+import { paperHoldsDelete } from "../state/keys";
 import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
 import { noteAtDrop, onEmptyBoard } from "./dropNote";
@@ -207,7 +208,9 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
 
   // React Flow offers the selection plus every descendant and every touching edge. The reader chose only the selected
   // ones: the reducer removes those as one undo step and dissolves groups in place (addendum 4.2, 4.7).
+  // In the both view a Delete meant for the paper (its open popover, its selected text) is not also the board's.
   const onBeforeDelete: OnBeforeDelete<BoardNode, FlowEdge> = useCallback(async ({ nodes: offered, edges: offeredEdges }) => {
+    if (paperHoldsDelete(document)) return false;
     const nodeIds = offered.filter((n) => n.selected).map((n) => n.id);
     const edgeIds = offeredEdges.filter((e) => e.selected).map((e) => e.id);
     if (nodeIds.length || edgeIds.length) dispatch({ type: "remove", nodeIds, edgeIds });

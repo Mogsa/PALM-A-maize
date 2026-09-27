@@ -55,23 +55,25 @@ export function strokeTouches(stroke: Stroke, [x, y]: [number, number]): boolean
   return stroke.points.some(([px, py]) => Math.hypot(px - x, py - y) <= reach);
 }
 
-/** The strokes on the surface, what each change replaced (for Undo), and the stroke being drawn. */
-export type Ink = { strokes: Stroke[]; past: Stroke[][]; drawing: Stroke | null };
+/** The strokes on the surface, what each change replaced (for Undo), what Undo took back (for Redo), and the stroke
+ *  being drawn. */
+export type Ink = { strokes: Stroke[]; past: Stroke[][]; future: Stroke[][]; drawing: Stroke | null };
 export type InkAction =
   | { type: "load"; strokes: Stroke[] }
   | { type: "start"; point: Point; size: number }
   | { type: "extend"; point: Point }
   | { type: "end" }
   | { type: "erase"; point: [number, number] }
-  | { type: "undo" };
+  | { type: "undo" }
+  | { type: "redo" };
 
-export const initialInk: Ink = { strokes: [], past: [], drawing: null };
+export const initialInk: Ink = { strokes: [], past: [], future: [], drawing: null };
 
-const changed = (ink: Ink, strokes: Stroke[]): Ink => ({ strokes, past: [...ink.past, ink.strokes], drawing: null });
+const changed = (ink: Ink, strokes: Stroke[]): Ink => ({ strokes, past: [...ink.past, ink.strokes], future: [], drawing: null });
 
 export function inkReducer(ink: Ink, action: InkAction): Ink {
   switch (action.type) {
-    case "load": return { strokes: action.strokes, past: [], drawing: null };
+    case "load": return { strokes: action.strokes, past: [], future: [], drawing: null };
     case "start": return { ...ink, drawing: { points: [action.point], size: action.size } };
     case "extend": return ink.drawing ? { ...ink, drawing: { ...ink.drawing, points: [...ink.drawing.points, action.point] } } : ink;
     case "end": return ink.drawing ? changed(ink, [...ink.strokes, ink.drawing]) : ink;
@@ -79,6 +81,9 @@ export function inkReducer(ink: Ink, action: InkAction): Ink {
       const kept = ink.strokes.filter((s) => !strokeTouches(s, action.point));
       return kept.length === ink.strokes.length ? ink : changed(ink, kept);
     }
-    case "undo": return ink.past.length ? { strokes: ink.past[ink.past.length - 1], past: ink.past.slice(0, -1), drawing: null } : ink;
+    case "undo": return ink.past.length
+      ? { strokes: ink.past[ink.past.length - 1], past: ink.past.slice(0, -1), future: [ink.strokes, ...ink.future], drawing: null } : ink;
+    case "redo": return ink.future.length
+      ? { strokes: ink.future[0], past: [...ink.past, ink.strokes], future: ink.future.slice(1), drawing: null } : ink;
   }
 }

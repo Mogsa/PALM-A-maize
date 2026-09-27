@@ -24,14 +24,19 @@ beforeEach(() => { Object.assign(note, { hasSketch: false, sketchVersion: 0 }); 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("SketchEditor (D23)", () => {
-  it("turns pointer strokes into paths, and Undo removes the last one", async () => {
+  it("turns pointer strokes into paths, and Cmd-Z removes the last one", async () => {
     const onClose = vi.fn();
-    const { getByRole, getByLabelText } = render(<SketchEditor noteId="n-1" onClose={onClose} />);
+    const { getByRole, getByLabelText, queryByRole } = render(<SketchEditor noteId="n-1" onClose={onClose} />);
     const surface = getByLabelText("Drawing surface");
     draw(surface, [10, 10], [100, 80]);
     draw(surface, [200, 200], [300, 250]);
     expect(strokesOn(surface)).toHaveLength(2);
-    fireEvent.click(getByRole("button", { name: "Undo" }));
+    expect(queryByRole("button", { name: "Undo" })).toBeNull();
+    fireEvent.keyDown(getByRole("dialog", { name: "Sketch" }), { key: "z", metaKey: true });
+    expect(strokesOn(surface)).toHaveLength(1);
+    fireEvent.keyDown(getByRole("dialog", { name: "Sketch" }), { key: "z", metaKey: true, shiftKey: true });
+    expect(strokesOn(surface)).toHaveLength(2);
+    fireEvent.keyDown(getByRole("dialog", { name: "Sketch" }), { key: "z", ctrlKey: true });
     expect(strokesOn(surface)).toHaveLength(1);
 
     await act(async () => { fireEvent.click(getByRole("button", { name: "Done" })); });
@@ -106,6 +111,7 @@ describe("SketchEditor (D23)", () => {
     window.addEventListener("keydown", onKey);
     const { getByRole } = render(<SketchEditor noteId="n-1" onClose={vi.fn()} />);
     fireEvent.keyDown(getByRole("dialog", { name: "Sketch" }), { key: "Delete" });
+    fireEvent.keyDown(getByRole("dialog", { name: "Sketch" }), { key: "z", metaKey: true });
     window.removeEventListener("keydown", onKey);
     expect(onKey).not.toHaveBeenCalled();
   });

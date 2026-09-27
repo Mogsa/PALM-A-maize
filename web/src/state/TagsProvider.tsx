@@ -3,7 +3,7 @@ import { api } from "../api/client";
 import { newId } from "../model/ids";
 import type { Tag } from "../model/types";
 
-/** A tag's colour is data in tags.json; a new tag starts slate, the colour of the pass presets (addendum 4.3). */
+/** A tag's colour is data in tags.json; a new tag starts slate, a neutral the reader recolours (addendum 4.3). */
 export const NEW_TAG_COLOUR = "#64748B";
 export const TAGS_FAILED_MESSAGE = "Could not load or save the tags. Changes to tags may be lost.";
 

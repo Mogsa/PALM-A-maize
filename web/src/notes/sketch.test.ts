@@ -62,6 +62,20 @@ describe("inkReducer", () => {
     expect(ink.strokes).toEqual([]);
     expect(inkReducer(ink, { type: "undo" })).toBe(ink);
   });
+  it("Redo puts back what Undo took, until a new stroke starts a new line of changes", () => {
+    let ink = drawn([10, 100]);
+    expect(inkReducer(ink, { type: "redo" })).toBe(ink);
+    ink = inkReducer(inkReducer(ink, { type: "undo" }), { type: "undo" });
+    ink = inkReducer(ink, { type: "redo" });
+    expect(ink.strokes).toEqual([line(10)]);
+    ink = inkReducer(ink, { type: "redo" });
+    expect(ink.strokes).toEqual([line(10), line(100)]);
+    ink = inkReducer(ink, { type: "undo" });
+    const [first, ...rest] = line(200).points;
+    ink = rest.reduce((next, point) => inkReducer(next, { type: "extend", point }), inkReducer(ink, { type: "start", point: first, size: PEN_SIZE }));
+    ink = inkReducer(ink, { type: "end" });
+    expect(inkReducer(ink, { type: "redo" })).toBe(ink);
+  });
   it("the eraser removes the whole stroke it touches, and Undo brings it back", () => {
     let ink = drawn([10, 300]);
     ink = inkReducer(ink, { type: "erase", point: [31, 31] });

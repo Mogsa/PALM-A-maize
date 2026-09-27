@@ -1,5 +1,5 @@
 import type { Board, Rect, Source } from "../model/types";
-import { CutBrackets } from "./CutBrackets";
+import { CutRuler } from "./CutRuler";
 import { Margin } from "./PageMargin";
 import type { JumpTarget } from "./margin";
 
@@ -12,12 +12,12 @@ const px = (rect: Rect, scale: number) => ({
   left: rect[0] * scale, top: rect[1] * scale, width: (rect[2] - rect[0]) * scale, height: (rect[3] - rect[1]) * scale,
 });
 
-/** Marks and cut brackets for one page. The overlay is pointer-events: none, so a drag anywhere over a page still
- *  selects the text underneath (fix round 1, finding 2); the brackets sit in the margin, off the text. */
+/** Marks and the cut ruler for one page. The overlay is pointer-events: none, so a drag anywhere over a page still
+ *  selects the text underneath (fix round 1, finding 2); the ruler sits in the margin, off the text. */
 export function PageOverlay({ page, scale, board, source, onOutlineClick, onJump, onOpenNote }: Props) {
   return (
     <div className="overlay">
-      <CutBrackets page={page} scale={scale} board={board} source={source} onOpen={onOutlineClick} />
+      <CutRuler page={page} scale={scale} board={board} source={source} onOpen={onOutlineClick} />
       {/* A highlight is painted line by line, each of its rects on this page (addendum 5.1). */}
       {board.highlights.flatMap((h) => h.anchor.rects.filter((r) => r.page === page).map((r, i) => (
         <div key={`${h.id}-${i}`} className={`mark ${h.anchor.state}`} style={px(r.rect, scale)} data-highlight-id={h.id}
