@@ -231,10 +231,12 @@ def test_empty_board_has_sane_defaults():
     assert board.version == 0 and board.nodes == [] and board.highlights == []
 
 
-def test_presets_are_the_eleven_from_the_spec():
-    assert [t.name for t in PRESET_TAGS] == [
-        "problem", "claim", "method", "evidence", "assumption",
-        "pass 1", "pass 2", "supports", "contradicts", "question", "term",
+def test_presets_are_the_four_relations_and_kinds():
+    assert [(t.id, t.name, t.colour) for t in PRESET_TAGS] == [
+        ("t-supports", "supports", "#15803D"),
+        ("t-contradicts", "contradicts", "#B91C1C"),
+        ("t-question", "question", "#7C3AED"),
+        ("t-term", "term", "#0F766E"),
     ]
     assert PRESET_TAGS[-1].id == "t-term"   # the client finds a term mark by this id (D27)
     assert TagFile(tags=PRESET_TAGS).tags[0].colour.startswith("#")

@@ -299,10 +299,10 @@ def test_export_writes_a_file_and_returns_it(client, resnet_id, store_root):
 
 def test_tags_default_and_update(client):
     tags = client.get("/api/tags").json()
-    assert len(tags["tags"]) == 11   # ten presets and term (D27)
+    assert len(tags["tags"]) == 4   # supports, contradicts, question, term
     tags["tags"].append({"id": "t-mine", "name": "mine", "colour": "#123456"})
     assert client.put("/api/tags", json=tags).status_code == 200
-    assert len(client.get("/api/tags").json()["tags"]) == 12
+    assert len(client.get("/api/tags").json()["tags"]) == 5
 
 
 def test_reextract_reports_states_and_touches_only_source(client, resnet_id, store_root):

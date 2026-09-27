@@ -291,13 +291,6 @@ class TagFile(BaseModel):
 
 
 PRESET_TAGS = [
-    Tag(id="t-problem", name="problem", colour="#C2410C"),
-    Tag(id="t-claim", name="claim", colour="#B91C1C"),
-    Tag(id="t-method", name="method", colour="#1D4ED8"),
-    Tag(id="t-evidence", name="evidence", colour="#15803D"),
-    Tag(id="t-assumption", name="assumption", colour="#A16207"),
-    Tag(id="t-pass1", name="pass 1", colour="#64748B"),
-    Tag(id="t-pass2", name="pass 2", colour="#475569"),
     Tag(id="t-supports", name="supports", colour="#15803D"),
     Tag(id="t-contradicts", name="contradicts", colour="#B91C1C"),
     Tag(id="t-question", name="question", colour="#7C3AED"),
