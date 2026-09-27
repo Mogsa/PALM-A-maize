@@ -8,7 +8,13 @@ from pathlib import Path
 import pymupdf
 from pymupdf4llm.helpers.document_layout import OCRMode, parse_document
 
-from paperboard.geometry import Rect, area, column_runs, normalise, pad
+from paperboard.extract.inline_headings import (
+    accepted_headings,
+    body_size,
+    read_lines,
+    split_region,
+)
+from paperboard.geometry import Rect, area, column_runs, intersection, normalise, pad
 from paperboard.source_model import (
     FURNITURE,
     Figure,
@@ -72,8 +78,60 @@ def read_regions(pdf_path: Path) -> tuple[list[PageInfo], list[Region]]:
                         text=page.get_textbox(pymupdf.Rect(*rect)).strip(),
                     )
                 )
+        regions = _split_buried_headings(doc, regions)
 
     return pages, regions
+
+
+_REFERENCES = re.compile(r"^(references|bibliography)\b", re.IGNORECASE)
+
+
+def _split_buried_headings(doc: pymupdf.Document, regions: list[Region]) -> list[Region]:
+    """Cut every region that hides a numbered heading mid-way (inline_headings).
+
+    Walks regions in reading order to know the last heading number, since a buried
+    heading must continue the sequence the other headings set.
+    """
+    out: list[Region] = []
+    last: str | None = None
+    after_references = False
+    body_sizes: dict[int, float] = {}
+    for region in regions:
+        if _is_heading(region):
+            title = _clean_title(region.text)
+            last = parse_number(title)[0] or last
+            after_references = after_references or bool(_REFERENCES.match(title))
+            out.append(region)
+            continue
+        if region.label in FURNITURE or after_references:
+            out.append(region)
+            continue
+        page = doc[region.page]
+        if region.page not in body_sizes:
+            body_sizes[region.page] = body_size(page)
+        lines = read_lines(page, region.rect)
+        found = accepted_headings(lines, body_sizes[region.page], last)
+        if not found:
+            out.append(region)
+            continue
+        last = _HEADING_NUMBER.match(lines[found[-1]].text).group(1)
+        for rect, label in split_region(region.rect, lines, found, lambda r, p=page: _has_art(p, r)):
+            out.append(Region(page=region.page, rect=rect, label=label or region.label,
+                              header_level=None, text=page.get_textbox(pymupdf.Rect(*rect)).strip()))
+    return out
+
+
+_HEADING_NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)*)")
+
+
+def _has_art(page: pymupdf.Page, rect: Rect) -> bool:
+    """An image or a cluster of vector drawings of figure size lies in `rect`."""
+    arts = [i["bbox"] for i in page.get_image_info()] + list(page.cluster_drawings())
+    for art in arts:
+        overlap = intersection(rect, normalise(tuple(art)))
+        if overlap is not None and area(overlap) >= MIN_FIGURE_AREA:
+            return True
+    return False
 
 
 # A heading number: "3", "3.1", "3.1.4" (separator optional), or a single appendix

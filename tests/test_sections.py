@@ -212,12 +212,23 @@ def test_ross11a_short_numbered_heading_ending_in_an_abbreviation_is_kept(ross_s
     assert "5.2" in _numbers_on_page(ross_sections, 5)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "5 EXPERIMENTS and 5.1 Super Tux Kart sit mid-way inside a region the layout model "
-    "labelled 'picture' (75,236)-(546,422); no text region starts with them, so a "
-    "start-of-region fallback cannot reach them. Needs region splitting (owner decision)."))
 def test_ross11a_gives_sections_5_and_5_1_on_page_6(ross_sections):
-    assert {"5", "5.1", "5.2"} <= set(_numbers_on_page(ross_sections, 5))
+    """Two headings sit mid-way inside a 'picture' region spanning both columns."""
+    on_page = [(s.number, s.title) for s in ross_sections if s.heading_rect.page == 5]
+    assert on_page == [("5", "5 EXPERIMENTS"), ("5.1", "5.1 Super Tux Kart"),
+                       ("5.2", "5.2 Super Mario Bros.")]
+
+
+def test_ross11a_sections_do_not_cover_each_others_headings(ross_sections):
+    for current in ross_sections:
+        for other in ross_sections:
+            if other is current:
+                continue
+            hx0, hy0, hx1, hy1 = other.heading_rect.rect
+            for rect in current.extent:
+                if rect.page == other.heading_rect.page:
+                    assert not contains_point(rect.rect, (hx0 + hx1) / 2, (hy0 + hy1) / 2), \
+                        (current.title, other.title)
 
 
 @pytest.mark.parametrize("text", [
