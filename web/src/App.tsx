@@ -51,13 +51,12 @@ type ShellProps = { papers: PaperSummary[]; paperId: string; onChoose: (id: stri
 
 /** Everything that depends on the open board. The view is the board's (D5): the one you left is the one that opens. */
 function Shell({ papers, paperId, onChoose }: ShellProps) {
-  const { state, dispatch } = useBoard();
-  const view = state.board.view;
+  const { state, dispatch, view: { view }, setView } = useBoard();
   const [focusNode, setFocusNode] = useState<string | null>(null);
   const [focusRect, setFocusRect] = useState<PageRect | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   useUndoKeys(dispatch);
-  const show = (next: View) => dispatch({ type: "setView", view: next });
+  const show = (next: View) => setView({ view: next });
   const openOnBoard = (id: string) => { setFocusNode(id); show("board"); };
   // A fresh object every time, so the paper scrolls again even for the same rect.
   const openInPaper = (rect: PageRect) => { setFocusRect({ ...rect }); show("paper"); };

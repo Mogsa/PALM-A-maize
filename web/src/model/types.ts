@@ -40,7 +40,8 @@ export type BoardNode = ChunkNode | FigureNode | NoteNode | GroupNode;
 export type BoardEdge = { id: string; from: string; to: string; data: { tags: string[] }; selected?: boolean };
 
 export type Viewport = { x: number; y: number; zoom: number };
-export type BoardView = "paper" | "board";
+/** "both" shows the paper and the board side by side. */
+export type BoardView = "paper" | "board" | "both";
 /** The plan's name for `BoardView`: the view the paper is open in. */
 export type View = BoardView;
 /** The page at the top of the paper view, and how far down it the view starts, in PDF points. */
@@ -51,10 +52,6 @@ export type Board = {
   paper_id: string;
   version: number;
   goal: string;
-  view: BoardView;
-  paper_scroll?: PaperScroll | null;
-  active_tags: string[];
-  viewport: Viewport;
   nodes: BoardNode[];
   edges: BoardEdge[];
   highlights: Highlight[];
@@ -105,6 +102,5 @@ export type Sketch = { width: number; height: number; strokes: Stroke[] };
 export type SketchUpload = Sketch & { paths: string[] };
 
 export const emptyBoard = (paper_id: string): Board => ({
-  schema: 2, paper_id, version: 0, goal: "", view: "paper", paper_scroll: null, active_tags: [],
-  viewport: { x: 0, y: 0, zoom: 1 }, nodes: [], edges: [], highlights: [],
+  schema: 2, paper_id, version: 0, goal: "", nodes: [], edges: [], highlights: [],
 });

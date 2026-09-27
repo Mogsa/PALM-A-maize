@@ -5,7 +5,7 @@ const dispatch = vi.fn();
 const remove = vi.fn(async () => undefined);
 const update = vi.fn(async () => undefined);
 const tag = { id: "t-a", name: "claim", colour: "#b91c1c" };
-vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ state: { board: { active_tags: ["t-a", "t-b"] } }, dispatch }) }));
+vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ view: { active_tags: ["t-a", "t-b"] }, setView: dispatch }) }));
 vi.mock("../state/TagsProvider", () => ({ useTags: () => ({ tags: [tag], byId: new Map([[tag.id, tag]]), error: null, update, remove, add: vi.fn() }) }));
 import { TagManager } from "./TagManager";
 
@@ -15,7 +15,7 @@ describe("the tag manager", () => {
   it("deleting a tag drops it from the filter, so the board never filters by a tag nobody can see", async () => {
     render(<TagManager />);
     fireEvent.click(screen.getByRole("button", { name: "Delete claim" }));
-    expect(dispatch).toHaveBeenCalledWith({ type: "setActiveTags", tags: ["t-b"] });
+    expect(dispatch).toHaveBeenCalledWith({ active_tags: ["t-b"] });
     await vi.waitFor(() => expect(remove).toHaveBeenCalledWith("t-a"));
   });
   it("renames on blur, and keeps the old name when the new one is empty", () => {

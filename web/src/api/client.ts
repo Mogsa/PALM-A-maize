@@ -2,6 +2,7 @@ import type {
   Board, ChunkAnchor, ExportOrder, ExportResult, HighlightAnchor, JoinResult, NoteFile, PageRect, PaperSummary, Piece, Question, QuoteSelector,
   RecutMode, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload, Source, SplitDraft, TagFile, TemplateFile,
 } from "../model/types";
+import type { PaperViewState } from "../model/paperView";
 
 /** One method per route of SPEC-ADDENDUM.md section 6. */
 
@@ -67,6 +68,10 @@ export const api = {
     if (!response.ok) throw new ApiError(response.status, body?.error?.code ?? "unknown", body?.error?.message ?? "");
     return { version: body.version };
   },
+
+  /** View state: no version and no If-Match; the latest PUT wins. */
+  getView: (id: string) => call<PaperViewState>(`${paper(id)}/view`),
+  putView: (id: string, view: PaperViewState) => send<void>("PUT", `${paper(id)}/view`, view),
 
   async getNote(id: string, nodeId: string): Promise<NoteFile> {
     try {

@@ -3,7 +3,7 @@ import { planDelete } from "./dissolve";
 import { begin, emptyHistory, patchNodes, record, redo, snapshot, undo, type History } from "./history";
 import { isNewConnection } from "./links";
 import { absoluteIn } from "./reparent";
-import { emptyBoard, type Board, type BoardEdge, type BoardNode, type ChunkNode, type Highlight, type PaperScroll, type View, type Viewport } from "./types";
+import { emptyBoard, type Board, type BoardEdge, type BoardNode, type ChunkNode, type Highlight } from "./types";
 
 /** `revision` counts the reader's saveable changes. It never resets, so a "saved" can tell whether the
  *  snapshot it saved is still the latest one. */
@@ -36,10 +36,6 @@ export type BoardAction =
   | { type: "nodes"; changes: NodeChange<BoardNode>[] }
   | ({ type: "setFigureClip" } & FigureClip)
   | { type: "setGoal"; goal: string }
-  | { type: "setView"; view: View }
-  | { type: "setPaperScroll"; scroll: PaperScroll | null }
-  | { type: "setActiveTags"; tags: string[] }
-  | { type: "viewport"; viewport: Viewport }
   | { type: "undo" }
   | { type: "redo" };
 
@@ -168,7 +164,7 @@ function travel(state: BoardState, direction: "undo" | "redo"): BoardState {
   return { ...next(state, { ...state.board, ...step.restore }), history: step.history };
 }
 
-/** Saved on the usual debounce, never an undo step: view state (addendum 4) and the goal's text. */
+/** Saved on the usual debounce, never an undo step: the goal's text. (View state is not the board's: see paperView.) */
 function unrecorded(state: BoardState, patch: Partial<Board>): BoardState {
   return next(state, { ...state.board, ...patch });
 }
@@ -179,8 +175,6 @@ function figureClip(state: BoardState, { id, clip, clip_size }: FigureClip): Boa
   if (!state.board.nodes.some((n) => n.id === id)) return { ...state, history };
   return { ...next(state, { ...state.board, nodes: state.board.nodes.map(patch) }), history };
 }
-
-const sameViewport = (a: Viewport, b: Viewport) => a.x === b.x && a.y === b.y && a.zoom === b.zoom;
 
 export function boardReducer(state: BoardState, action: BoardAction): BoardState {
   const { board } = state;
@@ -195,10 +189,6 @@ export function boardReducer(state: BoardState, action: BoardAction): BoardState
     case "nodes": return applyNodes(state, action.changes);
     case "setFigureClip": return figureClip(state, action);
     case "setGoal": return unrecorded(state, { goal: action.goal });
-    case "setView": return board.view === action.view ? state : unrecorded(state, { view: action.view });
-    case "setPaperScroll": return unrecorded(state, { paper_scroll: action.scroll });
-    case "setActiveTags": return unrecorded(state, { active_tags: action.tags });
-    case "viewport": return sameViewport(board.viewport, action.viewport) ? state : unrecorded(state, { viewport: action.viewport });
     case "undo":
     case "redo": return travel(state, action.type);
     default: return edit(state, action);

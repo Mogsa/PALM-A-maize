@@ -10,6 +10,8 @@ vi.mock("../api/client", () => ({
     getSource: vi.fn(async () => source),
     getBoard: vi.fn(async () => ({ ...emptyBoard("p"), version: 1 })),
     putBoard: vi.fn(async () => ({ version: 2 })),
+    getView: vi.fn(async () => ({ view: "paper", paper_scroll: null, active_tags: [], viewport: null, split: 0.4 })),
+    putView: vi.fn(async () => undefined),
     split: vi.fn(async () => ({ nodes: [] })),
     getTemplate: vi.fn(async () => ({ schema: 1, slots: [{ name: "Main point", prompt: "What is it?" }] })),
     putClip: vi.fn(),
@@ -22,6 +24,7 @@ import { StrictMode } from "react";
 import { api } from "../api/client";
 import { BoardProvider, FIRST_OPEN_FAILED_MESSAGE, FLUSH_FAILED_MESSAGE, useBoard, useNote } from "./BoardProvider";
 import { SAVE_FAILED_MESSAGE } from "./persistence";
+import { defaultPaperView } from "../model/paperView";
 
 const q = { exact: "x", prefix: "", suffix: "" };
 const highlight: Highlight = { id: "h-1", tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], quote: q, position: 0, state: "anchored" } };
@@ -190,5 +193,28 @@ describe("useNote, sketches (D23)", () => {
     act(() => note!.sketchSaved(false));
     expect(note!.hasSketch).toBe(false);
     expect(ctx!.state.history.past).toHaveLength(0);
+  });
+});
+
+describe("BoardProvider view state", () => {
+  it("loads the view from its own route", async () => {
+    vi.mocked(api.getView).mockResolvedValueOnce({ ...defaultPaperView, view: "board", active_tags: ["t-a"] });
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    expect(ctx!.view).toMatchObject({ view: "board", active_tags: ["t-a"] });
+    expect(api.getView).toHaveBeenCalledWith("p");
+  });
+
+  it("puts a viewport or scroll change to /view, never dirtying the board, saving it, or making an undo step", async () => {
+    const { unmount } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    act(() => ctx!.setView({ viewport: { x: 5, y: 6, zoom: 1.5 }, paper_scroll: { page: 2, y: 40 } }));
+    expect(ctx!.state.dirty).toBe(false);
+    expect(ctx!.state.history.past).toHaveLength(0);
+    expect(ctx!.view.viewport).toEqual({ x: 5, y: 6, zoom: 1.5 });
+    unmount();
+    await waitFor(() => expect(api.putView).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.putView).mock.calls[0]).toEqual(["p", expect.objectContaining({ paper_scroll: { page: 2, y: 40 } })]);
+    expect(api.putBoard).not.toHaveBeenCalled();
   });
 });

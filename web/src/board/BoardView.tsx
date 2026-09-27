@@ -38,9 +38,11 @@ const nodeTypes = { chunk: ChunkNode, figure: FigureNode, note: NoteNode, group:
 type Props = { onOpenInPaper: (rect: PageRect) => void; active?: boolean; focusNode?: string | null; onFocusHandled?: () => void };
 
 const DELETE_KEYS = ["Backspace", "Delete"];
+/** Where a board never moved opens. */
+const ORIGIN = { x: 0, y: 0, zoom: 1 };
 
 function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Props) {
-  const { state, dispatch, source, paperId } = useBoard();
+  const { state, dispatch, source, paperId, view, setView } = useBoard();
   const { byId } = useTags();
   const hover = useHoverCard();
   const cards = useBoardCards(source, paperId, state.board.highlights, hover);
@@ -53,10 +55,10 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   const [textMenu, setTextMenu] = useState<CardSelection | null>(null);
   // The note being written stays in sight whatever the filter: a new note carries no tag yet (D8).
   const hidden = useMemo(() => {
-    const ids = hiddenNodeIds(state.board);
+    const ids = hiddenNodeIds(state.board, view.active_tags);
     if (editing) ids.delete(editing);
     return ids;
-  }, [state.board, editing]);
+  }, [state.board, view.active_tags, editing]);
   useEffect(() => {
     if (!initialized || !focusNode) return;
     void fitView({ nodes: [{ id: focusNode }], minZoom: 0.2, maxZoom: getZoom() });
@@ -194,8 +196,8 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
         onEdgeClick={(event, edge) => setEdgeMenu({ id: edge.id, at: new DOMRect(event.clientX, event.clientY, 0, 0) })}
         onPaneClick={() => { closeEdgeMenu(); closeTextMenu(); }}
         onNodeDragStop={onNodeDragStop} onNodeClick={onNodeClick} onBeforeDelete={onBeforeDelete}
-        defaultViewport={state.board.viewport}
-        onMoveStart={() => hover.hide()} onMoveEnd={(_, viewport) => dispatch({ type: "viewport", viewport })}
+        defaultViewport={view.viewport ?? ORIGIN}
+        onMoveStart={() => hover.hide()} onMoveEnd={(_, viewport) => setView({ viewport })}
         minZoom={0.2} fitView={false} deleteKeyCode={active ? DELETE_KEYS : null}
       >
         <Background />

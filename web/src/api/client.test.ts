@@ -136,6 +136,18 @@ describe("api, schema 2 routes", () => {
     expect(init.body).toBeInstanceOf(FormData);
     expect(new Headers(init.headers).get("content-type")).toBeNull();
   });
+
+  it("the view is read and put at its own route, with no version", async () => {
+    const view = { view: "both" as const, paper_scroll: null, active_tags: [], viewport: null, split: 0.4 };
+    mockFetch(200, view);
+    expect(await api.getView("p")).toEqual(view);
+    const fn = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fn);
+    await api.putView("p", view);
+    const call = lastCall(fn);
+    expect(call).toMatchObject({ url: "/api/papers/p/view", init: { method: "PUT" }, body: view });
+    expect(new Headers(call.init.headers).get("if-match")).toBeNull();
+  });
 });
 
 describe("every request says it comes from Paper Board (contract 2)", () => {

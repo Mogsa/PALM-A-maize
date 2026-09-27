@@ -135,13 +135,6 @@ describe("boardReducer, ruling 7", () => {
 });
 
 
-it("saves changed viewport but ignores identical restore events", () => {
-  const loaded = boardReducer(initialBoardState, { type: "load", board: emptyBoard("p") });
-  expect(boardReducer(loaded, {type: "viewport", viewport: loaded.board.viewport})).toBe(loaded);
-  const moved = boardReducer(loaded, {type: "viewport", viewport: {x: 120, y: 50, zoom: 1.4}});
-  expect(moved.dirty).toBe(true);
-  expect(moved.revision).toBe(loaded.revision + 1);
-});
 
 const qq = { exact: "x", prefix: "", suffix: "" };
 const area = { rects: [{ page: 0, rect: [0, 0, 100, 100] as Rect }], start: qq, end: qq, position: 0, state: "anchored" as const };
@@ -213,15 +206,13 @@ describe("undo and redo (addendum 4.7)", () => {
     expect(s.revision).toBe(start.revision);
   });
 
-  it("view state and the goal are saved but never undone", () => {
-    let s = run(opened(), { type: "add", nodes: [aNote("n-1")] },
-      { type: "setView", view: "board" }, { type: "setActiveTags", tags: ["t-claim"] },
-      { type: "setPaperScroll", scroll: { page: 2, y: 40 } }, { type: "setGoal", goal: "why" },
-      { type: "viewport", viewport: { x: 5, y: 6, zoom: 1.5 } });
+  it("the goal is saved but never undone (view state is not the board's at all)", () => {
+    let s = run(opened(), { type: "add", nodes: [aNote("n-1")] }, { type: "setGoal", goal: "why" });
     expect(s.history.past).toHaveLength(1);
     s = run(s, { type: "undo" });
     expect(s.board.nodes).toEqual([]);
-    expect(s.board).toMatchObject({ view: "board", active_tags: ["t-claim"], paper_scroll: { page: 2, y: 40 }, goal: "why", viewport: { x: 5, y: 6, zoom: 1.5 } });
+    expect(s.board.goal).toBe("why");
+    expect(s.board).not.toHaveProperty("view");
   });
 
   it("a new edit clears what could be redone", () => {

@@ -16,8 +16,9 @@ import { Counts } from "./Counts";
 import { NodeTags } from "./NodeTags";
 
 export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
-  const { state, words } = useBoard();
-  const { highlights, active_tags: active } = state.board;
+  const { state, words, view } = useBoard();
+  const { highlights } = state.board;
+  const active = view.active_tags;
   // NodeProps.height also includes automatic measurements; only a stored height fixes the box size.
   const height = state.board.nodes.find((node) => node.id === id)?.height;
   const marks = useMemo(() => highlightsIn(highlights, data.region), [highlights, data.region]);
