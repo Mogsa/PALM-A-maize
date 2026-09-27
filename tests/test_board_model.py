@@ -8,6 +8,7 @@ from paperboard.board_model import (
     DEFAULT_SLOTS,
     PRESET_TAGS,
     TAGS_SCHEMA_VERSION,
+    VIEW_KEYS,
     Board,
     ChunkAnchor,
     ChunkNode,
@@ -20,6 +21,7 @@ from paperboard.board_model import (
     QuoteSelector,
     TagFile,
     TemplateFile,
+    ViewState,
     dump_board,
 )
 
@@ -143,12 +145,31 @@ def test_a_group_may_be_the_tray_or_a_slot_and_says_so_only_when_it_is():
 
 
 def test_view_state_defaults_to_the_paper_at_the_top():
-    board = Board(paper_id="p")
-    assert board.view == "paper" and board.paper_scroll is None
-    board = Board(paper_id="p", view="board", paper_scroll={"page": 3, "y": 212.5})
-    assert board.paper_scroll.page == 3 and board.paper_scroll.y == 212.5
+    view = ViewState()
+    assert (view.view, view.paper_scroll, view.active_tags, view.viewport, view.split) == (
+        "paper", None, [], None, 0.4)
+    view = ViewState(view="both", paper_scroll={"page": 3, "y": 212.5}, viewport={"x": 1, "y": 2, "zoom": 3})
+    assert view.paper_scroll.page == 3 and view.viewport.zoom == 3
     with pytest.raises(ValidationError):
-        Board(paper_id="p", view="split")
+        ViewState(view="split")
+
+
+@pytest.mark.parametrize("split", [0.1, 0.9, -1, 2])
+def test_view_split_stays_between_its_bounds(split):
+    with pytest.raises(ValidationError):
+        ViewState(split=split)
+
+
+@pytest.mark.parametrize("split", [0.15, 0.5, 0.85])
+def test_view_split_accepts_its_bounds(split):
+    assert ViewState(split=split).split == split
+
+
+def test_a_board_carries_no_view_state_and_drops_it_when_sent():
+    board = Board.model_validate({"paper_id": "p", "view": "board", "paper_scroll": {"page": 1, "y": 2},
+                                  "active_tags": ["t-x"], "viewport": {"x": 0, "y": 0, "zoom": 1}})
+    dumped = json.loads(dump_board(board))
+    assert not set(VIEW_KEYS) & dumped.keys()
 
 
 def test_an_edge_connects_nodes_or_highlights_by_id():
@@ -190,7 +211,7 @@ def test_board_rejects_duplicate_ids():
 
 def test_a_valid_board_round_trips_byte_for_byte():
     board = Board(
-        paper_id="p", goal="why", view="board", paper_scroll={"page": 1, "y": 40.0},
+        paper_id="p", goal="why",
         nodes=[_group(tray=True), _chunk(parent="n-g"), _note()],
         edges=[Edge(id="e-1", **{"from": "h-1", "to": "n-n"}, data={"tags": ["t-supports"]})],
         highlights=[_highlight("h-1")],
@@ -208,13 +229,14 @@ def test_a_valid_board_round_trips_byte_for_byte():
 def test_empty_board_has_sane_defaults():
     board = Board(paper_id="p")
     assert board.version == 0 and board.nodes == [] and board.highlights == []
-    assert board.viewport.zoom == 1
 
 
-def test_presets_are_the_eleven_from_the_spec():
-    assert [t.name for t in PRESET_TAGS] == [
-        "problem", "claim", "method", "evidence", "assumption",
-        "pass 1", "pass 2", "supports", "contradicts", "question", "term",
+def test_presets_are_the_four_relations_and_kinds():
+    assert [(t.id, t.name, t.colour) for t in PRESET_TAGS] == [
+        ("t-supports", "supports", "#15803D"),
+        ("t-contradicts", "contradicts", "#B91C1C"),
+        ("t-question", "question", "#7C3AED"),
+        ("t-term", "term", "#0F766E"),
     ]
     assert PRESET_TAGS[-1].id == "t-term"   # the client finds a term mark by this id (D27)
     assert TagFile(tags=PRESET_TAGS).tags[0].colour.startswith("#")

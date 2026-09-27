@@ -24,6 +24,7 @@ from paperboard.board_model import (
     QuoteSelector,
     TagFile,
     TemplateFile,
+    ViewState,
 )
 from paperboard.chunk_text import QuoteNotFound, highlight_in_chunk
 from paperboard.clips import DEFAULT_DPI, render_clip, render_etag
@@ -50,6 +51,8 @@ LOCAL_HOSTS = ["127.0.0.1", "localhost"]
 # on another origin can send it: a form posted from elsewhere is refused.
 APP_HEADER = "X-Paperboard"
 READ_METHODS = {"GET", "HEAD"}
+PDF_MAGIC = b"%PDF-"
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024   # far above any paper; a guard, not a quota
 # A sketch's SVG is built by the server from checked path data (D23); this policy is a second lock: were anything
 # in it to try, no script, fetch or external resource would run.
 SKETCH_CSP = "default-src 'none'; style-src 'unsafe-inline'"
@@ -244,7 +247,11 @@ def create_app(root: Path) -> FastAPI:
     async def add_paper(file: UploadFile = File(...)):  # noqa: B008 (FastAPI's own idiom)
         """A new paper is 201. An existing id is a re-upload (D9): replaced only
         once extraction has succeeded, then re-anchored as for POST /extract."""
-        pdf_bytes = await file.read()
+        pdf_bytes = await file.read(MAX_UPLOAD_BYTES + 1)
+        if len(pdf_bytes) > MAX_UPLOAD_BYTES:
+            return _error(413, "too_large", f"a paper may be at most {MAX_UPLOAD_BYTES} bytes")
+        if not pdf_bytes.startswith(PDF_MAGIC):
+            return _error(415, "not_pdf", "the upload is not a PDF")
         try:
             doc = store.extract_pdf(pdf_bytes)
         except Exception as exc:  # noqa: BLE001 -- turned into a 500, not swallowed
@@ -281,6 +288,17 @@ def create_app(root: Path) -> FastAPI:
     def put_board(paper_id: str, board: Board, if_match: str | None = Header(default=None)):
         expected = int(if_match) if if_match is not None and if_match.isdigit() else None
         return {"version": store.write_board(paper_id, board, expected)}
+
+    # -- view ---------------------------------------------------------------
+
+    @app.get("/api/papers/{paper_id}/view")
+    def get_view(paper_id: str):
+        return store.read_view(paper_id).model_dump()
+
+    @app.put("/api/papers/{paper_id}/view", status_code=204)
+    def put_view(paper_id: str, view: ViewState):
+        store.write_view(paper_id, view)
+        return Response(status_code=204)
 
     # -- notes --------------------------------------------------------------
 

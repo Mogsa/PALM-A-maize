@@ -4,14 +4,14 @@ SPEC-ADDENDUM.md section 4.
 Board schema 2. Nodes are React Flow's native shape with its runtime fields
 forbidden; edges are stored by the two things they connect (`from`, `to`) and
 become React Flow edges only at render (addendum 4.0). Plus the `highlights`
-array (marks on the paper, never nodes), view state, and a `version` integer
+array (marks on the paper, never nodes) and a `version` integer
 for optimistic concurrency. Everything that reads or writes a board goes through
 these models and `dump_board`, so a board that did not change produces a
 byte-identical file. A schema 1 board is migrated before it gets here
 (`migrate.py`).
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -207,22 +207,48 @@ class Edge(BaseModel):
     _id = field_validator("id")(_prefixed("e-"))
 
 
+SPLIT_MIN = 0.15
+SPLIT_MAX = 0.85
+SPLIT_DEFAULT = 0.4
+
+
+class ViewState(BaseModel):
+    """`view.json`: how the reader left the paper on screen. Unversioned, the last
+    write wins, and never part of board.json."""
+
+    model_config = ConfigDict(extra="forbid")
+    view: Literal["paper", "board", "both"] = "paper"
+    paper_scroll: PaperScroll | None = None
+    active_tags: list[str] = []
+    viewport: Viewport | None = None
+    # Fraction of the width the paper gets when both are shown.
+    split: float = Field(default=SPLIT_DEFAULT, ge=SPLIT_MIN, le=SPLIT_MAX)
+
+
+VIEW_KEYS = ("view", "paper_scroll", "active_tags", "viewport")
+
+
 class Board(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     schema_version: Literal[2] = Field(default=BOARD_SCHEMA_VERSION, alias="schema")
     paper_id: str
     version: int = Field(default=0, ge=0)
     goal: str = ""
-    view: Literal["paper", "board"] = "paper"
-    paper_scroll: PaperScroll | None = None
-    active_tags: list[str] = []
-    viewport: Viewport = Viewport()
     nodes: list[Node] = []
     edges: list[Edge] = []
     highlights: list[Highlight] = []
     # Fingerprint of the source text the anchors were last resolved against
     # (anchoring.anchor_basis). Loading re-finds anchors only when it differs.
     anchor_basis: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_view_state(cls, data: Any) -> Any:
+        """View state lives in view.json now; a client that still sends it in the
+        board is not refused, its view keys are dropped."""
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if k not in VIEW_KEYS}
+        return data
 
     @model_validator(mode="after")
     def _consistent(self) -> "Board":
@@ -265,13 +291,6 @@ class TagFile(BaseModel):
 
 
 PRESET_TAGS = [
-    Tag(id="t-problem", name="problem", colour="#C2410C"),
-    Tag(id="t-claim", name="claim", colour="#B91C1C"),
-    Tag(id="t-method", name="method", colour="#1D4ED8"),
-    Tag(id="t-evidence", name="evidence", colour="#15803D"),
-    Tag(id="t-assumption", name="assumption", colour="#A16207"),
-    Tag(id="t-pass1", name="pass 1", colour="#64748B"),
-    Tag(id="t-pass2", name="pass 2", colour="#475569"),
     Tag(id="t-supports", name="supports", colour="#15803D"),
     Tag(id="t-contradicts", name="contradicts", colour="#B91C1C"),
     Tag(id="t-question", name="question", colour="#7C3AED"),

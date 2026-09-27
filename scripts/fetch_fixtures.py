@@ -36,7 +36,7 @@ def fetch(name: str, entry: dict) -> None:
     if digest != entry["sha256"]:
         raise SystemExit(
             f"{target.name}: sha256 mismatch\n  expected {entry['sha256']}\n  got      {digest}\n"
-            f"arXiv may have replaced {entry['arxiv']}; the tests are calibrated to the old file."
+            f"the publisher may have replaced {entry['url']}; the tests are calibrated to the old file."
         )
     target.write_bytes(payload)
     print(f"{target.name}: fetched {len(payload)} bytes, hash ok")

@@ -12,7 +12,11 @@ PAPER_DIR = FIXTURE_DIR / "papers"
 GOLDEN_DIR = FIXTURE_DIR / "golden"
 MANIFEST = json.loads((PAPER_DIR / "MANIFEST.json").read_text())
 
-FIXTURES = {name: PAPER_DIR / f"{name}.pdf" for name in MANIFEST}
+# A paper marked with a "suite" serves only that suite's tests; the rest run
+# over every paper in the shared set, each with a golden file.
+FIXTURES = {name: PAPER_DIR / f"{name}.pdf" for name, entry in MANIFEST.items() if "suite" not in entry}
+SECTION_FIXTURES = {name: PAPER_DIR / f"{name}.pdf" for name, entry in MANIFEST.items()
+                    if entry.get("suite") == "sections"}
 
 # The server only answers requests addressed to localhost; test clients say so.
 LOCAL = "http://127.0.0.1"

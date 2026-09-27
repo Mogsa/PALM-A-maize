@@ -110,6 +110,24 @@ def test_upload_runs_extraction(tmp_path):
     assert client.get(f"/api/papers/{paper_id}/source").json()["sections"]
 
 
+def test_an_upload_that_is_not_a_pdf_is_415(tmp_path):
+    client = local_client(create_app(tmp_path))
+    response = _upload(client, b"<html>not a paper</html>")
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "not_pdf"
+    assert not (tmp_path / "papers").exists() or not any((tmp_path / "papers").iterdir())
+
+
+def test_an_upload_over_the_size_cap_is_413(tmp_path, monkeypatch):
+    import paperboard.api as api_module
+
+    monkeypatch.setattr(api_module, "MAX_UPLOAD_BYTES", 16)
+    client = local_client(create_app(tmp_path))
+    response = _upload(client, b"%PDF-1.4\n" + b"x" * 32)
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "too_large"
+
+
 def test_text_returns_a_selection_with_anchors(client, resnet_id):
     source = client.get(f"/api/papers/{resnet_id}/source").json()
     region = _first_text_region(source, 2)
@@ -281,10 +299,10 @@ def test_export_writes_a_file_and_returns_it(client, resnet_id, store_root):
 
 def test_tags_default_and_update(client):
     tags = client.get("/api/tags").json()
-    assert len(tags["tags"]) == 11   # ten presets and term (D27)
+    assert len(tags["tags"]) == 4   # supports, contradicts, question, term
     tags["tags"].append({"id": "t-mine", "name": "mine", "colour": "#123456"})
     assert client.put("/api/tags", json=tags).status_code == 200
-    assert len(client.get("/api/tags").json()["tags"]) == 12
+    assert len(client.get("/api/tags").json()["tags"]) == 5
 
 
 def test_reextract_reports_states_and_touches_only_source(client, resnet_id, store_root):
@@ -436,6 +454,46 @@ def test_reextracting_an_unchanged_paper_re_finds_nothing(client, resnet_id):
 # -- schema 2 ------------------------------------------------------------------
 
 
+VIEW = {"view": "both", "paper_scroll": {"page": 2, "y": 40.0}, "active_tags": ["t-question"],
+        "viewport": {"x": 10.0, "y": 20.0, "zoom": 1.5}, "split": 0.3}
+
+
+def test_a_view_defaults_when_none_was_saved(client, resnet_id):
+    response = client.get(f"/api/papers/{resnet_id}/view")
+    assert response.status_code == 200
+    assert response.json() == {"view": "paper", "paper_scroll": None, "active_tags": [],
+                               "viewport": None, "split": 0.4}
+
+
+def test_a_view_is_put_and_read_back_without_touching_the_board(client, resnet_id):
+    before = client.get(f"/api/papers/{resnet_id}/board").json()["version"]
+    response = client.put(f"/api/papers/{resnet_id}/view", json=VIEW)
+    assert response.status_code == 204
+    assert client.get(f"/api/papers/{resnet_id}/view").json() == VIEW
+    assert client.get(f"/api/papers/{resnet_id}/board").json()["version"] == before
+
+
+@pytest.mark.parametrize("change", [{"split": 0.9}, {"split": 0.1}, {"view": "split"}, {"extra": 1}])
+def test_an_invalid_view_is_422(client, resnet_id, change):
+    response = client.put(f"/api/papers/{resnet_id}/view", json={**VIEW, **change})
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid"
+
+
+def test_a_view_of_an_unknown_paper_is_404(client):
+    assert client.get("/api/papers/no-such-paper/view").status_code == 404
+    assert client.put("/api/papers/no-such-paper/view", json=VIEW).status_code == 404
+
+
+def test_a_board_put_with_old_view_keys_drops_them(client, resnet_id, store_root):
+    board = client.get(f"/api/papers/{resnet_id}/board").json()
+    old_client_board = {**board, "view": "board", "paper_scroll": None, "active_tags": [],
+                        "viewport": {"x": 0, "y": 0, "zoom": 1}}
+    _put(client, resnet_id, old_client_board)
+    on_disk = json.loads((store_root / "papers" / resnet_id / "board.json").read_text())
+    assert not {"view", "paper_scroll", "active_tags", "viewport"} & on_disk.keys()
+
+
 def test_a_schema_1_board_is_refused_on_put(client, resnet_id):
     board = client.get(f"/api/papers/{resnet_id}/board").json()
     board["schema"] = 1
@@ -450,7 +508,7 @@ def test_a_schema_1_board_on_disk_is_served_as_schema_2(client, resnet_id, store
                                                             "quote": {"exact": "x"}, "position": 0, "state": "anchored"}}]}
     (store_root / "papers" / resnet_id / "board.json").write_text(json.dumps(v1))
     got = client.get(f"/api/papers/{resnet_id}/board").json()
-    assert (got["schema"], got["view"], got["version"]) == (2, "paper", 2)
+    assert (got["schema"], got["version"]) == (2, 2) and "view" not in got
     assert len(got["highlights"][0]["anchor"]["rects"]) == 1   # re-found on load: no anchor_basis yet
     assert "note" not in got["highlights"][0]
     _put(client, resnet_id, got)

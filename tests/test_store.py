@@ -6,7 +6,7 @@ import threading
 import pytest
 from conftest import FIXTURES
 
-from paperboard.board_model import DEFAULT_SLOTS, PRESET_TAGS, Board, NoteNode
+from paperboard.board_model import DEFAULT_SLOTS, PRESET_TAGS, Board, NoteNode, ViewState
 from paperboard.store import (
     NodeNotFound,
     NoteNotFound,
@@ -269,6 +269,57 @@ def test_the_first_write_over_a_schema_1_board_keeps_one_copy_of_it(store_root):
     assert json.loads(path.read_text())["schema"] == 2
     assert store.write_board(paper_id, store.read_board(paper_id), expected_version=4) == 5
     assert copy.read_bytes() == original
+
+
+def test_a_missing_view_file_reads_as_the_defaults(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    assert store.read_view(paper_id) == ViewState()
+
+
+def test_a_view_is_written_to_its_own_file_and_read_back(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    view = ViewState(view="both", split=0.6, active_tags=["t-question"])
+    store.write_view(paper_id, view)
+    assert (store.paper_dir(paper_id) / "view.json").exists()
+    assert store.read_view(paper_id) == view
+
+
+def test_a_view_for_an_unknown_paper_is_refused(store_root):
+    with pytest.raises(PaperNotFound):
+        Store(store_root).read_view("no-such-paper")
+    with pytest.raises(PaperNotFound):
+        Store(store_root).write_view("no-such-paper", ViewState())
+
+
+def test_reading_a_board_with_view_keys_seeds_the_view_file(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    raw = {"schema": 2, "paper_id": paper_id, "version": 5, "view": "board",
+           "paper_scroll": {"page": 2, "y": 10.0}, "active_tags": ["t-term"], "viewport": {"x": 1, "y": 2, "zoom": 3}}
+    (store.paper_dir(paper_id) / "board.json").write_text(json.dumps(raw))
+    assert store.read_board(paper_id).version == 5
+    view = store.read_view(paper_id)
+    assert (view.view, view.paper_scroll.page, view.active_tags, view.viewport.zoom) == ("board", 2, ["t-term"], 3)
+
+
+def test_reading_a_board_with_view_keys_keeps_an_existing_view_file(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    store.write_view(paper_id, ViewState(view="both"))
+    raw = {"schema": 2, "paper_id": paper_id, "version": 1, "view": "board"}
+    (store.paper_dir(paper_id) / "board.json").write_text(json.dumps(raw))
+    store.read_board(paper_id)
+    assert store.read_view(paper_id).view == "both"
+
+
+def test_a_schema_1_boards_view_keys_seed_the_view_file(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    _write_v1(store, paper_id)
+    store.read_board(paper_id)
+    assert store.read_view(paper_id).viewport.zoom == 1
 
 
 def test_a_schema_2_board_never_gets_a_v1_copy(store_root):

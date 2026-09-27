@@ -9,7 +9,7 @@ from conftest import FIXTURES
 
 from paperboard.blocks import chunk_blocks
 from paperboard.board_model import Board
-from paperboard.migrate import migrate_board
+from paperboard.migrate import migrate_board, split_view
 from paperboard.source_model import PageRect
 
 QUOTE = {"exact": "x", "prefix": "", "suffix": ""}
@@ -120,10 +120,33 @@ def test_every_note_was_the_readers_own(resnet):
 
 # -- step 6: top level ----------------------------------------------------------------
 
-def test_the_top_level_gains_view_state_and_schema_2(resnet):
+def test_the_top_level_becomes_schema_2(resnet):
     out = _migrate(_v1(), resnet)
-    assert (out["schema"], out["view"], out["paper_scroll"]) == (2, "paper", None)
+    assert out["schema"] == 2
     assert (out["version"], out["goal"], out["anchor_basis"]) == (4, "g", "abc")
+
+
+# -- view state moves out of the board --------------------------------------------
+
+def test_split_view_takes_a_schema_1_boards_view_keys(resnet):
+    board, view = split_view(_migrate(_v1(), resnet))
+    assert view == {"active_tags": [], "viewport": {"x": 0, "y": 0, "zoom": 1}}
+    assert not {"view", "paper_scroll", "active_tags", "viewport"} & board.keys()
+    Board.model_validate(board)
+
+
+def test_split_view_takes_a_schema_2_boards_view_keys():
+    raw = {"schema": 2, "paper_id": "p", "view": "board", "paper_scroll": {"page": 1, "y": 3.0},
+           "active_tags": ["t-x"], "viewport": {"x": 1, "y": 2, "zoom": 3}}
+    board, view = split_view(raw)
+    assert board == {"schema": 2, "paper_id": "p"}
+    assert view == {"view": "board", "paper_scroll": {"page": 1, "y": 3.0},
+                    "active_tags": ["t-x"], "viewport": {"x": 1, "y": 2, "zoom": 3}}
+    assert "view" in raw   # pure: the input is untouched
+
+
+def test_split_view_of_a_board_without_view_keys_is_empty():
+    assert split_view({"schema": 2, "paper_id": "p"}) == ({"schema": 2, "paper_id": "p"}, {})
 
 
 # -- the whole ---------------------------------------------------------------------

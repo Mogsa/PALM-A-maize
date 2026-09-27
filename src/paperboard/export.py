@@ -1,6 +1,7 @@
 """The board as one Markdown file in the paper's order. SPEC.md section 6: this
 is the literature note, and nothing else is ever written by hand."""
 
+import re
 from collections.abc import Set as AbstractSet
 from typing import Literal
 
@@ -19,7 +20,8 @@ from paperboard.geometry import contains_point, midpoint, normalise
 from paperboard.source_model import SourceDocument
 
 TITLE_CHARS = 80
-TOP_INSET_POINTS = 1.0   # how far below a rect's top edge its "top-centre" point sits
+BARE_NUMBER = re.compile(r"^\d+(\.\d+)*[.)]?$")
+TOP_INSET_POINTS = 1.0  # how far below a rect's top edge its "top-centre" point sits
 
 ExportOrder = Literal["paper", "template"]
 
@@ -37,11 +39,20 @@ def _wanted(tags: list[str], have: list[str]) -> bool:
     return not tags or bool(set(tags) & set(have))
 
 
+def _first_line(text: str) -> str:
+    """The first line, joined with the next when it is only a heading number:
+    PDFs often break "5.1" and "Learning rate" onto separate lines."""
+    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+    if len(lines) > 1 and BARE_NUMBER.match(lines[0]):
+        return f"{lines[0]} {lines[1]}"
+    return lines[0]
+
+
 def _title(node: ChunkNode | FigureNode) -> str:
     if isinstance(node, FigureNode):
         return node.data.caption.split(":")[0].split(".")[0].strip() or node.id
     if node.data.region.start.exact.strip():
-        return node.data.region.start.exact.strip().splitlines()[0][:TITLE_CHARS]
+        return _first_line(node.data.region.start.exact)[:TITLE_CHARS]
     text = "\n".join(b.text for b in node.data.blocks if isinstance(b, TextBlock))
     return text.strip()[:TITLE_CHARS]
 
