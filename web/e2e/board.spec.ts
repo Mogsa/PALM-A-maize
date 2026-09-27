@@ -65,10 +65,10 @@ test('vertical resizing grows the visible chunk', async ({page}) => {
   await expect.poll(async () => (await inner.boundingBox())!.height).toBeCloseTo(after.height, 0);
 });
 
-test('opening an outline brings its offscreen chunk into view', async ({page}) => {
+test('opening a cut bracket brings its offscreen chunk into view', async ({page}) => {
   await seed(page, 4000);
-  await expect(page.locator('.outline-tab')).toBeVisible();
-  await page.locator('.outline-tab').click();
+  await expect(page.locator('.cut-bracket')).toBeVisible();
+  await page.locator('.cut-bracket').click();
   const chunk = page.locator('.react-flow__node[data-id="n-review"]');
   await expect(chunk).toBeAttached();
 
