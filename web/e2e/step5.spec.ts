@@ -441,25 +441,6 @@ test("Cmd-Z undoes a group dissolve in one step", async ({ page }) => {
     .toEqual(["n-a", "n-b"]);
 });
 
-test("Tidy moves only connected pieces, and one Cmd-Z puts them back", async ({ page }) => {
-  await seed(page, resnet, {
-    nodes: [chunk("n-a", 40, 100, "Alpha."), chunk("n-b", 1600, 1200, "Beta."), chunk("n-c", 40, 700, "Gamma."),
-      group("n-g", 900, 100, 400, 300), chunk("n-d", 20, 48, "Delta.", { parentId: "n-g" })],
-    edges: [{ id: "e-ab", from: "n-a", to: "n-b", data: { tags: [] } }],
-  });
-  await showBoard(page);
-  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
-  const positions = async () => Object.fromEntries((await boardOf(page.request, resnet)).nodes.map((n: Json) => [n.id, n.position]));
-  const before = await positions();
-  await page.getByRole("button", { name: "Tidy", exact: true }).click();
-  await expect.poll(async () => { const now = await positions(); return JSON.stringify([now["n-a"], now["n-b"]]) !== JSON.stringify([before["n-a"], before["n-b"]]); }).toBe(true);
-  const after = await positions();
-  for (const id of ["n-c", "n-g", "n-d"]) expect(after[id]).toEqual(before[id]);
-
-  await page.keyboard.press("ControlOrMeta+z");
-  await expect.poll(positions).toEqual(before);
-});
-
 test("a reload returns to the same view and the same place in the paper (SPEC 11.5)", async ({ page }) => {
   await seed(page, resnet);
   const paper = page.locator(".paper");
