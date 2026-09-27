@@ -22,12 +22,13 @@ from paperboard.board_model import (
     Board,
     TagFile,
     TemplateFile,
+    ViewState,
     dump_board,
     dump_tags,
     dump_template,
 )
 from paperboard.extract import extract
-from paperboard.migrate import is_v1, migrate_board
+from paperboard.migrate import is_v1, migrate_board, split_view
 from paperboard.sketch import SketchFile
 from paperboard.source_model import SourceDocument
 
@@ -186,6 +187,9 @@ class Store:
         if is_v1(raw):
             with pymupdf.open(self.pdf_path(paper_id)) as pdf:
                 raw = migrate_board(raw, self.read_source(paper_id), pdf)
+        raw, old_view = split_view(raw)
+        if old_view and not self._view_path(paper_id).exists():
+            self.write_view(paper_id, ViewState.model_validate(old_view))
         return Board.model_validate(raw)
 
     def write_board(self, paper_id: str, board: Board, expected_version: int | None) -> int:
@@ -208,6 +212,19 @@ class Store:
         copy = folder / "board.v1.json"
         if raw is not None and is_v1(raw) and not copy.exists():
             atomic_write(copy, (folder / "board.json").read_bytes())
+
+    # -- view ---------------------------------------------------------------
+
+    def _view_path(self, paper_id: str) -> Path:
+        return self.paper_dir(paper_id) / "view.json"
+
+    def read_view(self, paper_id: str) -> ViewState:
+        path = self._view_path(paper_id)
+        return ViewState.model_validate_json(path.read_bytes()) if path.exists() else ViewState()
+
+    def write_view(self, paper_id: str, view: ViewState) -> None:
+        """No version and no lock: the last write wins, as for a scroll position."""
+        atomic_write(self._view_path(paper_id), (view.model_dump_json(indent=2) + "\n").encode())
 
     # -- notes --------------------------------------------------------------
 

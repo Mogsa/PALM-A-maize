@@ -24,6 +24,7 @@ from paperboard.board_model import (
     QuoteSelector,
     TagFile,
     TemplateFile,
+    ViewState,
 )
 from paperboard.chunk_text import QuoteNotFound, highlight_in_chunk
 from paperboard.clips import DEFAULT_DPI, render_clip, render_etag
@@ -287,6 +288,17 @@ def create_app(root: Path) -> FastAPI:
     def put_board(paper_id: str, board: Board, if_match: str | None = Header(default=None)):
         expected = int(if_match) if if_match is not None and if_match.isdigit() else None
         return {"version": store.write_board(paper_id, board, expected)}
+
+    # -- view ---------------------------------------------------------------
+
+    @app.get("/api/papers/{paper_id}/view")
+    def get_view(paper_id: str):
+        return store.read_view(paper_id).model_dump()
+
+    @app.put("/api/papers/{paper_id}/view", status_code=204)
+    def put_view(paper_id: str, view: ViewState):
+        store.write_view(paper_id, view)
+        return Response(status_code=204)
 
     # -- notes --------------------------------------------------------------
 

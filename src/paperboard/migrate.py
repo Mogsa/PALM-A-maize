@@ -11,7 +11,7 @@ import copy
 import pymupdf
 
 from paperboard.blocks import chunk_blocks
-from paperboard.board_model import BOARD_SCHEMA_VERSION
+from paperboard.board_model import BOARD_SCHEMA_VERSION, VIEW_KEYS
 from paperboard.source_model import PageRect, SourceDocument
 
 V1 = 1
@@ -32,8 +32,17 @@ def migrate_board(raw: dict, doc: SourceDocument, pdf: pymupdf.Document) -> dict
     board["edges"] = [_edge(e, highlight_ids) for e in board.get("edges", [])]       # step 2
     board["edges"] += _cache_edges(raw, board["edges"])                              # step 3
     board["nodes"] = [_node(n, doc, pdf) for n in board.get("nodes", [])]           # steps 4, 5
-    board.update(schema=BOARD_SCHEMA_VERSION, view="paper", paper_scroll=None)     # step 6
+    board["schema"] = BOARD_SCHEMA_VERSION                                           # step 6
     return board
+
+
+def split_view(raw: dict) -> tuple[dict, dict]:
+    """The board without its view keys, and those keys. View state moved from
+    board.json to view.json with no schema bump, so a board of either schema may
+    still carry them; the store seeds view.json from them once."""
+    board = {k: v for k, v in raw.items() if k not in VIEW_KEYS}
+    view = {k: v for k, v in raw.items() if k in VIEW_KEYS}
+    return board, view
 
 
 def _highlight(highlight: dict) -> dict:
