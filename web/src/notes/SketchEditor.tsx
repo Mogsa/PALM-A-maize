@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../api/client";
+import { undoKeyAction } from "../panels/undoKeys";
 import { useBoard, useNote } from "../state/BoardProvider";
 import { initialInk, inkReducer, PEN_SIZE, pointFrom, SKETCH_HEIGHT, SKETCH_WIDTH, strokePath, type InkAction } from "./sketch";
 
@@ -30,7 +31,7 @@ function useSavedStrokes(paperId: string, noteId: string, hasSketch: boolean, di
   return state;
 }
 
-/** Draws a note's sketch (D23): Pen, Eraser (a whole stroke at a touch), Undo, Done. Pointer events serve a
+/** Draws a note's sketch (D23): Pen, Eraser (a whole stroke at a touch), Done; Cmd-Z undoes, Shift-Cmd-Z redoes. Pointer events serve a
  *  mouse, a finger and a pen, and only a pen's pressure is used. Saving is not a board change, so not an undo step. */
 export function SketchEditor({ noteId, onClose }: { noteId: string; onClose: () => void }) {
   const { paperId } = useBoard();
@@ -85,16 +86,24 @@ export function SketchEditor({ noteId, onClose }: { noteId: string; onClose: () 
     }
   };
 
+  /** Its keys stay in it (the board must not delete or undo behind it); Cmd-Z and Shift-Cmd-Z undo and redo the ink. */
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    event.stopPropagation();
+    const action = undoKeyAction(event.nativeEvent);
+    if (!action || loaded !== "ready" || saving) return;
+    event.preventDefault();
+    dispatch({ type: action });
+  };
+
   const shown = ink.drawing ? [...ink.strokes, ink.drawing] : ink.strokes;
   const blocked = loaded !== "ready" || saving;
   return createPortal(
     <div className="sketch-backdrop nodrag nopan nowheel" onPointerDown={stop} onMouseDown={stop} onMouseUp={stop} onClick={stop}
-         onDoubleClick={stop} onKeyDown={stop} onWheel={stop} onContextMenu={stop}>
+         onDoubleClick={stop} onKeyDown={onKeyDown} onWheel={stop} onContextMenu={stop}>
       <div ref={dialog} className="sketch-editor" role="dialog" aria-label="Sketch" aria-modal="true" tabIndex={-1}>
         <div className="sketch-tools" role="toolbar" aria-label="Sketch tools">
           <button className={tool === "pen" ? "active" : ""} aria-pressed={tool === "pen"} onClick={() => setTool("pen")}>Pen</button>
           <button className={tool === "eraser" ? "active" : ""} aria-pressed={tool === "eraser"} onClick={() => setTool("eraser")}>Eraser</button>
-          <button onClick={() => dispatch({ type: "undo" })} disabled={blocked || !ink.past.length}>Undo</button>
           <button className="primary" onClick={() => void done()} disabled={blocked}>Done</button>
         </div>
         <svg ref={surface} className={`sketch-surface ${tool}`} aria-label="Drawing surface" role="img"
