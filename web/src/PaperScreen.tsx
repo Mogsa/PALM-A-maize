@@ -108,7 +108,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
       <PaperView paperId={paperId} source={source} board={state.board} focus={jump ?? focus} onFocusHandled={onJumpHandled}
                  onSelect={onSelect} onClickPaper={onClickPaper} onMarkMenu={onMarkMenu} onOutlineClick={onOpenOnBoard}
                  connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark}
-                 paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} />
+                 paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} fit={view.view === "both"} />
       {pending && selectionPopover(pending)}
       {find.query && <FindPanel query={find.query} onPick={find.pick} onClose={find.close} />}
       {markOpen && openMark && (

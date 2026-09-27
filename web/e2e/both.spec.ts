@@ -89,3 +89,71 @@ test("in both, a cut on the paper lands on the board at once", async ({ page }) 
   await expect(page.locator(".react-flow__node")).toHaveCount(2);
   await expect(both(page)).toHaveAttribute("aria-pressed", "true");
 });
+
+const firstPage = (page: Page) => page.locator('.react-pdf__Page[data-page-number="1"]');
+const noSidewaysScroll = (page: Page) => page.locator(".paper").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+
+test("in both, the page fits the pane's width, refits once the divider is released, and never scrolls sideways", async ({ page }) => {
+  await seedBoth(page, 0.4);
+  const paperBox = (await page.locator(".paper").boundingBox())!;
+  await expect.poll(async () => (await firstPage(page).boundingBox())!.width).toBeLessThan(paperBox.width - 24);
+  const fitted = (await firstPage(page).boundingBox())!;
+  expect(fitted.x + fitted.width).toBeLessThanOrEqual(paperBox.x + paperBox.width);
+  expect(await noSidewaysScroll(page)).toBe(true);
+
+  // during a drag the page keeps its size; on release it refits to the wider pane
+  const divider = (await page.getByRole("separator").boundingBox())!;
+  const views = (await page.locator(".views").boundingBox())!;
+  await page.mouse.move(divider.x + divider.width / 2, divider.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(views.x + views.width * 0.55, divider.y + 200, { steps: 6 });
+  await page.waitForTimeout(300);
+  expect((await firstPage(page).boundingBox())!.width).toBeCloseTo(fitted.width, 0);
+  await page.mouse.up();
+  await expect.poll(async () => (await firstPage(page).boundingBox())!.width).toBeGreaterThan(fitted.width + 100);
+  expect(await noSidewaysScroll(page)).toBe(true);
+
+  // the window narrows: the page refits again
+  const wider = (await firstPage(page).boundingBox())!.width;
+  await page.setViewportSize({ width: 1000, height: 1000 });
+  await expect.poll(async () => (await firstPage(page).boundingBox())!.width).toBeLessThan(wider - 50);
+  expect(await noSidewaysScroll(page)).toBe(true);
+});
+
+test("paper alone keeps the full page width", async ({ page }) => {
+  await seedBoth(page, 0.4);
+  await page.getByRole("button", { name: "Paper", exact: true }).click();
+  await expect.poll(async () => (await firstPage(page).boundingBox())!.width).toBeCloseTo(760, 0);
+});
+
+test("in both, a cut on the fitted page is stored where it was selected, and its ruler stretch lines up", async ({ page }) => {
+  await seedBoth(page, 0.35);
+  const spans = page.locator('.react-pdf__Page[data-page-number="1"] .react-pdf__Page__textContent span');
+  await expect.poll(async () => (await firstPage(page).boundingBox())!.width).toBeLessThan(600);
+  await expect(spans.nth(12)).toBeVisible();
+  const a = (await spans.nth(10).boundingBox())!;
+  const b = (await spans.nth(12).boundingBox())!;
+  await page.mouse.move(a.x + 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width - 2, b.y + b.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.getByRole("button", { name: "Cut", exact: true }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(2);
+  await expect(page.locator(".notice")).toHaveText(/Saved v\d+/);
+
+  const board: Json = await (await page.request.get(`/api/papers/${resnet}/board`)).json();
+  const cut = board.nodes.find((n: Json) => n.id !== "n-a" && n.type === "chunk");
+  const source: Json = await (await page.request.get(`/api/papers/${resnet}/source`)).json();
+  const canvas = (await firstPage(page).boundingBox())!;
+  const scale = canvas.width / source.pages[0].width;
+  const [x0, y0] = cut.data.region.rects[0].rect;
+  expect(Math.abs(canvas.x + x0 * scale - a.x)).toBeLessThan(6);
+  expect(Math.abs(canvas.y + y0 * scale - a.y)).toBeLessThan(6);
+
+  const stretch = page.locator(`.cut-stretch[data-node-id="${cut.id}"]`);
+  expect(Math.abs((await stretch.boundingBox())!.y - (canvas.y + y0 * scale))).toBeLessThan(2);
+  await stretch.hover();
+  const tint = (await page.locator(".cut-tint").first().boundingBox())!;
+  expect(Math.abs(tint.x - (canvas.x + x0 * scale))).toBeLessThan(2);
+  await expect(page.locator(".cut-tip")).toBeVisible();
+});

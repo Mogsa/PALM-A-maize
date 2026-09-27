@@ -8,6 +8,7 @@ import type { Board, Highlight, PageRect, PaperScroll, SelectionMode, Source } f
 import { ContextCard } from "./ContextCard";
 import type { LinkDocument } from "./citation";
 import type { PaperHit } from "./hit";
+import { usePageWidth } from "./fit";
 import { destinationTop } from "./links";
 import type { JumpTarget } from "./margin";
 import { PageOverlay } from "./PageOverlay";
@@ -21,7 +22,6 @@ import { usePaperMouse } from "./usePaperMouse";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
 
-export const PAGE_WIDTH_PX = 760;
 /** A jump lands this far below the top of the view, so the line above it is still in sight. */
 export const FOCUS_OFFSET_PX = 80;
 /** How long a place gone to from the board stays flashed. */
@@ -56,6 +56,8 @@ type Props = {
   findMark: FindMark | null;                    // a find hit to mark in its page's text layer
   paperScroll: PaperScroll | null | undefined;  // where the paper was left: restored once on load (D5)
   onScrollSettled: (scroll: PaperScroll | null) => void;
+  /** Fit the page to the pane's width (the both view) rather than show it at full width. */
+  fit: boolean;
 };
 
 const flashStyle = ({ rect }: PageRect, scale: number) =>
@@ -63,9 +65,10 @@ const flashStyle = ({ rect }: PageRect, scale: number) =>
 const bandStyle = (a: XY, b: XY) => { const r = bandBox(a, b); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
 
 export function PaperView(props: Props) {
-  const { paperId, source, board, focus, onFocusHandled, onOutlineClick, connecting, onJump, onOpenNote, findMark, paperScroll, onScrollSettled } = props;
+  const { paperId, source, board, focus, onFocusHandled, onOutlineClick, connecting, onJump, onOpenNote, findMark, paperScroll, onScrollSettled, fit } = props;
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  const pageWidth = usePageWidth(container, fit);
   const pdf = useRef<LinkDocument | null>(null);
   const hover = useHoverCard();
   const citation = useCitationCard(pdf, source, paperId, hover);
@@ -73,7 +76,7 @@ export function PaperView(props: Props) {
   const mouse = usePaperMouse(container, source, board, props);
   const findProps = useFindMark(container, findMark);
   const { flash, show: showFlash } = useFlash();
-  const onScrollSave = usePaperScroll(container, { ready, source, pageWidthPx: PAGE_WIDTH_PX, paperScroll, onScrollSettled });
+  const onScrollSave = usePaperScroll(container, { ready, source, pageWidthPx: pageWidth, paperScroll, onScrollSettled });
 
   const scrollToPoint = useCallback((page: number, y: number) => {
     const el = container.current?.querySelector<HTMLElement>(`.react-pdf__Page[data-page-number="${page + 1}"]`);
@@ -97,17 +100,17 @@ export function PaperView(props: Props) {
 
   return (
     <>
-      <div ref={container} className={connecting ? "paper connecting" : "paper"} onMouseUp={mouse.onMouseUp} onContextMenu={mouse.onContextMenu}
+      <div ref={container} className={connecting ? "paper connecting" : "paper"} style={{ "--page-width": `${pageWidth}px` } as React.CSSProperties} onMouseUp={mouse.onMouseUp} onContextMenu={mouse.onContextMenu}
            onMouseDown={(e) => { hover.close(); mouse.onMouseDown(e); }} onScroll={onScroll} {...citation} {...termHover}>
         <Document file={api.pdfUrl(paperId)} onLoadSuccess={(doc) => { pdf.current = doc; setReady(true); }}
                   loading={<div className="loading">Loading the paper</div>}
                   onItemClick={followLink} externalLinkTarget="_blank" externalLinkRel="noopener noreferrer">
           {source.pages.map((p) => (
-            <div key={p.index} className="page-wrap" style={{ height: p.height * (PAGE_WIDTH_PX / p.width) }}>
-              <Page pageIndex={p.index} width={PAGE_WIDTH_PX} renderAnnotationLayer renderTextLayer {...findProps(p.index)} />
-              <PageOverlay page={p.index} scale={PAGE_WIDTH_PX / p.width} board={board} source={source}
+            <div key={p.index} className="page-wrap" style={{ height: p.height * (pageWidth / p.width) }}>
+              <Page pageIndex={p.index} width={pageWidth} renderAnnotationLayer renderTextLayer {...findProps(p.index)} />
+              <PageOverlay page={p.index} scale={pageWidth / p.width} board={board} source={source}
                            onOutlineClick={onOutlineClick} onJump={onJump} onOpenNote={onOpenNote} />
-              {flash?.page === p.index && <div className="focus-flash" style={flashStyle(flash, PAGE_WIDTH_PX / p.width)} />}
+              {flash?.page === p.index && <div className="focus-flash" style={flashStyle(flash, pageWidth / p.width)} />}
             </div>
           ))}
         </Document>
