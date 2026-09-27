@@ -1,7 +1,7 @@
 /* the paper view: the PDF as printed, on a desk, with the reader's marks laid over it */
 .paper { position: relative; overflow: auto; height: 100%; background: var(--bg-paper); padding: 24px 0 48px; }
-/* the page keeps room on its left for the cut brackets and their names, however narrow the pane */
-.page-wrap { position: relative; width: var(--page-width); margin: 0 auto 20px max(var(--bracket-gutter), calc((100% - var(--page-width)) / 2)); background: var(--surface); box-shadow: var(--shadow-page); border-radius: 2px; }
+/* the page keeps room on its left for the cut ruler, however narrow the pane */
+.page-wrap { position: relative; width: var(--page-width); margin: 0 auto 20px max(var(--ruler-gutter), calc((100% - var(--page-width)) / 2)); background: var(--surface); box-shadow: var(--shadow-page); border-radius: 2px; }
 .page-wrap .react-pdf__Page__textContent ::selection { background: var(--cut-tint); }
 
 .overlay { position: absolute; inset: 0; pointer-events: none; }
@@ -11,24 +11,25 @@
 .overlay .mark.relocated { outline: 1px dashed var(--moved); outline-offset: 1px; }
 .overlay .mark.orphaned { background: var(--lost); opacity: 0.22; }
 
-/* where the paper has been cut: a thin bracket "[" in the outer (left) margin from a piece's first line to its last,
-   grey while the piece is still in the tray, coloured once placed; its name at the top. It never covers the text. */
-.overlay .cut-bracket {
-  --bracket: var(--cut); position: absolute; width: 6px; padding: 0; pointer-events: auto; cursor: pointer;
-  border: 2px solid var(--bracket); border-right: 0; border-radius: 2px 0 0 2px; background: transparent; opacity: 0.75;
+/* where the paper has been cut: one thin line in the left margin, faint along a piece still in the tray, solid in the
+   accent along one out of it, a short tick at every start and end. A solid stretch is drawn after, so over a faint one. */
+.overlay .cut-ruler { position: absolute; top: 0; bottom: 0; right: calc(100% + 8px); width: 12px; }
+.overlay .cut-stretch {
+  --stretch: var(--cut); position: absolute; left: 0; width: 12px; padding: 0; border: 0; background: transparent;
+  pointer-events: auto; cursor: pointer;
 }
-.overlay .cut-bracket.tray { --bracket: var(--ink-faint); }
-.overlay .cut-bracket.relocated { --bracket: var(--moved); }
-.overlay .cut-bracket.orphaned { --bracket: var(--lost); border-style: dashed; }
-/* a piece that runs onto the next page is left open at the bottom; the next page's part is open at the top */
-.overlay .cut-bracket.continues { border-bottom: 0; border-bottom-left-radius: 0; }
-.overlay .cut-bracket.continued { border-top: 0; border-top-left-radius: 0; }
-.overlay .cut-bracket:hover, .overlay .cut-bracket:focus-visible { opacity: 1; border-left-width: 3px; }
-.overlay .cut-label {
-  position: absolute; right: calc(100% + 4px); max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font: 500 10.5px/1.3 var(--font-ui); color: var(--bracket); text-align: right; transform: translateY(-2px);
+.overlay .cut-stretch::before { content: ""; position: absolute; top: 0; bottom: 0; left: 5px; width: 2px; background: var(--stretch); border-radius: 1px; }
+.overlay .cut-stretch.tray { --stretch: var(--border-strong); }
+.overlay .cut-stretch.relocated { --stretch: var(--moved); }
+.overlay .cut-stretch.orphaned { --stretch: var(--lost); }
+.overlay .cut-stretch:hover::before, .overlay .cut-stretch:focus-visible::before { left: 4px; width: 4px; }
+.overlay .cut-stretch:focus-visible { outline: none; }
+.overlay .cut-tick { position: absolute; left: 2px; width: 8px; height: 1px; background: var(--ink-muted); pointer-events: none; }
+.overlay .cut-tip {
+  position: absolute; top: -2px; left: calc(100% + 6px); z-index: 2; white-space: nowrap; padding: 2px 6px; border-radius: var(--radius-small);
+  background: var(--ink); color: var(--surface); font: 500 11px/1.3 var(--font-ui); pointer-events: none;
 }
-/* hovering or focusing a bracket tints its piece's lines */
+/* hovering or focusing a stretch tints its piece's lines */
 .overlay .cut-tint { position: absolute; background: var(--cut-tint); outline: 1px solid var(--cut-edge); border-radius: 2px; pointer-events: none; }
 
 /* the choice after a selection */

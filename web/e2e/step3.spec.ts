@@ -45,13 +45,13 @@ test("highlights and cuts survive a reload and the views mirror each other", asy
   const highlights = async () => new Set(await page.locator(".overlay .mark").evaluateAll(
     (marks) => marks.map((m) => m.getAttribute("data-highlight-id")))).size;   // a mark per line since D1
   await expect.poll(highlights).toBe(5);
-  await expect(page.locator(".overlay .cut-bracket")).toHaveCount(3);
+  await expect(page.locator(".overlay .cut-stretch")).toHaveCount(3);
   await expect(page.locator(".notice")).toHaveText(/Saved v\d+/);
 
   await page.reload();
   await page.locator("select").selectOption({ index: 1 });
   await expect.poll(highlights).toBe(5);
-  await expect(page.locator(".overlay .cut-bracket")).toHaveCount(3);
+  await expect(page.locator(".overlay .cut-stretch")).toHaveCount(3);
 
   await page.getByRole("button", { name: "Board" }).click();
   await expect(page.locator(".node.chunk")).toHaveCount(3);
@@ -66,10 +66,10 @@ test("highlights and cuts survive a reload and the views mirror each other", asy
   await pageThreeChunk.locator("[data-testid=open-source]").click();
 
   // Only a real jump satisfies these once the pages have rendered: page 1 has scrolled away and
-  // the clicked chunk's own cut bracket on page 3 is on screen.
+  // the clicked chunk's own cut ruler on page 3 is on screen.
   await expect(page.locator(".react-pdf__Page")).toHaveCount(12);
   const pageThree = page.locator(`.react-pdf__Page[data-page-number="3"]`);
   await expect(pageThree.locator(".react-pdf__Page__canvas")).toBeVisible();
   await expect(page.locator(`.react-pdf__Page[data-page-number="1"]`)).not.toBeInViewport();
-  await expect(page.locator(`.overlay .cut-bracket[data-node-id="${nodeId}"]`).first()).toBeInViewport();
+  await expect(page.locator(`.overlay .cut-stretch[data-node-id="${nodeId}"]`).first()).toBeInViewport();
 });
