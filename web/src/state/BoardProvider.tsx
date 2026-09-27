@@ -77,7 +77,9 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
       }
     };
     const open = async () => {
-      const [s, b, v] = await Promise.all([api.getSource(paperId), api.getBoard(paperId), api.getView(paperId)]);
+      // Where the reader left off is a convenience: if it cannot be read, the paper still opens, at the start.
+      const view = api.getView(paperId).catch((error: unknown) => { console.error("Could not read the view state", error); return defaultPaperView; });
+      const [s, b, v] = await Promise.all([api.getSource(paperId), api.getBoard(paperId), view]);
       if (!live) return;
       setViewState(v);
       dispatch({ type: "load", board: b });

@@ -205,6 +205,15 @@ describe("BoardProvider view state", () => {
     expect(api.getView).toHaveBeenCalledWith("p");
   });
 
+  it("still opens the paper, at the default view, when the view cannot be read", async () => {
+    vi.mocked(api.getView).mockRejectedValueOnce(new Error("404"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    expect(ctx!.view).toEqual(defaultPaperView);
+    error.mockRestore();
+  });
+
   it("puts a viewport or scroll change to /view, never dirtying the board, saving it, or making an undo step", async () => {
     const { unmount } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
     await waitFor(() => expect(ctx).not.toBeNull());
