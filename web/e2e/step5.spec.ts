@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { WRITE } from "./headers";
+import { putView, viewOf, WRITE } from "./headers";
 
 /** The acceptance checks of the features plan (Task 3D), and SPEC.md section 11's mechanical items 4 and 5
  *  (item 6 is step3.spec.ts). Specs run in file order with one worker and this one runs last, so the specs before it
@@ -57,11 +57,10 @@ async function open(page: Page, id: string) {
 /** Saves a board holding exactly these things, in the paper view with no filter, then opens it. */
 async function save(request: APIRequestContext, id: string, parts: { nodes?: Json[]; edges?: Json[]; highlights?: Json[] } = {}) {
   const current = await boardOf(request, id);
-  const next: Json = { ...current, nodes: parts.nodes ?? [], edges: parts.edges ?? [], highlights: parts.highlights ?? [], active_tags: [], view: "paper",
-    viewport: { x: 0, y: 0, zoom: 1 } };
-  delete next.paper_scroll;
+  const next: Json = { ...current, nodes: parts.nodes ?? [], edges: parts.edges ?? [], highlights: parts.highlights ?? [] };
   const put = await request.put(`/api/papers/${id}/board`, { data: next, headers: { "If-Match": String(current.version), ...WRITE } });
   expect(put.ok()).toBeTruthy();
+  await putView(request, id, { viewport: { x: 0, y: 0, zoom: 1 } });
 }
 
 async function seed(page: Page, id: string, parts: { nodes?: Json[]; edges?: Json[]; highlights?: Json[] } = {}) {
@@ -186,9 +185,10 @@ test("in the paper view the hidden board's tray and slots neither show nor take 
   expect(laidOut.nodes.filter((n: Json) => n.type === "group" && n.data.prompt)).toHaveLength(9);
   expect(laidOut.nodes.some((n: Json) => n.data.tray)).toBe(true);
   const put = await page.request.put(`/api/papers/${attention}/board`, {
-    data: { ...laidOut, view: "paper", viewport: { x: 0, y: 0, zoom: 1 } }, headers: { "If-Match": String(laidOut.version), ...WRITE },
+    data: laidOut, headers: { "If-Match": String(laidOut.version), ...WRITE },
   });
   expect(put.ok()).toBeTruthy();
+  await putView(page.request, attention, { viewport: { x: 0, y: 0, zoom: 1 } });
   await open(page, attention);
   const slots = page.locator(".react-flow__node:has(.node.group.slot)");
   await expect(slots).toHaveCount(9);
@@ -465,7 +465,7 @@ test("a reload returns to the same view and the same place in the paper (SPEC 11
   const paper = page.locator(".paper");
   await expect(page.locator('.react-pdf__Page[data-page-number="6"] canvas')).toBeAttached();
   await paper.evaluate((el) => el.scrollTo(0, 3000));
-  await expect.poll(async () => (await boardOf(page.request, resnet)).paper_scroll?.page ?? -1).toBeGreaterThan(0);
+  await expect.poll(async () => (await viewOf(page.request, resnet)).paper_scroll?.page ?? -1).toBeGreaterThan(0);
   const top = await paper.evaluate((el) => el.scrollTop);
   await page.reload();
   await paperPicker(page).selectOption(resnet);
@@ -473,7 +473,7 @@ test("a reload returns to the same view and the same place in the paper (SPEC 11
   await expect.poll(async () => Math.abs((await paper.evaluate((el) => el.scrollTop)) - top)).toBeLessThan(3);
 
   await showBoard(page);
-  await expect.poll(async () => (await boardOf(page.request, resnet)).view).toBe("board");
+  await expect.poll(async () => (await viewOf(page.request, resnet)).view).toBe("board");
   await page.reload();
   await paperPicker(page).selectOption(resnet);
   await expect(page.getByRole("button", { name: "Board", exact: true })).toHaveAttribute("aria-pressed", "true");

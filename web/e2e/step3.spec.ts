@@ -1,15 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
-import { WRITE } from "./headers";
+import { putView, WRITE } from "./headers";
 
 /** Every test here starts from a saved, empty board: first open (D15) never runs, and no earlier spec's pieces remain. */
 test.beforeEach(async ({ request }) => {
   const [paper] = await (await request.get("/api/papers")).json();
   const path = `/api/papers/${paper.paper_id}/board`;
   const board = await (await request.get(path)).json();
-  const empty = { ...board, nodes: [], edges: [], highlights: [], active_tags: [], view: "paper" };
-  delete empty.paper_scroll;
+  const empty = { ...board, nodes: [], edges: [], highlights: [] };
   const saved = await request.put(path, { data: empty, headers: { "If-Match": String(board.version), ...WRITE } });
   expect(saved.ok()).toBeTruthy();
+  await putView(request, paper.paper_id);
 });
 
 async function selectSpan(page: Page, pageIndex: number, fromSpan: number, toSpan: number) {

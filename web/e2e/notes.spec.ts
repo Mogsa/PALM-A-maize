@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { WRITE } from './headers';
+import { putView, WRITE } from './headers';
 
 /** Notes render Markdown with maths (D22) and carry a freehand sketch (D23). */
 
@@ -17,9 +17,8 @@ test.afterEach(async ({request}) => {
   const path = `/api/papers/${papers[0].paper_id}/board`;
   const board = await (await request.get(path)).json();
   board.nodes = []; board.edges = []; board.highlights = [];
-  board.viewport = {x: 0, y: 0, zoom: 1}; board.active_tags = [];
-  board.view = 'paper'; delete board.paper_scroll;   // view state is saved (D5): don't leak it into the next test
   await request.put(path, {data: board, headers: {'If-Match': String(board.version), ...WRITE}});
+  await putView(request, papers[0].paper_id);   // view state is saved (D5): don't leak it into the next test
   await request.delete(`/api/papers/${papers[0].paper_id}/notes/${NOTE}/sketch`, {headers: WRITE});
 });
 
@@ -28,8 +27,8 @@ async function seedNote(page: Page, markdown: string, shape: object = note): Pro
   const id = await paperId(page);
   const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
   board.nodes = [shape]; board.edges = []; board.highlights = [];
-  board.viewport = { x: 0, y: 0, zoom: 1 }; board.active_tags = []; board.view = 'paper'; delete board.paper_scroll;
   expect((await page.request.put(`/api/papers/${id}/board`, {data: board, headers: {'If-Match': String(board.version), ...WRITE}})).ok()).toBeTruthy();
+  await putView(page.request, id);
   expect((await page.request.put(`/api/papers/${id}/notes/${NOTE}`, {data: { markdown }, headers: WRITE})).ok()).toBeTruthy();
   await page.goto('/');
   await page.locator('select').selectOption(id);

@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { WRITE } from "./headers";
+import { putView, WRITE } from "./headers";
 
 /** Context on demand (D26, D27, D28), mechanised on ResNet. Runs before step5 uploads Attention, so ResNet is the only
  *  paper; every test saves the board it needs first, view included. */
@@ -24,11 +24,10 @@ const boardOf = async (request: APIRequestContext): Promise<Json> => (await requ
 /** Saves a board holding exactly these things, open in `view`, at zoom 1 on the board. */
 async function save(request: APIRequestContext, parts: { nodes?: Json[]; edges?: Json[]; highlights?: Json[] }, view = "board") {
   const current = await boardOf(request);
-  const next: Json = { ...current, nodes: parts.nodes ?? [], edges: parts.edges ?? [], highlights: parts.highlights ?? [],
-    active_tags: [], view, viewport: { x: 0, y: 0, zoom: 1 } };
-  delete next.paper_scroll;
+  const next: Json = { ...current, nodes: parts.nodes ?? [], edges: parts.edges ?? [], highlights: parts.highlights ?? [] };
   const put = await request.put(`/api/papers/${resnet}/board`, { data: next, headers: { "If-Match": String(current.version), ...WRITE } });
   expect(put.ok()).toBeTruthy();
+  await putView(request, resnet, { view, viewport: { x: 0, y: 0, zoom: 1 } });
 }
 
 /** A section's chunk data as split makes it, expanded. */

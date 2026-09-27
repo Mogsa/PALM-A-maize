@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { WRITE } from "./headers";
+import { putView, WRITE } from "./headers";
 
 /** The semantic reader, tier 1: citation cards (D24) and likely definitions in Find (D25), on ResNet. Runs before
  *  step5 uploads Attention, so ResNet is the only paper. */
@@ -12,10 +12,10 @@ test.beforeEach(async ({ request }) => {
   resnet = papers.map((p) => p.paper_id).find((id) => id.includes("residual"))!;
   const path = `/api/papers/${resnet}/board`;
   const board = await (await request.get(path)).json();
-  const empty = { ...board, nodes: [], edges: [], highlights: [], active_tags: [], view: "paper" };
-  delete empty.paper_scroll;
+  const empty = { ...board, nodes: [], edges: [], highlights: [] };
   const saved = await request.put(path, { data: empty, headers: { "If-Match": String(board.version), ...WRITE } });
   expect(saved.ok()).toBeTruthy();
+  await putView(request, resnet);
 });
 
 async function open(page: Page) {
