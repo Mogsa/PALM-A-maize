@@ -1,14 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { WRITE } from './headers';
+import { putView, viewOf, WRITE } from './headers';
 
 test.afterEach(async ({request}) => {
   const papers = await (await request.get(`/api/papers`)).json();
   const path = `/api/papers/${papers[0].paper_id}/board`;
   const board = await (await request.get(path)).json();
   board.nodes = []; board.edges = []; board.highlights = [];
-  board.viewport = {x: 0, y: 0, zoom: 1}; board.active_tags = [];
-  board.view = 'paper'; delete board.paper_scroll;   // view state is saved (D5): don't leak it into the next test
   await request.put(path, {data: board, headers: {'If-Match': String(board.version), ...WRITE}});
+  await putView(request, papers[0].paper_id);   // view state is saved (D5): don't leak it into the next test
 });
 const quote = { exact: 'Review chunk', prefix: '', suffix: '' };
 const region = { rects: [{ page: 0, rect: [50, 130, 280, 300] }], start: quote, end: quote, position: 0, state: 'anchored' };
@@ -26,10 +25,10 @@ async function seedBoard(page: Page, { nodes = [], highlights = [], activeTags =
   const id = papers[0].paper_id;
   const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
   board.nodes = nodes;
-  board.edges = []; board.highlights = highlights; board.viewport = { x: 0, y: 0, zoom: 1 }; board.active_tags = activeTags;
-  board.view = 'paper'; delete board.paper_scroll;
+  board.edges = []; board.highlights = highlights;
   const saved = await page.request.put(`/api/papers/${id}/board`, {data: board, headers: {'If-Match': String(board.version), ...WRITE}});
   expect(saved.ok()).toBeTruthy();
+  await putView(page.request, id, { active_tags: activeTags });
   await page.goto('/');
   await page.locator('select').selectOption(id);
   await expect(page.getByRole('button', {name: 'Board', exact: true})).toBeVisible();
@@ -87,10 +86,8 @@ test('pan and zoom persist without editing a piece', async ({page}) => {
   await page.mouse.down();
   await page.mouse.move(box.x + 1000, box.y + 760, {steps: 15});
   await page.mouse.up();
-  await expect(page.locator('.notice')).toHaveText(/Saved/);
-  const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
-  expect(board.viewport.zoom).toBeGreaterThan(1);
-  expect(board.viewport.x).not.toBe(0);
+  await expect.poll(async () => (await viewOf(page.request, id)).viewport?.zoom ?? 0).toBeGreaterThan(1);
+  expect((await viewOf(page.request, id)).viewport.x).not.toBe(0);
   const viewport = page.locator('.react-flow__viewport');
   const transform = await viewport.evaluate(el => (el as HTMLElement).style.transform);
   await page.reload();

@@ -2,6 +2,7 @@ import type {
   Board, ChunkAnchor, ExportOrder, ExportResult, HighlightAnchor, JoinResult, NoteFile, PageRect, PaperSummary, Piece, Question, QuoteSelector,
   RecutMode, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload, Source, SplitDraft, TagFile, TemplateFile,
 } from "../model/types";
+import type { PaperViewState } from "../model/paperView";
 
 /** One method per route of SPEC-ADDENDUM.md section 6. */
 
@@ -51,7 +52,12 @@ export const api = {
   async addPaper(pdf: Blob, filename: string): Promise<AddPaperResult> {
     const form = new FormData();
     form.append("file", pdf, filename);
-    return parse<AddPaperResult>(await request("/api/papers", { method: "POST", body: form }));
+    const response = await request("/api/papers", { method: "POST", body: form });
+    if (response.ok) return response.json();
+    // A 413 may come from a proxy with no JSON body; a failure may be `{error: {code}}` or a bare `{code}`.
+    const body = await response.json().catch(() => null);
+    const error = body?.error ?? body ?? {};
+    throw new ApiError(response.status, error.code ?? "unknown", error.message ?? response.statusText);
   },
   getSource: (id: string) => call<Source>(`${paper(id)}/source`),
   reextract: (id: string) => send<ReextractResult>("POST", `${paper(id)}/extract`),
@@ -67,6 +73,10 @@ export const api = {
     if (!response.ok) throw new ApiError(response.status, body?.error?.code ?? "unknown", body?.error?.message ?? "");
     return { version: body.version };
   },
+
+  /** View state: no version and no If-Match; the latest PUT wins. */
+  getView: (id: string) => call<PaperViewState>(`${paper(id)}/view`),
+  putView: (id: string, view: PaperViewState) => send<void>("PUT", `${paper(id)}/view`, view),
 
   async getNote(id: string, nodeId: string): Promise<NoteFile> {
     try {

@@ -4,7 +4,8 @@ import { paperWords } from "../board/marks";
 import { boardReducer, initialBoardState, type BoardAction, type BoardState } from "../model/boardReducer";
 import type { BoardNode, Source } from "../model/types";
 import { createNoteStore, noteIO, type NoteStore } from "./notes";
-import { createPersistence } from "./persistence";
+import { defaultPaperView, withView, type PaperViewState } from "../model/paperView";
+import { createPersistence, createViewPersistence } from "./persistence";
 import { CLIP_FAILED_MESSAGE, planFirstOpen, planSplit, storeFigureClips } from "./split";
 
 export const FIRST_OPEN_FAILED_MESSAGE = "Could not lay out this paper's sections. Use Split on the board to try again.";
@@ -17,6 +18,8 @@ export const FLUSH_FAILED_MESSAGE = "Some changes could not be saved yet, so thi
 type Ctx = {
   state: BoardState; dispatch: React.Dispatch<BoardAction>; source: Source; words: ReadonlySet<string>; notice: string | null; paperId: string;
   notes: NoteStore;
+  /** How the paper is shown (view, scrolls, filter, split): not the board's, saved at `/view`. */
+  view: PaperViewState; setView: (patch: Partial<PaperViewState>) => void;
   /** Saves any pending board change and waits for note writes: what export and split need first (SPEC 6).
    *  Rejects with FLUSH_FAILED_MESSAGE when the board or a note is still not saved. */
   flush: () => Promise<void>;
@@ -32,6 +35,20 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
   const [failure, setFailure] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const persistence = useRef<ReturnType<typeof createPersistence> | null>(null);
+  const [view, setViewState] = useState<PaperViewState>(defaultPaperView);
+  const viewPersistence = useMemo(() => createViewPersistence({
+    save: (v) => api.putView(paperId, v),
+    onError: (message) => { if (mounted.current) setNotice(message); },
+  }), [paperId]);
+  useEffect(() => () => { void viewPersistence.flush(); viewPersistence.dispose(); }, [viewPersistence]);
+  /** Changes how the paper is shown: saved at `/view`, never dirties the board, never an undo step. */
+  const setView = useCallback((patch: Partial<PaperViewState>) => {
+    setViewState((current) => {
+      const next = withView(current, patch);
+      if (next !== current) viewPersistence.schedule(next);
+      return next;
+    });
+  }, [viewPersistence]);
 
   const latest = useRef(state);
   latest.current = state;
@@ -60,8 +77,11 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
       }
     };
     const open = async () => {
-      const [s, b] = await Promise.all([api.getSource(paperId), api.getBoard(paperId)]);
+      // Where the reader left off is a convenience: if it cannot be read, the paper still opens, at the start.
+      const view = api.getView(paperId).catch((error: unknown) => { console.error("Could not read the view state", error); return defaultPaperView; });
+      const [s, b, v] = await Promise.all([api.getSource(paperId), api.getBoard(paperId), view]);
       if (!live) return;
+      setViewState(v);
       dispatch({ type: "load", board: b });
       if (b.version === 0) await layOut(s);
       if (live) setSource(s);
@@ -133,8 +153,8 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
   }, [paperId, source, flush, storeClips]);
 
   const words = useMemo(() => paperWords(source?.page_text ?? []), [source]);
-  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId, notes, flush, split } : null),
-    [state, source, words, notice, paperId, notes, flush, split]);
+  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId, notes, view, setView, flush, split } : null),
+    [state, source, words, notice, paperId, notes, view, setView, flush, split]);
   if (!value && failure) {
     return (
       <div className="loading load-failed" role="alert">

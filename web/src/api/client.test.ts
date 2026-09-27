@@ -136,6 +136,25 @@ describe("api, schema 2 routes", () => {
     expect(init.body).toBeInstanceOf(FormData);
     expect(new Headers(init.headers).get("content-type")).toBeNull();
   });
+
+  it("addPaper fails with the status even when the body is not JSON (a proxy's 413) or is a bare {code}", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("Request Entity Too Large", { status: 413 })));
+    await expect(api.addPaper(new Blob(["%PDF-"]), "big.pdf")).rejects.toMatchObject({ status: 413 });
+    mockFetch(415, { code: "not_pdf" });
+    await expect(api.addPaper(new Blob(["x"]), "a.txt")).rejects.toMatchObject({ status: 415, code: "not_pdf" });
+  });
+
+  it("the view is read and put at its own route, with no version", async () => {
+    const view = { view: "both" as const, paper_scroll: null, active_tags: [], viewport: null, split: 0.4 };
+    mockFetch(200, view);
+    expect(await api.getView("p")).toEqual(view);
+    const fn = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fn);
+    await api.putView("p", view);
+    const call = lastCall(fn);
+    expect(call).toMatchObject({ url: "/api/papers/p/view", init: { method: "PUT" }, body: view });
+    expect(new Headers(call.init.headers).get("if-match")).toBeNull();
+  });
 });
 
 describe("every request says it comes from Paper Board (contract 2)", () => {

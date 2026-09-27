@@ -5,9 +5,10 @@ import type { PaperHit } from "./paper/hit";
 
 const dispatch = vi.fn();
 let board: Board;
+let currentView: View = "paper";
 let clickPaper: ((hit: PaperHit) => void) | null = null;
 vi.mock("./state/BoardProvider", () => ({
-  useBoard: () => ({ state: { board }, dispatch, paperId: "p", source: { sections: [], figures: [], page_text: [], pages: [] } }),
+  useBoard: () => ({ state: { board }, view: { view: currentView, paper_scroll: null }, setView: vi.fn(), dispatch, paperId: "p", source: { sections: [], figures: [], page_text: [], pages: [] } }),
   useNote: () => ({ text: "", error: null, loadFailed: false, edit: vi.fn(), commit: vi.fn(), retry: vi.fn() }),
 }));
 vi.mock("./paper/PaperView", () => ({ PaperView: (props: { onClickPaper: (hit: PaperHit) => void }) => { clickPaper = props.onClickPaper; return null; } }));
@@ -17,7 +18,7 @@ vi.mock("./api/client", () => ({ api: {} }));
 import { PaperScreen } from "./PaperScreen";
 
 const mark: Highlight = { id: "h-1", tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 10, 10] }], quote: { exact: "x", prefix: "", suffix: "" }, position: 0, state: "anchored" } };
-const withView = (view: View): Board => ({ ...emptyBoard("p"), view, highlights: [mark] });
+const withView = (view: View): Board => { currentView = view; return { ...emptyBoard("p"), highlights: [mark] }; };
 const screen = () => <PaperScreen focus={null} onFocusHandled={() => undefined} onOpenOnBoard={() => undefined} />;
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });

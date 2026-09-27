@@ -48,3 +48,12 @@ describe("toBoardJson", () => {
     expect(JSON.parse(JSON.stringify(out))).toEqual(out);
   });
 });
+
+describe("toBoardJson and view state", () => {
+  it("never sends view, paper_scroll, active_tags or viewport", () => {
+    const stale = { ...emptyBoard("p"), view: "board", paper_scroll: { page: 1, y: 2 }, active_tags: ["t"], viewport: { x: 0, y: 0, zoom: 1 } };
+    const out = toBoardJson(stale as never) as unknown as Record<string, unknown>;
+    for (const key of ["view", "paper_scroll", "active_tags", "viewport"]) expect(out).not.toHaveProperty(key);
+    expect(emptyBoard("p")).not.toHaveProperty("view");
+  });
+});

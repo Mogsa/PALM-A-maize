@@ -8,12 +8,12 @@ export const COPY_FAILED_MESSAGE = "Could not copy. Select the text below instea
 
 /** The literature note (SPEC 6): in the paper's order or the template's (D19), filtered by the active tags. */
 export function ExportDialog() {
-  const { paperId, state, flush } = useBoard();
+  const { paperId, view, flush } = useBoard();
   const [order, setOrder] = useState<ExportOrder>("paper");
   const [result, setResult] = useState<ExportResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const active = state.board.active_tags;
+  const active = view.active_tags;
   const fail = (message: string, failure: unknown) => { console.error(message, failure); setError(message); };
   const run = async () => {
     setBusy(true);

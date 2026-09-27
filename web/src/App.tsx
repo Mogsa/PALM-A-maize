@@ -7,6 +7,7 @@ import { Glossary } from "./panels/Glossary";
 import { QuestionList } from "./panels/QuestionList";
 import { TemplateEditor } from "./panels/TemplateEditor";
 import { useUndoKeys } from "./panels/undoKeys";
+import { PaperPicker } from "./PaperPicker";
 import { PaperScreen } from "./PaperScreen";
 import { BoardProvider, useBoard } from "./state/BoardProvider";
 import { FilterBar } from "./tags/FilterBar";
@@ -19,15 +20,6 @@ function Notice() {
   const { notice, state } = useBoard();
   const tone = notice ? "warn" : state.dirty ? "unsaved" : "";
   return <span className={`notice ${tone}`}>{notice ?? (state.dirty ? "Unsaved" : `Saved v${state.board.version}`)}</span>;
-}
-
-function PaperPicker({ papers, value, onChange }: { papers: PaperSummary[]; value: string; onChange: (id: string) => void }) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Paper">
-      {value === "" && <option value="">Choose a paper</option>}
-      {papers.map((p) => <option key={p.paper_id} value={p.paper_id}>{p.title}</option>)}
-    </select>
-  );
 }
 
 function PanelButton({ panel, open, label, onToggle }: { panel: Panel; open: Panel | null; label: string; onToggle: (p: Panel) => void }) {
@@ -47,17 +39,16 @@ function SidePanel({ panel, onQuestion, onJump, onOpenNote }: SidePanelProps) {
   }
 }
 
-type ShellProps = { papers: PaperSummary[]; paperId: string; onChoose: (id: string) => void };
+type ShellProps = { papers: PaperSummary[]; paperId: string; onChoose: (id: string) => void; onAdded: (id: string) => void };
 
 /** Everything that depends on the open board. The view is the board's (D5): the one you left is the one that opens. */
-function Shell({ papers, paperId, onChoose }: ShellProps) {
-  const { state, dispatch } = useBoard();
-  const view = state.board.view;
+function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
+  const { state, dispatch, view: { view }, setView } = useBoard();
   const [focusNode, setFocusNode] = useState<string | null>(null);
   const [focusRect, setFocusRect] = useState<PageRect | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   useUndoKeys(dispatch);
-  const show = (next: View) => dispatch({ type: "setView", view: next });
+  const show = (next: View) => setView({ view: next });
   const openOnBoard = (id: string) => { setFocusNode(id); show("board"); };
   // A fresh object every time, so the paper scrolls again even for the same rect.
   const openInPaper = (rect: PageRect) => { setFocusRect({ ...rect }); show("paper"); };
@@ -72,7 +63,7 @@ function Shell({ papers, paperId, onChoose }: ShellProps) {
     <>
       <div className="topbar">
         <span className="wordmark">Paper Board</span>
-        <div className="paper-title"><PaperPicker papers={papers} value={paperId} onChange={onChoose} /></div>
+        <div className="paper-title"><PaperPicker papers={papers} value={paperId} onChange={onChoose} onAdded={onAdded} /></div>
         <div className="segmented" role="group" aria-label="View">
           <button aria-pressed={view === "paper"} onClick={() => show("paper")}>Paper</button>
           <button aria-pressed={view === "board"} onClick={() => show("board")}>Board</button>
@@ -112,6 +103,13 @@ export default function App() {
   const [paperId, setPaperId] = useState<string | null>(null);
   useEffect(() => { api.listPapers().then(setPapers, (error: unknown) => console.error("Could not list the papers", error)); }, []);
   const choose = (id: string) => setPaperId(id || null);
+  // A re-upload of the open paper must open it afresh, so the board key counts uploads too.
+  const [uploads, setUploads] = useState(0);
+  const added = (id: string) => {
+    api.listPapers().then(setPapers, (error: unknown) => console.error("Could not list the papers", error));
+    setUploads((n) => n + 1);
+    setPaperId(id);
+  };
 
   if (!paperId) {
     return (
@@ -120,8 +118,8 @@ export default function App() {
         <div className="start">
           <h1>Choose a paper</h1>
           <p>Read it, mark it, cut it into pieces, and lay the pieces out.</p>
-          <PaperPicker papers={papers} value="" onChange={choose} />
-          <p className="how">Add a paper with <code>paperboard extract paper.pdf --out ~/paperboard-data/papers</code></p>
+          <PaperPicker papers={papers} value="" onChange={choose} onAdded={added} />
+          <p className="how">Add one with <em>Add paper…</em> at the end of the list.</p>
         </div>
       </div>
     );
@@ -129,8 +127,8 @@ export default function App() {
 
   return (
     <div className="app">
-      <BoardProvider key={paperId} paperId={paperId}>
-        <Shell papers={papers} paperId={paperId} onChoose={choose} />
+      <BoardProvider key={`${paperId}:${uploads}`} paperId={paperId}>
+        <Shell papers={papers} paperId={paperId} onChoose={choose} onAdded={added} />
       </BoardProvider>
     </div>
   );

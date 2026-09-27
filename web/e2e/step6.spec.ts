@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { WRITE } from "./headers";
+import { putView, WRITE } from "./headers";
 
 /** Live text on the board (D20, D21 and a note from a line, addendum 4.10), mechanised. Runs after step5, on ResNet
  *  only: every test saves the board it needs first, opened on the board. ResNet's §3.1 is the chunk: four text blocks
@@ -34,11 +34,10 @@ const post = async (request: APIRequestContext, route: string, body: Json): Prom
 /** Saves a board holding exactly these things, shown on the board at zoom 1. */
 async function save(request: APIRequestContext, parts: { nodes?: Json[]; edges?: Json[]; highlights?: Json[] }) {
   const current = await boardOf(request);
-  const next: Json = { ...current, nodes: parts.nodes ?? [], edges: parts.edges ?? [], highlights: parts.highlights ?? [],
-    active_tags: [], view: "board", viewport: { x: 0, y: 0, zoom: 1 } };
-  delete next.paper_scroll;
+  const next: Json = { ...current, nodes: parts.nodes ?? [], edges: parts.edges ?? [], highlights: parts.highlights ?? [] };
   const put = await request.put(`/api/papers/${resnet}/board`, { data: next, headers: { "If-Match": String(current.version), ...WRITE } });
   expect(put.ok()).toBeTruthy();
+  await putView(request, resnet, { view: "board", viewport: { x: 0, y: 0, zoom: 1 } });
 }
 
 async function open(page: Page) {

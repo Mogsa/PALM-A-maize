@@ -11,7 +11,6 @@ import { MarkPopover } from "./paper/MarkPopover";
 import { PaperView } from "./paper/PaperView";
 import { SelectionPopover } from "./paper/SelectionPopover";
 import { previewText } from "./paper/preview";
-import { samePaperScroll } from "./paper/scroll";
 import { useConnect } from "./paper/useConnect";
 import { useBoard } from "./state/BoardProvider";
 
@@ -27,7 +26,7 @@ export const SELECTION_FAILED_MESSAGE = "Could not read that selection from the 
 type Props = { focus: PageRect | null; onFocusHandled: () => void; onOpenOnBoard: (nodeId: string) => void };
 
 export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
-  const { state, dispatch, source, paperId } = useBoard();
+  const { state, dispatch, source, paperId, view, setView } = useBoard();
   const [pending, setPending] = useState<Pending | null>(null);
   const [openMark, setOpenMark] = useState<OpenMark | null>(null);
   const [busy, setBusy] = useState(false);
@@ -37,7 +36,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   const find = useFind(setJump);
   // The shell keeps the paper mounted, only hidden, while the board is shown: nothing of the paper's may stay open
   // there, or its keys (Delete, Escape) would act on the paper behind the board.
-  const active = state.board.view === "paper";
+  const active = view.view !== "board";
   const cancelConnect = connect.cancel;
   useEffect(() => {
     if (active) return;
@@ -81,7 +80,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   };
   const onJump = (target: JumpTarget) => ("paper" in target ? setJump({ ...target.paper }) : onOpenOnBoard(target.board));
   const onScrollSettled = (scroll: PaperScroll | null) => {
-    if (!samePaperScroll(scroll, state.board.paper_scroll)) dispatch({ type: "setPaperScroll", scroll });
+    setView({ paper_scroll: scroll });   // an unchanged scroll saves nothing (withView)
   };
   const onJumpHandled = useCallback(() => { setJump(null); onFocusHandled(); }, [onFocusHandled]);
 
@@ -102,7 +101,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
       <PaperView paperId={paperId} source={source} board={state.board} focus={jump ?? focus} onFocusHandled={onJumpHandled}
                  onSelect={onSelect} onClickPaper={onClickPaper} onOutlineClick={onOpenOnBoard}
                  connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark}
-                 paperScroll={state.board.paper_scroll} onScrollSettled={onScrollSettled} />
+                 paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} />
       {pending && selectionPopover(pending)}
       {find.query && <FindPanel query={find.query} onPick={find.pick} onClose={find.close} />}
       {markOpen && openMark && (

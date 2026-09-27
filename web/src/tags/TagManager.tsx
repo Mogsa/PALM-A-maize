@@ -33,10 +33,10 @@ const logFailure = (failure: unknown) => console.error("A change to the tags was
  *  No confirmation: re-adding a tag is one click in any picker. */
 export function TagManager() {
   const { tags, update, remove, error } = useTags();
-  const { state, dispatch } = useBoard();
+  const { view, setView } = useBoard();
   const drop = (id: string) => {
-    const active = state.board.active_tags;
-    if (active.includes(id)) dispatch({ type: "setActiveTags", tags: active.filter((t) => t !== id) });
+    const active = view.active_tags;
+    if (active.includes(id)) setView({ active_tags: active.filter((t) => t !== id) });
     remove(id).catch(logFailure);
   };
   return (

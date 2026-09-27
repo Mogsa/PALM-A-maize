@@ -3,6 +3,8 @@ import type { Board, BoardEdge, BoardNode } from "./types";
 export const PERSISTED_NODE_FIELDS = ["id", "type", "position", "data", "parentId", "extent", "width", "height", "initialWidth", "initialHeight", "hidden", "zIndex"] as const;
 // Schema 2 stores an edge by what it connects (addendum 4.0); React Flow's source/target are computed at render.
 export const PERSISTED_EDGE_FIELDS = ["id", "from", "to", "data"] as const;
+/** View state lives at `/view`, never in board.json. */
+const VIEW_KEYS = ["view", "paper_scroll", "active_tags", "viewport"] as const;
 
 function pick<T extends object>(obj: T, fields: readonly string[]): T {
   const out: Record<string, unknown> = {};
@@ -32,5 +34,7 @@ export function parentsFirst(nodes: BoardNode[]): BoardNode[] {
 export function toBoardJson(board: Board): Board {
   const nodes = parentsFirst(board.nodes).map((n) => pick(n, PERSISTED_NODE_FIELDS));
   const edges = board.edges.map((e) => pick(e, PERSISTED_EDGE_FIELDS)) as BoardEdge[];
-  return JSON.parse(JSON.stringify({ ...board, nodes, edges }));
+  const out: Record<string, unknown> = { ...board, nodes, edges };
+  for (const key of VIEW_KEYS) delete out[key];   // an older server's board may still carry them
+  return JSON.parse(JSON.stringify(out));
 }

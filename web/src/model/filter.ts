@@ -13,8 +13,7 @@ export function markDimmed(active: string[], highlight: Highlight): boolean {
 
 /** Nodes the filter hides. Computed at render, never stored (addendum 4.2). A chunk or figure also shows
  *  when a mark inside it carries an active tag, the rule export uses (addendum 6.1). */
-export function hiddenNodeIds(board: Board): Set<string> {
-  const active = board.active_tags;
+export function hiddenNodeIds(board: Board, active: string[]): Set<string> {
   if (!active.length) return new Set();
   const children = new Map<string, BoardNode[]>();
   for (const n of board.nodes) if (n.parentId) children.set(n.parentId, [...(children.get(n.parentId) ?? []), n]);

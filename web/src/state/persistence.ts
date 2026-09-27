@@ -1,4 +1,5 @@
 import { toBoardJson } from "../model/serialize";
+import type { PaperViewState } from "../model/paperView";
 import type { Board } from "../model/types";
 
 type SaveResult = { version: number } | { conflict: true; current: number };
@@ -112,4 +113,46 @@ export function createPersistence(opts: PersistenceOptions) {
   const hasUnsaved = () => conflictPending || pending !== null || timer !== null || inFlight > 0;
 
   return { schedule, flush, dispose, hasUnsaved };
+}
+
+export const VIEW_SAVE_FAILED_MESSAGE = "Could not save where you left this paper. It will be saved with your next move.";
+
+export type ViewPersistenceOptions = {
+  save: (view: PaperViewState) => Promise<void>;
+  onError?: (message: string) => void;
+  delayMs?: number;
+};
+
+/** Debounced puts of the view state. Unversioned: the latest view wins, and it never touches the board. */
+export function createViewPersistence(opts: ViewPersistenceOptions) {
+  const delay = opts.delayMs ?? SAVE_DELAY_MS;
+  let pending: PaperViewState | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let queue: Promise<void> = Promise.resolve();
+
+  const run = async (view: PaperViewState) => {
+    try {
+      await opts.save(view);
+    } catch (error) {
+      if (opts.onError) opts.onError(VIEW_SAVE_FAILED_MESSAGE);
+      else console.error(VIEW_SAVE_FAILED_MESSAGE, error);
+    }
+  };
+  const enqueue = () => {
+    const view = pending;
+    pending = null;
+    if (view) queue = queue.then(() => run(view));
+    return queue;
+  };
+  const schedule = (view: PaperViewState) => {
+    pending = view;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; void enqueue(); }, delay);
+  };
+  const flush = async () => {
+    if (timer) { clearTimeout(timer); timer = null; }
+    await enqueue();
+  };
+  const dispose = () => { if (timer) clearTimeout(timer); timer = null; pending = null; };
+  return { schedule, flush, dispose };
 }

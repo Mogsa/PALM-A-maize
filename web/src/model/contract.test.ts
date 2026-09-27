@@ -4,6 +4,7 @@ import type { BoardAction } from "./boardReducer";
 import { resolveEdges, type ResolvedEdge } from "./edges";
 import { highlightsIn } from "./geometry";
 import { newId } from "./ids";
+import { defaultPaperView } from "./paperView";
 import {
   emptyBoard, type Block, type Board, type BoardEdge, type ChunkNode, type ExportOrder, type ExportResult, type GroupData,
   type Highlight, type NoteData, type PaperScroll, type Question, type Rect, type Selection, type SelectionMode, type Slot,
@@ -24,8 +25,8 @@ const board: Board = {
 };
 
 // Type-level half: `npm run build` fails on these lines if a shape differs from the plan's contract.
-const view: View = board.view;
-const scroll: PaperScroll | null | undefined = board.paper_scroll;
+const view: View = defaultPaperView.view;
+const scroll: PaperScroll | null = defaultPaperView.paper_scroll;
 const slot: GroupData = { tags: [], name: "Main point", prompt: "In your own words?", tray: false };
 const origin: NoteData["origin"] = "reader";
 const mode: SelectionMode = "area";
@@ -40,8 +41,8 @@ afterEach(() => vi.unstubAllGlobals());
 describe("the schema 2 contract this plan builds on", () => {
   it("starts a board at schema 2, version 0, in the paper view", () => {
     const fresh = emptyBoard("p");
-    expect(fresh).toMatchObject({ schema: 2, version: 0, view: "paper" });
-    expect(fresh.paper_scroll ?? null).toBeNull();
+    expect(fresh).toMatchObject({ schema: 2, version: 0 });
+    expect(defaultPaperView).toMatchObject({ view: "paper", paper_scroll: null });
   });
   it("mints tag ids", () => expect(newId("t")).toMatch(/^t-/));
   it("finds a highlight in a chunk by any one of its lines", () => {

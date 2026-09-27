@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createPersistence, SAVE_FAILED_MESSAGE, CONFLICT_RELOAD_FAILED_MESSAGE } from "./persistence";
+import { createPersistence, createViewPersistence, SAVE_FAILED_MESSAGE, CONFLICT_RELOAD_FAILED_MESSAGE, VIEW_SAVE_FAILED_MESSAGE } from "./persistence";
+import { defaultPaperView } from "../model/paperView";
 import { emptyBoard, type Board } from "../model/types";
 
 describe("createPersistence", () => {
@@ -280,5 +281,29 @@ describe("conflict recovery", () => {
     expect(onReload).toHaveBeenCalledWith(fresh);
     expect(p.hasUnsaved()).toBe(false);
     p.dispose();
+  });
+});
+
+describe("createViewPersistence", () => {
+  it("puts the latest view once after the delay, and flush sends a pending one now", async () => {
+    vi.useFakeTimers();
+    const save = vi.fn(async () => undefined);
+    const p = createViewPersistence({ save, delayMs: 100 });
+    p.schedule({ ...defaultPaperView, view: "board" });
+    p.schedule({ ...defaultPaperView, view: "both" });
+    await vi.advanceTimersByTimeAsync(101);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith({ ...defaultPaperView, view: "both" });
+    p.schedule({ ...defaultPaperView, split: 0.7 });
+    await p.flush();
+    expect(save).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+  it("reports a failed put", async () => {
+    const onError = vi.fn();
+    const p = createViewPersistence({ save: async () => { throw new Error("down"); }, onError, delayMs: 1 });
+    p.schedule(defaultPaperView);
+    await p.flush();
+    expect(onError).toHaveBeenCalledWith(VIEW_SAVE_FAILED_MESSAGE);
   });
 });
