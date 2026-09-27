@@ -129,10 +129,17 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled }: Prop
   };
   const selectedNodes = useMemo(() => state.board.nodes.filter((n) => n.selected), [state.board.nodes]);
 
+  /** ↗ opens a piece's place in the paper. With the paper beside the board (both), clicking the piece or a mark on
+   *  it does too: the paper scrolls there and flashes it, and the view stays as it is. */
   const onNodeClick = (event: React.MouseEvent, node: Node) => {
-    if ((event.target as HTMLElement).closest("[data-testid=open-source]") && (node.type === "chunk" || node.type === "figure")) {
-      onOpenInPaper((node as BoardNode & { data: { region: { rects: PageRect[] } } }).data.region.rects[0]);
-    }
+    if (node.type !== "chunk" && node.type !== "figure") return;
+    const target = event.target as HTMLElement;
+    const region = (node as BoardNode & { data: { region: { rects: PageRect[] } } }).data.region;
+    if (target.closest("[data-testid=open-source]")) return onOpenInPaper(region.rects[0]);
+    if (view.view !== "both" || !window.getSelection()?.isCollapsed || target.closest("button")) return;
+    const markId = target.closest<HTMLElement>("mark[data-highlight-id]")?.dataset.highlightId;
+    const mark = markId ? state.board.highlights.find((h) => h.id === markId) : undefined;
+    onOpenInPaper(mark?.anchor.rects[0] ?? region.rects[0]);
   };
 
   // Every path into <ReactFlow> goes through parentsFirst, not only saving: a node re-parented into a

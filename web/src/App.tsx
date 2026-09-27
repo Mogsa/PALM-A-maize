@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
@@ -7,8 +7,10 @@ import { Glossary } from "./panels/Glossary";
 import { QuestionList } from "./panels/QuestionList";
 import { TemplateEditor } from "./panels/TemplateEditor";
 import { useUndoKeys } from "./panels/undoKeys";
+import { clampSplit } from "./model/paperView";
 import { PaperPicker } from "./PaperPicker";
 import { PaperScreen } from "./PaperScreen";
+import { bothColumns, SplitDivider } from "./SplitDivider";
 import { BoardProvider, useBoard } from "./state/BoardProvider";
 import { FilterBar } from "./tags/FilterBar";
 import { TagManager } from "./tags/TagManager";
@@ -43,15 +45,18 @@ type ShellProps = { papers: PaperSummary[]; paperId: string; onChoose: (id: stri
 
 /** Everything that depends on the open board. The view is the board's (D5): the one you left is the one that opens. */
 function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
-  const { state, dispatch, view: { view }, setView } = useBoard();
+  const { state, dispatch, view: { view, split: savedSplit }, setView } = useBoard();
+  const views = useRef<HTMLDivElement>(null);
+  const split = clampSplit(savedSplit);
   const [focusNode, setFocusNode] = useState<string | null>(null);
   const [focusRect, setFocusRect] = useState<PageRect | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   useUndoKeys(dispatch);
   const show = (next: View) => setView({ view: next });
-  const openOnBoard = (id: string) => { setFocusNode(id); show("board"); };
+  // In the both view each side is already in sight: going to the other only scrolls it there.
+  const openOnBoard = (id: string) => { setFocusNode(id); if (view !== "both") show("board"); };
   // A fresh object every time, so the paper scrolls again even for the same rect.
-  const openInPaper = (rect: PageRect) => { setFocusRect({ ...rect }); show("paper"); };
+  const openInPaper = (rect: PageRect) => { setFocusRect({ ...rect }); if (view !== "both") show("paper"); };
   /** A highlight opens in the paper, anything else on the board. */
   const onQuestion = (q: Question) => {
     if (q.kind !== "highlight") return openOnBoard(q.id);
@@ -66,6 +71,7 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
         <div className="paper-title"><PaperPicker papers={papers} value={paperId} onChange={onChoose} onAdded={onAdded} /></div>
         <div className="segmented" role="group" aria-label="View">
           <button aria-pressed={view === "paper"} onClick={() => show("paper")}>Paper</button>
+          <button aria-pressed={view === "both"} onClick={() => show("both")}>Both</button>
           <button aria-pressed={view === "board"} onClick={() => show("board")}>Board</button>
         </div>
         <div className="panel-buttons">
@@ -84,13 +90,14 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
       </div>
       <div className="workspace">
         {/* Both views stay mounted and the inactive one is only hidden: switching never moves anything (SPEC 4). */}
-        <div className="views">
-          <div className={`view ${view === "paper" ? "" : "inactive"}`}>
+        <div ref={views} className={`views ${view === "both" ? "both" : ""}`} style={view === "both" ? { gridTemplateColumns: bothColumns(split) } : undefined}>
+          <div className={`view paper-pane ${view === "board" ? "inactive" : ""}`}>
             <PaperScreen focus={focusRect} onFocusHandled={() => setFocusRect(null)} onOpenOnBoard={openOnBoard} />
           </div>
-          <div className={`view ${view === "board" ? "" : "inactive"}`}>
-            <BoardView active={view === "board"} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={openInPaper} />
+          <div className={`view board-pane ${view === "paper" ? "inactive" : ""}`}>
+            <BoardView active={view !== "paper"} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={openInPaper} />
           </div>
+          {view === "both" && <SplitDivider views={views} split={split} onCommit={(next) => setView({ split: next })} />}
         </div>
         {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} onJump={openInPaper} onOpenNote={openOnBoard} /></aside>}
       </div>

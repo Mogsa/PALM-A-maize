@@ -19,6 +19,11 @@ button { cursor: pointer; }
    the paper and take its clicks */
 .views { display: grid; min-height: 0; min-width: 0; }
 .view { grid-row: 1; grid-column: 1; min-height: 0; }
+/* both: the paper on the left, a divider, the board on the right; each pane keeps its own scroll and zoom */
+.views.both > .paper-pane { grid-column: 1; min-width: 0; }
+.views.both > .board-pane { grid-column: 3; min-width: 0; }
+.split-divider { grid-row: 1; grid-column: 2; cursor: col-resize; background: var(--border); touch-action: none; }
+.split-divider:hover, .split-divider:focus-visible { background: var(--border-strong); }
 .view.inactive, .view.inactive * { visibility: hidden !important; pointer-events: none !important; }
 .panel { width: 320px; overflow: auto; padding: 12px 14px; border-left: 1px solid var(--border); background: var(--surface); }
 .panel h3 { margin: 0 0 8px; font-size: var(--text-ui); font-weight: 600; }
