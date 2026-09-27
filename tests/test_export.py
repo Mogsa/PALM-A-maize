@@ -14,7 +14,7 @@ from paperboard.board_model import (
     NoteNode,
     QuoteSelector,
 )
-from paperboard.export import export_markdown, highlights_in
+from paperboard.export import _title, export_markdown, highlights_in
 from paperboard.geometry import contains_point, midpoint
 from paperboard.source_model import PageRect
 from paperboard.words import text_under
@@ -520,3 +520,13 @@ def test_an_ai_notes_text_keeps_its_label_under_the_sketch(resnet):
     board = Board(paper_id=doc.paper_id, nodes=[_note_node("n-ai", origin="ai")])
     md = export_markdown(doc, board, {"n-ai": "An answer.\n"}, pdf, tags=[], sketches={"n-ai"})
     assert "![sketch](notes/n-ai.svg)\n\n**AI:** An answer." in md
+
+
+def test_a_title_whose_first_line_is_a_bare_number_joins_the_next_line():
+    region = ChunkAnchor(rects=[PageRect(page=0, rect=(0.0, 0.0, 1.0, 1.0))],
+                         start=QuoteSelector(exact="5.1\nLearning rate\nWe set the rate"),
+                         end=QuoteSelector(exact="end"))
+    node = ChunkNode(id="n-x", type="chunk", position={"x": 0, "y": 0},
+                     data={"tags": [], "collapsed": False, "region": region.model_dump(),
+                           "blocks": _blocks("x")})
+    assert _title(node) == "5.1 Learning rate"
