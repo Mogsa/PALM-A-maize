@@ -133,8 +133,22 @@ def _is_heading(region: Region) -> bool:
         return False
     if text.isdigit():
         return False  # a bare page number the model promoted
-    # not a body sentence the model promoted; no real heading looks like one
-    return not (text[0].islower() or text.endswith("."))
+    if text[0].islower():
+        return False  # a body sentence the model promoted
+    # A trailing period marks a promoted sentence, except on a short numbered
+    # heading ending in a capitalised abbreviation: ross11a's "5.2 Super Mario Bros."
+    return not text.endswith(".") or _ends_in_capitalised_abbreviation(text)
+
+
+SHORT_HEADING_CHARS = 80
+
+
+def _ends_in_capitalised_abbreviation(text: str) -> bool:
+    """Numbered, short, and its last word capitalised: a sentence such as
+    "3 layers are used." ends in a lower-case word, a heading title does not."""
+    words = text.split()
+    return (parse_number(text)[0] is not None and len(text) <= SHORT_HEADING_CHARS
+            and len(words) > 1 and words[-1][0].isupper())
 
 
 def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section]:

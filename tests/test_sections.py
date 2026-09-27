@@ -1,4 +1,5 @@
 import pytest
+from conftest import MISSING_FIXTURE, SECTION_FIXTURES
 
 from paperboard.extract.pymupdf_layout import (
     Region,
@@ -192,3 +193,39 @@ def test_no_sections_extent_covers_another_sections_heading(paper_path):
                 if contains_point(extent_rect.rect, *midpoint):
                     violations.append((current.title, other.title, heading.page))
     assert not violations, violations
+
+
+@pytest.fixture(scope="module")
+def ross_sections():
+    path = SECTION_FIXTURES["ross11a"]
+    if not path.exists():
+        pytest.fail(MISSING_FIXTURE.format(path=path), pytrace=False)
+    return build_sections(*read_regions(path))
+
+
+def _numbers_on_page(sections, page):
+    return [s.number for s in sections if s.heading_rect.page == page]
+
+
+def test_ross11a_short_numbered_heading_ending_in_an_abbreviation_is_kept(ross_sections):
+    """"5.2 Super Mario Bros." is a section-header region; the trailing-period rule dropped it."""
+    assert "5.2" in _numbers_on_page(ross_sections, 5)
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "5 EXPERIMENTS and 5.1 Super Tux Kart sit mid-way inside a region the layout model "
+    "labelled 'picture' (75,236)-(546,422); no text region starts with them, so a "
+    "start-of-region fallback cannot reach them. Needs region splitting (owner decision)."))
+def test_ross11a_gives_sections_5_and_5_1_on_page_6(ross_sections):
+    assert {"5", "5.1", "5.2"} <= set(_numbers_on_page(ross_sections, 5))
+
+
+@pytest.mark.parametrize("text", [
+    "3 layers are used.",
+    "3 Layers Are Stacked In Every Block Of The Network We Describe As Shown In Figure Two.",
+])
+def test_a_numbered_sentence_ending_in_a_period_is_not_a_heading(text):
+    region = Region(page=1, rect=(0.0, 0.0, 100.0, 10.0), label="section-header",
+                    header_level=2, text=text)
+    page = PageInfo(index=1, width=612.0, height=792.0, rotation=0)
+    assert build_sections([page], [region]) == []

@@ -16,5 +16,12 @@
     "url": "https://arxiv.org/pdf/1412.6980v9",
     "sha256": "eab9c73ae2ceda884b94830bda99312254bac4806f6c9f045cbab90721ecda31",
     "bytes": 584641
+  },
+  "ross11a": {
+    "pmlr": "v15/ross11a",
+    "url": "https://proceedings.mlr.press/v15/ross11a/ross11a.pdf",
+    "sha256": "17bdd6e049e64f09010b322f9e2d4fb5c744c33ff7ac99b4c4561e39bd9082a7",
+    "bytes": 1174501,
+    "suite": "sections"
   }
 }
