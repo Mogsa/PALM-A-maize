@@ -90,6 +90,31 @@ test("in both, a cut on the paper lands on the board at once", async ({ page }) 
   await expect(both(page)).toHaveAttribute("aria-pressed", "true");
 });
 
+test("in both, Delete on an open mark removes the mark and leaves the selected card alone", async ({ page }) => {
+  await seedBoth(page);
+  await page.locator('.react-flow__node[data-id="n-a"]').click();
+  await expect(page.locator('.react-flow__node[data-id="n-a"]')).toHaveClass(/selected/);
+  const spans = page.locator('.react-pdf__Page[data-page-number="1"] .react-pdf__Page__textContent span');
+  await expect(spans.nth(12)).toBeVisible();
+  const a = (await spans.nth(10).boundingBox())!;
+  const b = (await spans.nth(12).boundingBox())!;
+  await page.mouse.move(a.x + 2, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width - 2, b.y + b.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await page.getByRole("button", { name: "Highlight", exact: true }).click();
+  await expect(page.locator(".overlay .mark").first()).toBeVisible();
+  const mark = (await page.locator(".overlay .mark").first().boundingBox())!;
+  await page.mouse.click(mark.x + mark.width / 2, mark.y + mark.height / 2);
+  await expect(page.getByRole("dialog", { name: "Mark" })).toBeVisible();
+  await page.keyboard.press("Delete");
+  await expect(page.locator(".overlay .mark")).toHaveCount(0);
+  await expect(page.locator('.react-flow__node[data-id="n-a"]')).toBeVisible();
+  await expect(page.locator(".notice")).toHaveText(/Saved v\d+/);
+  const board: Json = await (await page.request.get(`/api/papers/${resnet}/board`)).json();
+  expect(board.nodes.map((n: Json) => n.id)).toContain("n-a");
+});
+
 const firstPage = (page: Page) => page.locator('.react-pdf__Page[data-page-number="1"]');
 const noSidewaysScroll = (page: Page) => page.locator(".paper").evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
 
