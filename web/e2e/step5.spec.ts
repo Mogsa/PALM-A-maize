@@ -463,13 +463,13 @@ test("a reload returns to the same view and the same place in the paper (SPEC 11
   await expect.poll(async () => Math.abs((await paper.evaluate((el) => el.scrollTop)) - top)).toBeLessThan(3);
 });
 
-test("filtering to a first-pass tag shows only its pieces, and export writes them in either order (SPEC 11.4)", async ({ page }) => {
+test("filtering to one tag shows only its pieces, and export writes them in either order (SPEC 11.4)", async ({ page }) => {
   await seed(page, resnet, { nodes: [chunk("n-alpha", 40, 100, "Alpha claim text."), chunk("n-beta", 40, 500, "Beta other text.")] });
   await showBoard(page);
   const alpha = node(page, "n-alpha");
   await alpha.getByRole("button", { name: "Tags", exact: true }).click();
-  await alpha.getByLabel("pass 1", { exact: true }).check();
-  await page.locator(".filter-bar .chip", { hasText: "pass 1" }).click();
+  await alpha.getByLabel("question", { exact: true }).check();
+  await page.locator(".filter-bar .chip", { hasText: "question" }).click();
   await expect(node(page, "n-beta")).toBeHidden();
   await expect(alpha).toBeVisible();
 
