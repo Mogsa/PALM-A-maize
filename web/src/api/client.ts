@@ -52,7 +52,12 @@ export const api = {
   async addPaper(pdf: Blob, filename: string): Promise<AddPaperResult> {
     const form = new FormData();
     form.append("file", pdf, filename);
-    return parse<AddPaperResult>(await request("/api/papers", { method: "POST", body: form }));
+    const response = await request("/api/papers", { method: "POST", body: form });
+    if (response.ok) return response.json();
+    // A 413 may come from a proxy with no JSON body; a failure may be `{error: {code}}` or a bare `{code}`.
+    const body = await response.json().catch(() => null);
+    const error = body?.error ?? body ?? {};
+    throw new ApiError(response.status, error.code ?? "unknown", error.message ?? response.statusText);
   },
   getSource: (id: string) => call<Source>(`${paper(id)}/source`),
   reextract: (id: string) => send<ReextractResult>("POST", `${paper(id)}/extract`),

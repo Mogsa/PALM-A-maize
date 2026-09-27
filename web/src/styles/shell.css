@@ -40,6 +40,9 @@ button { cursor: pointer; }
   background-repeat: no-repeat; background-position: right 8px center;
 }
 .paper-title select:hover { border-color: var(--border); background-color: var(--surface-muted); }
+/* one line beside the picker while a PDF is added, or what adding it did */
+.picker-status { font-size: var(--text-ui-small); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picker-status.error { color: var(--moved); }
 
 .segmented { display: inline-flex; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface-muted); }
 .segmented button { padding: 4px 12px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--ink-muted); font-weight: 500; }
