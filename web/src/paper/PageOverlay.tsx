@@ -17,7 +17,8 @@ const px = (rect: Rect, scale: number) => ({
  *  used to capture pointer events, so text inside a cut could never be selected). Only the
  *  small tab at an outline's top-left corner takes clicks, to open it. */
 export function PageOverlay({ page, scale, board, source, onOutlineClick, onJump, onOpenNote }: Props) {
-  const chunks = board.nodes.filter((n): n is ChunkNode | FigureNode => n.type === "chunk" || n.type === "figure");
+  // Only the reader's own cuts are outlined: a piece split made (it has a source_id) is the paper's own structure.
+  const chunks = board.nodes.filter((n): n is ChunkNode | FigureNode => (n.type === "chunk" || n.type === "figure") && !n.data.source_id);
   return (
     <div className="overlay">
       {chunks.flatMap((node) => node.data.region.rects.filter((r) => r.page === page).map((r, i) => (
