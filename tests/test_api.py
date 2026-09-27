@@ -110,6 +110,24 @@ def test_upload_runs_extraction(tmp_path):
     assert client.get(f"/api/papers/{paper_id}/source").json()["sections"]
 
 
+def test_an_upload_that_is_not_a_pdf_is_415(tmp_path):
+    client = local_client(create_app(tmp_path))
+    response = _upload(client, b"<html>not a paper</html>")
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "not_pdf"
+    assert not (tmp_path / "papers").exists() or not any((tmp_path / "papers").iterdir())
+
+
+def test_an_upload_over_the_size_cap_is_413(tmp_path, monkeypatch):
+    import paperboard.api as api_module
+
+    monkeypatch.setattr(api_module, "MAX_UPLOAD_BYTES", 16)
+    client = local_client(create_app(tmp_path))
+    response = _upload(client, b"%PDF-1.4\n" + b"x" * 32)
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "too_large"
+
+
 def test_text_returns_a_selection_with_anchors(client, resnet_id):
     source = client.get(f"/api/papers/{resnet_id}/source").json()
     region = _first_text_region(source, 2)
