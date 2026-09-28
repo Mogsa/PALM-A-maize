@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api/client";
+import { AiProvider, useAi } from "./ai/AiProvider";
+import { AiStatus } from "./ai/AiStatus";
+import { aiGlossary } from "./ai/terms";
 import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
 import { CommandPalette } from "./commands/CommandPalette";
@@ -47,9 +50,10 @@ type SidePanelProps = { panel: Panel; onQuestion: (question: Question) => void; 
 
 /** The side panel's contents: one panel at a time, beside whichever view is open. */
 function SidePanel({ panel, onQuestion, onJump, onOpenNote }: SidePanelProps) {
+  const { ai, stale } = useAi();
   switch (panel) {
     case "questions": return <QuestionList onPick={onQuestion} />;
-    case "glossary": return <Glossary onJump={onJump} onOpenNote={onOpenNote} />;
+    case "glossary": return <Glossary onJump={onJump} onOpenNote={onOpenNote} ai={ai} aiStale={stale} />;
     case "export": return <ExportDialog />;
     case "tags": return <TagManager />;
     case "template": return <TemplateEditor />;
@@ -58,13 +62,31 @@ function SidePanel({ panel, onQuestion, onJump, onOpenNote }: SidePanelProps) {
 
 type ShellProps = { papers: PaperSummary[]; paperId: string; onChoose: (id: string) => void; onAdded: (id: string) => void };
 
-/** Everything that depends on the open board. The view is the board's (D5): the one you left is the one that opens. */
+/** Everything that depends on the open board. The view is the board's (D5): the one you left is the one that opens.
+ *  A thin wrapper so `openInPaper` exists before AiProvider (its `goTo`) is mounted. */
 function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
+  const { view: { view }, setView } = useBoard();
+  const [focusRect, setFocusRect] = useState<PageRect | null>(null);
+  const show = (next: View) => setView({ view: next });
+  // A fresh object every time, so the paper scrolls again even for the same rect.
+  const openInPaper = useCallback((rect: PageRect) => { setFocusRect({ ...rect }); if (view !== "both") show("paper"); }, [view]);   // eslint-disable-line react-hooks/exhaustive-deps -- show only calls setView
+  return (
+    <AiProvider goTo={openInPaper}>
+      <ShellBody papers={papers} paperId={paperId} onChoose={onChoose} onAdded={onAdded}
+                 focusRect={focusRect} setFocusRect={setFocusRect} openInPaper={openInPaper} />
+    </AiProvider>
+  );
+}
+
+type ShellBodyProps = ShellProps & {
+  focusRect: PageRect | null; setFocusRect: (r: PageRect | null) => void; openInPaper: (rect: PageRect) => void;
+};
+
+function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect, openInPaper }: ShellBodyProps) {
   const { state, dispatch, view: { view, split: savedSplit }, setView } = useBoard();
   const views = useRef<HTMLDivElement>(null);
   const split = clampSplit(savedSplit);
   const [focusNode, setFocusNode] = useState<string | null>(null);
-  const [focusRect, setFocusRect] = useState<PageRect | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [noteRequests, setNoteRequests] = useState(0);
   const [findRequest, setFindRequest] = useState<{ text: string } | null>(null);
@@ -75,7 +97,13 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
   const board = useBoard();
   const { tags } = useTags();
   const { questions } = useQuestions();
-  const terms = useMemo(() => glossary(state.board, termTagIds(tags)).length, [state.board, tags]);
+  const { ai, stale: aiStale } = useAi();
+  const readerTerms = useMemo(() => glossary(state.board, termTagIds(tags)), [state.board, tags]);
+  const aiTerms = useMemo(
+    () => (ai && !aiStale ? aiGlossary(ai, readerTerms.map((e) => e.term)) : []),
+    [ai, aiStale, readerTerms],
+  );
+  const terms = readerTerms.length + aiTerms.length;
   const [palette, setPalette] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
   const splitAction = useSplit();
@@ -85,8 +113,6 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
   const show = (next: View) => setView({ view: next });
   // In the both view each side is already in sight: going to the other only scrolls it there.
   const openOnBoard = (id: string) => { setFocusNode(id); if (view !== "both") show("board"); };
-  // A fresh object every time, so the paper scrolls again even for the same rect.
-  const openInPaper = (rect: PageRect) => { setFocusRect({ ...rect }); if (view !== "both") show("paper"); };
   /** A highlight opens in the paper, anything else on the board. */
   const onQuestion = (q: Question) => {
     if (q.kind !== "highlight") return openOnBoard(q.id);
@@ -112,6 +138,7 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
         </div>
         <input className="goal" aria-label="Reading goal" placeholder="Why am I reading this?" value={state.board.goal}
                onChange={(e) => dispatch({ type: "setGoal", goal: e.target.value })} />
+        <AiStatus />
         <div className="panel-buttons">
           <CountedButton panel="questions" open={panel} label="Questions" count={questions?.length ?? 0} onToggle={toggle} />
           <CountedButton panel="glossary" open={panel} label="Glossary" count={terms} onToggle={toggle} />
