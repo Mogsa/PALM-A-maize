@@ -455,14 +455,14 @@ def test_reextracting_an_unchanged_paper_re_finds_nothing(client, resnet_id):
 
 
 VIEW = {"view": "both", "paper_scroll": {"page": 2, "y": 40.0}, "active_tags": ["t-question"],
-        "viewport": {"x": 10.0, "y": 20.0, "zoom": 1.5}, "split": 0.3}
+        "viewport": {"x": 10.0, "y": 20.0, "zoom": 1.5}, "split": 0.3, "ai": False}
 
 
 def test_a_view_defaults_when_none_was_saved(client, resnet_id):
     response = client.get(f"/api/papers/{resnet_id}/view")
     assert response.status_code == 200
     assert response.json() == {"view": "paper", "paper_scroll": None, "active_tags": [],
-                               "viewport": None, "split": 0.4}
+                               "viewport": None, "split": 0.4, "ai": False}
 
 
 def test_a_view_is_put_and_read_back_without_touching_the_board(client, resnet_id):
