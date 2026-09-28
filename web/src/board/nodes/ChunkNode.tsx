@@ -31,6 +31,7 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const bodyContent = useMemo(() => ({ painted, open: peek.open, lines: peek.lines }), [painted, peek.open, peek.lines]);
   const offsets = useMarkOffsets(bodyRef, id, data.collapsed, bodyContent);
   const dimmed = (highlightId: string) => { const h = marks.find((m) => m.id === highlightId); return h ? markDimmed(active, h) : false; };
+  const tagsOf = (highlightId: string) => marks.find((m) => m.id === highlightId)?.tags ?? [];
   const title = reflow(data.region.start.exact, words).slice(0, 80);
   const page = data.region.rects[0].page + 1;
   const classes = ["node", "chunk", data.region.state, height !== undefined && !data.collapsed ? "sized" : "", overflowing ? "overflowing" : ""].filter(Boolean).join(" ");
@@ -47,7 +48,7 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
         <button className="quiet open-source" data-testid="open-source" title="Open in paper" aria-label="Open in paper">↗</button>
       </div>
       {!data.collapsed && <div className="node-body" ref={bodyRef}>
-        <PeekText peek={peek} side="before" /><ChunkBody painted={painted} dimmed={dimmed} /><PeekText peek={peek} side="after" />
+        <PeekText peek={peek} side="before" /><ChunkBody painted={painted} dimmed={dimmed} tagsOf={tagsOf} /><PeekText peek={peek} side="after" />
       </div>}
       {/* Every mark inside keeps a handle, painted or not, since an edge may end on it. */}
       {marks.map((h) => (data.collapsed
