@@ -3,6 +3,7 @@ import { useDismiss } from "../ui/useDismiss";
 import { api } from "../api/client";
 import { newId } from "../model/ids";
 import type { ChunkNode, Highlight, RecutMode } from "../model/types";
+import type { Reshape } from "../model/boardReducer";
 import { extraSelectionItems, type MenuItem } from "../commands/registry";
 import { newEdge } from "../model/links";
 import { newNote } from "../model/notes";
@@ -39,12 +40,15 @@ export function TextPopover({ selection, menuOpen = false, onClose }: { selectio
   useEffect(() => { if (!chunk) onClose(); }, [chunk, onClose]);   // undone or deleted meanwhile
   if (!chunk) return null;
 
-  const run = async (act: () => Promise<string | null>) => {
+  /** Runs an action that either succeeds with a value (handled by `onSuccess`) or fails to say why: a problem
+   *  the server reported on purpose, or an exception it threw. Shared by every action below, so the busy flag,
+   *  the try/catch and the "why it failed" message are written once. */
+  const run = async <T,>(act: () => Promise<{ value: T } | { problem: string }>, onSuccess: (value: T) => void) => {
     setBusy(true);
     try {
-      const problem = await act();
-      if (problem) setSaid({ about: selection, text: problem });
-      else { window.getSelection()?.removeAllRanges(); onClose(); }
+      const outcome = await act();
+      if ("problem" in outcome) setSaid({ about: selection, text: outcome.problem });
+      else onSuccess(outcome.value);
     } catch (failure) {
       console.error("board text action failed", failure);
       setSaid({ about: selection, text: (failure as { code?: string }).code === "quote_not_found" ? NOT_FOUND_MESSAGE : FAILED_MESSAGE });
@@ -52,41 +56,36 @@ export function TextPopover({ selection, menuOpen = false, onClose }: { selectio
       setBusy(false);
     }
   };
+  const closeAfter = () => { window.getSelection()?.removeAllRanges(); onClose(); };
   const mark = async (tagId: string | null): Promise<Highlight> => {
     const anchor = await api.highlightInChunk(paperId, chunk.data.region, selection.quote);
     return { id: newId("h"), tags: tagId ? [tagId] : [], anchor };
   };
-  const highlight = (tagId: string | null) => run(async () => {
-    dispatch({ type: "addHighlight", highlight: await mark(tagId) });
-    return null;
-  });
-  const recut = (mode: RecutMode) => run(async () => {
-    const plan = recutPlan(chunk, await api.recut(paperId, chunk.data.region, selection.quote, mode));
-    if (!plan) return NOTHING_TO_DIVIDE[mode];
-    dispatch({ type: "reshape", ...plan });
-    return null;
-  });
+  const highlight = (tagId: string | null) => run(
+    async () => ({ value: await mark(tagId) }),
+    (h) => { dispatch({ type: "addHighlight", highlight: h }); closeAfter(); },
+  );
+  const recut = (mode: RecutMode) => run<Reshape>(
+    async () => {
+      const plan = recutPlan(chunk, await api.recut(paperId, chunk.data.region, selection.quote, mode));
+      return plan ? { value: plan } : { problem: NOTHING_TO_DIVIDE[mode] };
+    },
+    (plan) => { dispatch({ type: "reshape", ...plan }); closeAfter(); },
+  );
   /** Add note: the mark and a note of the reader's own connected to it, one undo step. */
-  const addNote = () => run(async () => {
-    const h = await mark(null);
-    const note = newNote({ ...spotForNoteOn({ ...state.board, highlights: [...state.board.highlights, h] }, h.id), origin: "reader" });
-    dispatch({ type: "add", highlights: [h], nodes: [note], edges: [newEdge(h.id, note.id)] });
-    return null;
-  });
+  const addNote = () => run(
+    async () => ({ value: await mark(null) }),
+    (h) => {
+      const note = newNote({ ...spotForNoteOn({ ...state.board, highlights: [...state.board.highlights, h] }, h.id), origin: "reader" });
+      dispatch({ type: "add", highlights: [h], nodes: [note], edges: [newEdge(h.id, note.id)] });
+      closeAfter();
+    },
+  );
   /** Add tag and Ask elsewhere: the mark first; the popover stays open to show what comes next. */
-  const markThen = (then: "tag" | "ask") => void (async () => {
-    setBusy(true);
-    try {
-      const h = await mark(null);
-      dispatch({ type: "addHighlight", highlight: h });
-      setMade({ about: selection, mark: h, then });
-    } catch (failure) {
-      console.error("board text action failed", failure);
-      setSaid({ about: selection, text: (failure as { code?: string }).code === "quote_not_found" ? NOT_FOUND_MESSAGE : FAILED_MESSAGE });
-    } finally {
-      setBusy(false);
-    }
-  })();
+  const markThen = (then: "tag" | "ask") => void run(
+    async () => ({ value: await mark(null) }),
+    (h) => { dispatch({ type: "addHighlight", highlight: h }); setMade({ about: selection, mark: h, then }); },
+  );
   const menu: MenuItem[] = [
     { id: "add-tag", label: "Add tag", run: () => markThen("tag") },
     { id: "add-note", label: "Add note", run: () => void addNote() },
