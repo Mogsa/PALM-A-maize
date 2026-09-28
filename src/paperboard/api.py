@@ -1,6 +1,8 @@
 """Routes and nothing else. Every rule lives in the module it belongs to; this
 file turns HTTP into calls and exceptions into the one error shape."""
 
+import json
+import threading
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,10 +11,13 @@ from typing import Annotated, Literal
 import pymupdf
 from fastapi import FastAPI, File, Header, Query, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from paperboard.ai import WordNotHere, define_context, define_stream, run_pass, word_key
+from paperboard.ai_client import AiError, AnthropicClaude, ClaudeClient
+from paperboard.ai_model import AiFile
 from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
 from paperboard.blocks import chunk_blocks
 from paperboard.board_model import (
@@ -30,6 +35,7 @@ from paperboard.chunk_text import QuoteNotFound, highlight_in_chunk
 from paperboard.clips import DEFAULT_DPI, render_clip, render_etag
 from paperboard.export import ExportOrder, export_markdown
 from paperboard.extract import extract
+from paperboard.geometry import Rect
 from paperboard.recut import NotContiguous, RecutMode, join, recut
 from paperboard.sketch import SketchBody, SketchFile, sketch_svg
 from paperboard.snap import Selection, select
@@ -117,6 +123,28 @@ class JoinRequest(BaseModel):
     regions: list[ChunkAnchor] = Field(min_length=2)
 
 
+MAX_DEFINE_WORDS = 4
+
+
+class TextRange(BaseModel):
+    page: int = Field(ge=0)
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+
+
+class DefineRequest(BaseModel):
+    word: str = Field(min_length=1, max_length=80)
+    page: int = Field(ge=0)
+    rect: Rect
+    definition: TextRange | None = None
+
+    @model_validator(mode="after")
+    def _a_word_or_short_phrase(self) -> "DefineRequest":
+        if len(self.word.split()) > MAX_DEFINE_WORDS:
+            raise ValueError(f"define a word or a phrase of at most {MAX_DEFINE_WORDS} words")
+        return self
+
+
 def _error(status: int, code: str, message: str, **extra) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message, **extra}})
 
@@ -131,8 +159,12 @@ def _anchors(board: Board) -> dict[str, tuple]:
     return out
 
 
-def create_app(root: Path) -> FastAPI:
+def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     store = Store(root)
+    claude = claude or AnthropicClaude()   # built lazily: no credentials are read until a call
+    ai_passes: dict[str, str] = {}          # paper id -> "running" or "failed"; in memory only
+    ai_messages: dict[str, str] = {}
+    ai_lock = threading.Lock()
     app = FastAPI(title="paperboard", docs_url=None, redoc_url=None)
     # Bound to 127.0.0.1, but a page elsewhere can rebind its own name to that
     # address; it still sends its own name as Host, so refuse any other.
@@ -218,6 +250,10 @@ def create_app(root: Path) -> FastAPI:
     @app.exception_handler(NotContiguous)
     async def _not_neighbours(_: Request, exc: NotContiguous):
         return _error(422, "not_contiguous", str(exc))
+
+    @app.exception_handler(WordNotHere)
+    async def _word_not_here(_: Request, exc: WordNotHere):
+        return _error(422, "word_not_here", str(exc))
 
     @app.exception_handler(ValueError)
     async def _value(_: Request, exc: ValueError):
@@ -450,6 +486,86 @@ def create_app(root: Path) -> FastAPI:
         with opened(paper_id) as pdf:
             node, order = join(doc, pdf, body.regions)
         return {"node": node, "order": order}
+
+    # -- ai (spec B3) ---------------------------------------------------------
+
+    def ai_off(paper_id: str) -> JSONResponse | None:
+        if not store.read_view(paper_id).ai:
+            return _error(409, "ai_off", "AI help is off for this paper")
+        return None
+
+    def ai_status(paper_id: str, status: str, ai: AiFile | None) -> dict:
+        return {"status": status, "stale": bool(ai and store.ai_is_stale(paper_id, ai)),
+                "message": ai_messages.get(paper_id), "ai": ai.model_dump(mode="json", by_alias=True) if ai else None}
+
+    @app.get("/api/papers/{paper_id}/ai")
+    def get_ai(paper_id: str):
+        ai = store.read_ai(paper_id)
+        status = ai_passes.get(paper_id) or ("done" if ai and ai.reader else "none")
+        if ai is None and status == "none":
+            return _error(404, "ai_not_found", f"no AI pass for {paper_id}")
+        return ai_status(paper_id, status, ai)
+
+    @app.post("/api/papers/{paper_id}/ai")
+    def post_ai(paper_id: str):
+        if (refused := ai_off(paper_id)) is not None:
+            return refused
+        with ai_lock:
+            if ai_passes.get(paper_id) == "running":
+                return _error(409, "ai_running", "an AI pass is already running for this paper")
+            ai_passes[paper_id] = "running"
+            ai_messages.pop(paper_id, None)
+        doc = store.read_source(paper_id)
+        slots = [s.name for s in store.read_template().slots]
+        try:
+            with opened(paper_id) as pdf:
+                reader = run_pass(doc, pdf, slots, claude)
+        except (AiError, ValueError) as exc:
+            message = f"AI help could not run: {exc}"
+            ai_passes[paper_id], ai_messages[paper_id] = "failed", message
+            store.write_view(paper_id, store.read_view(paper_id).model_copy(update={"ai": False}))
+            return _error(502, "ai_failed", message)
+
+        def with_reader(current: AiFile | None) -> AiFile:
+            keep = current.defined if current and current.extracted_at == doc.extracted_at else {}
+            return AiFile(extracted_at=doc.extracted_at, reader=reader, defined=keep)
+
+        ai = store.update_ai(paper_id, with_reader)
+        ai_passes.pop(paper_id, None)
+        return ai_status(paper_id, "done", ai)
+
+    def ndjson(line: dict) -> bytes:
+        return (json.dumps(line) + "\n").encode()
+
+    @app.post("/api/papers/{paper_id}/ai/define")
+    def post_define(paper_id: str, body: DefineRequest):
+        if (refused := ai_off(paper_id)) is not None:
+            return refused
+        key = word_key(body.word)
+        saved = store.read_ai(paper_id)
+        if saved and key in saved.defined and not store.ai_is_stale(paper_id, saved):
+            return StreamingResponse(iter([ndjson({"done": saved.defined[key].model_dump(mode="json")})]),
+                                     media_type="application/x-ndjson")
+        doc = store.read_source(paper_id)
+        with opened(paper_id) as pdf:
+            context = define_context(doc, pdf, body.word, body.page, body.rect,
+                                     body.definition.model_dump() if body.definition else None)
+
+        def lines():
+            try:
+                for kind, value in define_stream(claude, body.word, context):
+                    if kind == "delta":
+                        yield ndjson({"delta": value})
+                    elif value is None:
+                        yield ndjson({"error": "AI help could not find this in the paper."})
+                    else:
+                        store.update_ai(paper_id, lambda cur, value=value: (cur or AiFile(extracted_at=doc.extracted_at)).model_copy(
+                            update={"defined": {**(cur.defined if cur else {}), key: value}}))
+                        yield ndjson({"done": value.model_dump(mode="json")})
+            except AiError as exc:
+                yield ndjson({"error": f"AI help could not run: {exc}"})
+
+        return StreamingResponse(lines(), media_type="application/x-ndjson")
 
     # -- tags ---------------------------------------------------------------
 
