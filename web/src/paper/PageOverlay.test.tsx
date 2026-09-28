@@ -81,3 +81,14 @@ describe("PageOverlay AI underlines", () => {
     expect(renderOverlay([]).container.querySelectorAll(".ai-term")).toHaveLength(0);
   });
 });
+
+describe("PageOverlay AI slot outlines", () => {
+  const renderWithOutlines = (outlines: { span: string; quote: string; at: { page: number; rect: [number, number, number, number] } | null }[]) =>
+    render(<PageOverlay page={0} scale={1} board={emptyBoard("p")} source={source} outlines={outlines}
+      onOutlineClick={() => undefined} onJump={() => undefined} onOpenNote={() => undefined} onOutlineGo={() => undefined} />);
+  it("outlines AI spans dashed on their page only", () => {
+    const outlines = [{ span: "p1-r1", quote: "q", at: { page: 0, rect: [0, 0, 10, 10] as [number, number, number, number] } }, { span: "p2-r1", quote: "q", at: { page: 1, rect: [0, 0, 10, 10] as [number, number, number, number] } }];
+    const { container } = renderWithOutlines(outlines);
+    expect(container.querySelectorAll(".ai-outline")).toHaveLength(1);
+  });
+});

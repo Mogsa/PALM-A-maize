@@ -6,10 +6,12 @@ export type MenuItem = { id: string; label: string; title?: string; run: () => v
 /** A ⌘K command: `keywords` are extra words it is found by. */
 export type Command = MenuItem & { keywords?: string };
 export type BoardHandle = ReturnType<typeof useBoard>;
-/** Words selected on the paper or on a card: what a selection's `›` list is about. */
+/** Words selected on the paper or on a card: what a selection's `›` list is about.
+ *  `openDefine`, when the caller can show an AI term card, opens one for a word or short phrase found here
+ *  (Part B, Task 12): only the paper wires this today, since only it holds a hover card to open. */
 export type SelectionTarget =
-  | { on: "paper"; text: string; rects: PageRect[]; at: DOMRect }
-  | { on: "card"; text: string; nodeId: string; quote: QuoteSelector; at: DOMRect };
+  | { on: "paper"; text: string; rects: PageRect[]; at: DOMRect; openDefine?: (term: string, at: PageRect) => void }
+  | { on: "card"; text: string; nodeId: string; quote: QuoteSelector; at: DOMRect; openDefine?: (term: string, at: PageRect) => void };
 export type CommandSource = (board: BoardHandle) => Command[];
 export type SelectionSource = (target: SelectionTarget, board: BoardHandle) => MenuItem[];
 

@@ -21,6 +21,7 @@ import { PaperView } from "./paper/PaperView";
 import { SelectionPopover } from "./paper/SelectionPopover";
 import { previewText } from "./paper/preview";
 import { useConnect } from "./paper/useConnect";
+import { useHoverCard } from "./paper/useHoverCard";
 import { useBoard } from "./state/BoardProvider";
 
 /** A selection waiting for a choice: dragged text, a Shift-drag rectangle ("area"), or a clicked heading (`section`).
@@ -40,6 +41,7 @@ type Props = {
 export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest, onFindHandled }: Props) {
   const board = useBoard();
   const { state, dispatch, source, paperId, view, setView } = board;
+  const hover = useHoverCard();
   const [pending, setPending] = useState<Pending | null>(null);
   const [openMark, setOpenMark] = useState<OpenMark | null>(null);
   const [markMenu, setMarkMenu] = useState<OpenMark | null>(null);
@@ -145,7 +147,10 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
       { id: "connect", label: "Connect", run: markThen((h) => connect.start(h.id)) },
       { id: "add-note", label: "Add note", run: markThen(addNoteOn) },
       { id: "ask", label: "Ask elsewhere", run: markThen((h) => setMarkMenu({ id: h.id, at: p.at })) },
-      ...extraSelectionItems({ on: "paper", text: p.text, rects: p.rects, at: p.at }, board),
+      ...extraSelectionItems({
+        on: "paper", text: p.text, rects: p.rects, at: p.at,
+        openDefine: (term, at) => hover.open(term, p.at, { kind: "aiTerm", term, at }),
+      }, board),
     ];
   };
 
@@ -163,7 +168,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
       <PaperView paperId={paperId} source={source} board={state.board} focus={jump ?? focus} onFocusHandled={onJumpHandled}
                  onSelect={onSelect} onClickPaper={onClickPaper} onMarkMenu={onMarkMenu} onDragSelection={onDragSelection} onOutlineClick={onOpenOnBoard}
                  connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark}
-                 paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} fit={view.view === "both"} />
+                 paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} fit={view.view === "both"} hover={hover} />
       {pending && selectionPopover(pending)}
       {find.query !== null && <FindPanel query={find.query} onQuery={find.edit} onPick={find.pick} onClose={find.close} />}
       <Hint id="drag-cut" when={Boolean(pending && !pending.section && pending.mode === "text") && view.view === "both"} />

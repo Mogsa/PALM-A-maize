@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "../api/client";
-import { registerCommands } from "../commands/registry";
+import { registerCommands, registerSelectionItems } from "../commands/registry";
 import type { PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
 import { aiCommands } from "./commands";
+import { defineAction } from "./defineAction";
 import { NO_AI, type AiFile, type AiStatus, type Definition, type SlotSpans } from "./types";
 
 /** How often the status is re-read while a pass started elsewhere (another tab, before a reload) runs. */
@@ -79,6 +80,13 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
 
   useEffect(() => registerCommands(() => aiCommands({ on: value.on, setOn: value.setOn, redo: value.redo })),
     [value.on, value.setOn, value.redo]);
+
+  // Define in the selection bar's › (Part B, Task 12): one word or a short phrase, when the caller wired an opener.
+  useEffect(() => registerSelectionItems((target) => {
+    const at = target.on === "paper" ? (target.rects[0] ?? null) : null;
+    const action = defineAction({ on: value.on, text: target.text, at, open: (term, at) => target.openDefine?.(term, at) });
+    return action ? [action] : [];
+  }), [value.on]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
