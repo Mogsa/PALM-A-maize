@@ -8,6 +8,7 @@ const source: Source = {
 };
 vi.mock("../../state/BoardProvider", () => ({ useBoard: () => ({ paperId: "p", source }) }));
 vi.mock("../../state/TagsProvider", () => ({ useTags: () => ({ byId: new Map([["t-q", { id: "t-q", name: "question", colour: "#7C3AED" }]]) }) }));
+vi.mock("../../ai/AiProvider", () => ({ useAi: () => ({ ai: null }) }));
 import { ChunkBody } from "./ChunkBody";
 
 afterEach(cleanup);

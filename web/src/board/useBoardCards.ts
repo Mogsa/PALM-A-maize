@@ -37,6 +37,11 @@ export function useBoardCards(source: Source, paperId: string, highlights: Highl
   const thing = (target: EventTarget | null): { el: Element; show: () => void } | null => {
     const ref = closest(target, REFERENCE);
     if (ref) return { el: ref, show: () => void showReference(ref) };
+    const aiWord = closest(target, "[data-ai-term]");
+    if (aiWord) {
+      const term = aiWord.getAttribute("data-ai-term")!;
+      return { el: aiWord, show: () => hover.open(aiWord, aiWord.getBoundingClientRect(), { kind: "aiTerm", term, at: null }) };
+    }
     const mark = closest(target, MARK);
     const id = mark?.getAttribute("data-highlight-id");
     const highlight = id ? highlights.find((h) => h.id === id) : undefined;

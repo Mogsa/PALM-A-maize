@@ -1,5 +1,7 @@
 import { useMemo } from "react";
 import { api, CLIP_DPI } from "../../api/client";
+import { useAi } from "../../ai/AiProvider";
+import { splitTerms } from "../../ai/splitTerms";
 import type { Source } from "../../model/types";
 import { markColour } from "../../paper/PageOverlay";
 import { splitReferences, type ReferencePart } from "../../paper/references";
@@ -20,12 +22,14 @@ function withReferences(painted: PaintedBlock[], source: Source): { block: Paint
   }));
 }
 
-function Plain({ parts }: { parts: ReferencePart[] }) {
+function Plain({ parts, terms }: { parts: ReferencePart[]; terms: string[] }) {
   return (
     <span>
       {parts.map((part, k) => (part.ref
         ? <span key={k} className="ref" tabIndex={0} data-ref-kind={part.ref.kind} data-ref-key={part.ref.key}>{part.text}</span>
-        : part.text))}
+        : splitTerms(part.text, terms).map((piece, j) => (piece.term
+          ? <span key={`${k}-${j}`} className="ai-term" tabIndex={0} data-ai-term={piece.term}>{piece.text}</span>
+          : <span key={`${k}-${j}`}>{piece.text}</span>))))}
     </span>
   );
 }
@@ -36,6 +40,8 @@ function Plain({ parts }: { parts: ReferencePart[] }) {
 export function ChunkBody({ painted, dimmed, tagsOf }: { painted: PaintedBlock[]; dimmed: (highlightId: string) => boolean; tagsOf: (highlightId: string) => string[] }) {
   const { paperId, source } = useBoard();
   const { byId } = useTags();
+  const { ai } = useAi();
+  const terms = useMemo(() => ai?.reader?.terms.map((t) => t.term) ?? [], [ai]);
   const blocks = useMemo(() => withReferences(painted, source), [painted, source]);
   return (
     <>
@@ -47,7 +53,7 @@ export function ChunkBody({ painted, dimmed, tagsOf }: { painted: PaintedBlock[]
             {runs.map((run, j) => (run.highlightId
               ? <mark key={j} data-highlight-id={run.highlightId} className={dimmed(run.highlightId) ? "dim" : undefined}
                       style={markColour(tagsOf(run.highlightId), byId)}>{run.text}</mark>
-              : <Plain key={j} parts={run.parts} />))}
+              : <Plain key={j} parts={run.parts} terms={terms} />))}
           </p>))}
     </>
   );
