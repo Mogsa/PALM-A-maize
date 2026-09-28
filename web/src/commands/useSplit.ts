@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FLUSH_FAILED_MESSAGE, useBoard } from "../state/BoardProvider";
 
 export const SPLIT_FAILED_MESSAGE = "Could not add the missing sections. Nothing was added.";
@@ -11,7 +11,10 @@ export function useSplit() {
   const { split } = useBoard();
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
+  const running = useRef(false);   // ⌘K keeps an older `run`, which sees a stale `busy`
   const run = async () => {
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     try {
       setSaid(splitDone(await split()));
@@ -19,6 +22,7 @@ export function useSplit() {
       console.error(SPLIT_FAILED_MESSAGE, failure);
       setSaid(splitFailed(failure));
     } finally {
+      running.current = false;
       setBusy(false);
     }
   };

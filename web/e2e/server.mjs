@@ -25,6 +25,8 @@ try {
   console.error("e2e server: extract failed", failure.message);
   process.exit(1);
 }
-server = spawn(paperboard, ["serve", "--root", root, "--web", join(repo, "web", "dist"), "--port", process.env.PAPERBOARD_API_PORT ?? "8765"], { stdio: "inherit" });
+// AI help answers from a canned file (test only, see paperboard/canned_claude.py): e2e never reaches the API.
+const env = { ...process.env, PAPERBOARD_FAKE_CLAUDE: join(repo, "web", "e2e", "fake-claude.json") };
+server = spawn(paperboard, ["serve", "--root", root, "--web", join(repo, "web", "dist"), "--port", process.env.PAPERBOARD_API_PORT ?? "8765"], { stdio: "inherit", env });
 server.on("error", (failure) => { console.error("e2e server: could not start paperboard", failure.message); process.exit(1); });
 server.on("exit", (code) => process.exit(code ?? 1));

@@ -20,6 +20,8 @@ type Ctx = {
   notes: NoteStore;
   /** How the paper is shown (view, scrolls, filter, split): not the board's, saved at `/view`. */
   view: PaperViewState; setView: (patch: Partial<PaperViewState>) => void;
+  /** Writes a view change still waiting for its debounce now: for a server call that reads view.json (AI help). */
+  flushView: () => Promise<void>;
   /** Saves any pending board change and waits for note writes: what export and split need first (SPEC 6).
    *  Rejects with FLUSH_FAILED_MESSAGE when the board or a note is still not saved. */
   flush: () => Promise<void>;
@@ -49,6 +51,7 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
       return next;
     });
   }, [viewPersistence]);
+  const flushView = useCallback(() => viewPersistence.flush(), [viewPersistence]);
 
   const latest = useRef(state);
   latest.current = state;
@@ -153,8 +156,8 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
   }, [paperId, source, flush, storeClips]);
 
   const words = useMemo(() => paperWords(source?.page_text ?? []), [source]);
-  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId, notes, view, setView, flush, split } : null),
-    [state, source, words, notice, paperId, notes, view, setView, flush, split]);
+  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId, notes, view, setView, flushView, flush, split } : null),
+    [state, source, words, notice, paperId, notes, view, setView, flushView, flush, split]);
   if (!value && failure) {
     return (
       <div className="loading load-failed" role="alert">

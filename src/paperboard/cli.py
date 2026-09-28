@@ -1,18 +1,24 @@
 """`paperboard extract` and `paperboard serve`."""
 
+import os
+from collections.abc import Mapping
 from pathlib import Path
 
 import typer
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from paperboard.ai_client import ClaudeClient
 from paperboard.api import create_app
+from paperboard.canned_claude import CannedClaude
 from paperboard.extract import extract
 from paperboard.store import atomic_write
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_WEB = Path("web") / "dist"
+# TEST ONLY: names a JSON answer for a canned Claude (e2e). Unset, serve talks to the real API.
+FAKE_CLAUDE_ENV = "PAPERBOARD_FAKE_CLAUDE"
 
 app = typer.Typer(help="Take a paper apart so its ideas can be laid out.")
 
@@ -28,10 +34,16 @@ def main() -> None:
     """
 
 
-def build_app(root: Path, web: Path = DEFAULT_WEB) -> FastAPI:
+def claude_from_env(env: Mapping[str, str]) -> ClaudeClient | None:
+    """TEST ONLY: the canned Claude FAKE_CLAUDE_ENV names, else None (the real one)."""
+    answer = env.get(FAKE_CLAUDE_ENV)
+    return CannedClaude(Path(answer)) if answer else None
+
+
+def build_app(root: Path, web: Path = DEFAULT_WEB, claude: ClaudeClient | None = None) -> FastAPI:
     """The API over the data folder `root`, plus the frontend build at `/` when
     `web/index.html` exists."""
-    application = create_app(root)
+    application = create_app(root, claude=claude)
     if (web / "index.html").exists():
         application.mount("/", StaticFiles(directory=web, html=True), name="web")
     else:
@@ -78,4 +90,4 @@ def serve_command(
     import uvicorn
 
     typer.echo(f"paperboard at http://{HOST}:{port}  (data: {root.resolve()}, web: {web.resolve()})")
-    uvicorn.run(build_app(root, web), host=HOST, port=port, log_level="warning")
+    uvicorn.run(build_app(root, web, claude_from_env(os.environ)), host=HOST, port=port, log_level="warning")

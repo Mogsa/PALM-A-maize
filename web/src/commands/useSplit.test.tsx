@@ -30,4 +30,14 @@ describe("Add missing sections (split, D16)", () => {
     split.mockRejectedValueOnce(new Error("500"));
     expect(await said()).toBe(SPLIT_FAILED_MESSAGE);
   });
+  it("does not run a second time while one is busy", async () => {
+    let finish: (n: number) => void = () => {};
+    split.mockReturnValueOnce(new Promise((r) => { finish = r; }));
+    const { result } = renderHook(() => useSplit());
+    let first: Promise<void> = Promise.resolve();
+    act(() => { first = result.current.run(); });
+    await act(() => result.current.run());
+    expect(split).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(0); await first; });
+  });
 });

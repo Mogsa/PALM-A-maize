@@ -62,6 +62,14 @@ def _term(raw: _RawTerm, spans: dict[str, Span]) -> AiTerm | None:
                   explanation=raw.explanation.strip() if grounds and raw.explanation.strip() else None)
 
 
+def _each_span_once(grounds: list[Ground]) -> list[Ground]:
+    """The first ground for each span, in order: a slot pointing at one span twice points at it once."""
+    first: dict[str, Ground] = {}
+    for ground in grounds:
+        first.setdefault(ground.span, ground)
+    return list(first.values())
+
+
 def ground_pass(raw: dict, spans: dict[str, Span], slot_names: list[str]) -> tuple[list[AiTerm], list[SlotSpans]]:
     """The model's answer with everything that fails the rule dropped. A wrong
     shape is a ValueError: the output is invalid, not partly true."""
@@ -72,7 +80,7 @@ def ground_pass(raw: dict, spans: dict[str, Span], slot_names: list[str]) -> tup
     terms = [t for t in (_term(r, spans) for r in parsed.terms) if t]
     where = []
     for slot in parsed.where_to_look:
-        kept = ground_all(slot.spans, spans)[:MAX_SLOT_SPANS]
+        kept = _each_span_once(ground_all(slot.spans, spans))[:MAX_SLOT_SPANS]
         if slot.slot in slot_names and kept:
             where.append(SlotSpans(slot=slot.slot, spans=kept))
     return terms, where

@@ -50,10 +50,18 @@ def test_a_term_with_nothing_grounded_at_all_is_dropped():
 
 
 def test_a_slot_keeps_at_most_three_spans_and_unknown_slots_are_dropped():
-    good = {"span": "p1-r1", "quote": "BN"}
-    _, where = ground_pass(_raw(where=[{"slot": "Problem", "spans": [good] * 5},
-                                       {"slot": "Not a slot", "spans": [good]}]), SPANS, SLOTS)
-    assert [s.slot for s in where] == ["Problem"] and len(where[0].spans) == 3
+    spans = {f"p1-r{i}": Span(f"p1-r{i}", 0, (0, 20 * i, 100, 20 * i + 20), "BN here.") for i in range(1, 6)}
+    grounds = [{"span": sid, "quote": "BN"} for sid in spans]
+    _, where = ground_pass(_raw(where=[{"slot": "Problem", "spans": grounds},
+                                       {"slot": "Not a slot", "spans": grounds}]), spans, SLOTS)
+    assert [s.slot for s in where] == ["Problem"] and [g.span for g in where[0].spans] == ["p1-r1", "p1-r2", "p1-r3"]
+
+
+def test_a_slot_names_each_span_once_before_it_is_cut():
+    same = {"span": "p1-r1", "quote": "BN"}
+    other = {"span": "p2-r3", "quote": "BN"}
+    _, where = ground_pass(_raw(where=[{"slot": "Problem", "spans": [same] * 4 + [other]}]), SPANS, SLOTS)
+    assert [g.span for g in where[0].spans] == ["p1-r1", "p2-r3"]
 
 
 def test_a_slot_with_nothing_grounded_is_dropped():

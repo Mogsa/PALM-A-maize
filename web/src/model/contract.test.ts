@@ -6,7 +6,7 @@ import { highlightsIn } from "./geometry";
 import { newId } from "./ids";
 import { defaultPaperView } from "./paperView";
 import {
-  emptyBoard, type Block, type Board, type BoardEdge, type ChunkNode, type ExportOrder, type ExportResult, type GroupData,
+  emptyBoard, type Block, type Board, type BoardEdge, type ChunkNode, type ExportResult, type GroupData,
   type Highlight, type NoteData, type PaperScroll, type Question, type Rect, type Selection, type SelectionMode, type Slot,
   type SplitDraft, type TagFile, type TemplateFile, type View,
 } from "./types";
@@ -30,11 +30,10 @@ const scroll: PaperScroll | null = defaultPaperView.paper_scroll;
 const slot: GroupData = { tags: [], name: "Main point", prompt: "In your own words?", tray: false };
 const origin: NoteData["origin"] = "reader";
 const mode: SelectionMode = "area";
-const order: ExportOrder = "template";
 const templateSlot: Slot = { name: "Problem", prompt: "Why?" };
 const shapes: [BoardEdge, Question, Selection["blocks"], SplitDraft["type"], TagFile["schema"], TemplateFile["slots"], ExportResult["path"], ResolvedEdge] | null = null;
 const action: BoardAction = { type: "addHighlight", highlight: mark };
-void [view, scroll, slot, origin, mode, order, templateSlot, shapes, action];
+void [view, scroll, slot, origin, mode, templateSlot, shapes, action];
 
 afterEach(() => vi.unstubAllGlobals());
 

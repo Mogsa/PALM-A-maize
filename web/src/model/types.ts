@@ -76,7 +76,6 @@ export type TemplateFile = { schema: 1; slots: TemplateSlot[] };
 export type Slot = TemplateSlot;
 
 export type Question = { id: string; kind: "highlight" | BoardNode["type"]; text: string };
-export type ExportOrder = "paper" | "template";
 /** `POST /export` returns `{path}` (addendum 6); `markdown` is read when the server also sends it. */
 export type ExportResult = { path: string; markdown?: string };
 /** A piece `POST /split` proposes: no id and no parentId; the client mints the id (addendum 6). */

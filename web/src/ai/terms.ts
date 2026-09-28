@@ -51,7 +51,8 @@ export function cardParts(readerParts: TermPart[], entry: AiEntry | null): (Term
 }
 
 /** AI terms the reader has not kept, for the Glossary's lighter rows (spec B4). */
-export function aiGlossary(ai: AiFile | null, keptTerms: string[]): { term: string; explanation: string | null }[] {
+export type AiGlossaryEntry = { term: string; explanation: string | null };
+export function aiGlossary(ai: AiFile | null, keptTerms: string[]): AiGlossaryEntry[] {
   const kept = new Set(keptTerms.map(wordKey));
   return (ai?.reader?.terms ?? [])
     .filter((t) => !kept.has(wordKey(t.term)))

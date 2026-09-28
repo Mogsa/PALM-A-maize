@@ -79,6 +79,17 @@ def test_sdk_errors_become_one_plain_ai_error(exc, code):
     assert err.value.code == code and str(err.value)
 
 
+def test_no_credentials_at_all_is_no_key():
+    with pytest.raises(AiError) as err:
+        AnthropicClaude(_Sdk(raises=TypeError("Could not resolve authentication method"))).read_paper("s", "p", {})
+    assert err.value.code == "no_key"
+
+
+def test_an_unrelated_type_error_is_not_hidden():
+    with pytest.raises(TypeError):
+        AnthropicClaude(_Sdk(raises=TypeError("bad argument"))).read_paper("s", "p", {})
+
+
 def test_define_streams_sonnet_low_effort_deltas():
     sdk = _Sdk(_message('{"explanation": "x", "grounds": []}'), deltas=['{"expl', 'anation": "x", "grounds": []}'])
     assert "".join(AnthropicClaude(sdk).define("s", "p", {})) == '{"explanation": "x", "grounds": []}'
