@@ -14,3 +14,8 @@
 .tag-dot.plain { background: var(--hl-solid); }
 .tag-dot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
 .tag-dot:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* a mark in its main tag's colour (spec A2): the tag's colour as a light wash, plain yellow with no tag */
+.overlay .mark[style*="--mark-colour"], .node mark[style*="--mark-colour"] { background: color-mix(in srgb, var(--mark-colour) 28%, transparent); }
+.overlay .mark .mark-extras { position: absolute; top: -5px; right: -4px; display: inline-flex; gap: 2px; }
+.overlay .mark .mark-extra { width: 7px; height: 7px; border-radius: var(--radius-pill); border: 1px solid var(--surface); }

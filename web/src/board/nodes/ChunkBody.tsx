@@ -1,8 +1,10 @@
 import { useMemo } from "react";
 import { api, CLIP_DPI } from "../../api/client";
 import type { Source } from "../../model/types";
+import { markColour } from "../../paper/PageOverlay";
 import { splitReferences, type ReferencePart } from "../../paper/references";
 import { useBoard } from "../../state/BoardProvider";
+import { useTags } from "../../state/TagsProvider";
 import type { PaintedBlock } from "../marks";
 
 /** GET /render pads every clip by this much (addendum 6); the image is that much bigger than the region. */
@@ -31,8 +33,9 @@ function Plain({ parts }: { parts: ReferencePart[] }) {
 /** A chunk as the page has it (D2): text as text with the marks painted, formulas, figures and tables as images of the
  *  paper as printed. Width and height are given so a loading image reserves its space and the card does not jump.
  *  A reference the paper can show is underlined, and hovering it shows the paper's own words there (D26). */
-export function ChunkBody({ painted, dimmed }: { painted: PaintedBlock[]; dimmed: (highlightId: string) => boolean }) {
+export function ChunkBody({ painted, dimmed, tagsOf }: { painted: PaintedBlock[]; dimmed: (highlightId: string) => boolean; tagsOf: (highlightId: string) => string[] }) {
   const { paperId, source } = useBoard();
+  const { byId } = useTags();
   const blocks = useMemo(() => withReferences(painted, source), [painted, source]);
   return (
     <>
@@ -42,7 +45,8 @@ export function ChunkBody({ painted, dimmed }: { painted: PaintedBlock[]; dimmed
                alt={block.label ?? "part of the paper"} loading="lazy" draggable={false} />
         : <p key={i} className="block-text nodrag">
             {runs.map((run, j) => (run.highlightId
-              ? <mark key={j} data-highlight-id={run.highlightId} className={dimmed(run.highlightId) ? "dim" : undefined}>{run.text}</mark>
+              ? <mark key={j} data-highlight-id={run.highlightId} className={dimmed(run.highlightId) ? "dim" : undefined}
+                      style={markColour(tagsOf(run.highlightId), byId)}>{run.text}</mark>
               : <Plain key={j} parts={run.parts} />))}
           </p>))}
     </>

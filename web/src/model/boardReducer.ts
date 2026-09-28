@@ -27,6 +27,7 @@ type EditAction =
   | ({ type: "remove" } & Removal)
   | { type: "removeNode"; id: string }
   | { type: "setTags"; target: TagTarget; id: string; tags: string[] }
+  | { type: "setNodeTags"; tags: Record<string, string[]> }
   | ({ type: "reshape" } & Reshape);
 
 export type BoardAction =
@@ -137,6 +138,11 @@ function setTags(board: Board, target: TagTarget, id: string, tags: string[]): B
   return { ...board, edges: board.edges.map((e) => (e.id === id ? { ...e, data: { ...e.data, tags } } : e)) };
 }
 
+/** Several nodes retagged at once (● on a multi-selection): one undo step. */
+function setNodeTags(board: Board, tags: Record<string, string[]>): Board {
+  return { ...board, nodes: board.nodes.map((n) => (n.id in tags ? ({ ...n, data: { ...n.data, tags: tags[n.id] } } as BoardNode) : n)) };
+}
+
 function applyEdit(board: Board, action: EditAction): Board {
   switch (action.type) {
     case "add": return addThings(board, action);
@@ -147,6 +153,7 @@ function applyEdit(board: Board, action: EditAction): Board {
     case "remove": return removeThings(board, action);
     case "removeNode": return removeThings(board, { nodeIds: [action.id] });
     case "setTags": return setTags(board, action.target, action.id, action.tags);
+    case "setNodeTags": return setNodeTags(board, action.tags);
     case "reshape": return reshape(board, action);
   }
 }

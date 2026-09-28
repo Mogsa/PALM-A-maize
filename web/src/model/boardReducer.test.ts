@@ -330,3 +330,14 @@ describe("figure clips are outside undo", () => {
     expect(run(s, { type: "undo" }).board.nodes[0].data).toMatchObject({ clip: "clips/n-f.png" });
   });
 });
+
+describe("setNodeTags (spec A3)", () => {
+  it("setNodeTags retags several nodes as one undo step (spec A3, ● on a multi-selection)", () => {
+    const other: BoardNode = { ...note, id: "n-2" };
+    let s = boardReducer(initialBoardState, { type: "load", board: { ...emptyBoard("p"), nodes: [note, other] } });
+    s = boardReducer(s, { type: "setNodeTags", tags: { "n-1": ["t-q"], "n-2": ["t-q", "t-s"] } });
+    expect(s.board.nodes.map((n) => n.data.tags)).toEqual([["t-q"], ["t-q", "t-s"]]);
+    s = boardReducer(s, { type: "undo" });
+    expect(s.board.nodes.map((n) => n.data.tags)).toEqual([[], []]);
+  });
+});

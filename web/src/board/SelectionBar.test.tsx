@@ -4,6 +4,7 @@ import type { BoardNode, ChunkNode, Rect } from "../model/types";
 
 const dispatch = vi.fn();
 vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ dispatch, paperId: "p" }) }));
+vi.mock("../state/TagsProvider", () => ({ useTags: () => ({ tags: [{ id: "t-q", name: "question", colour: "#7C3AED" }] }) }));
 vi.mock("../api/client", () => ({ api: { join: vi.fn() } }));
 import { api } from "../api/client";
 import { SelectionBar } from "./SelectionBar";
@@ -23,7 +24,7 @@ describe("SelectionBar (addendum 4.10)", () => {
     const { findByRole, queryByRole } = render(<SelectionBar selected={[a, b]} onGroup={vi.fn()} />);
     fireEvent.click(await findByRole("button", { name: "Join" }));
     expect(api.join).toHaveBeenCalledWith("p", [a.data.region, b.data.region]);
-    expect(queryByRole("button", { name: "Group" })).toBeNull();
+    expect(queryByRole("button", { name: "Group" })).not.toBeNull();
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: "reshape", removeIds: ["n-a"] }));
   });
   it("offers Group instead for chunks that are not neighbours", async () => {
@@ -47,5 +48,12 @@ describe("SelectionBar (addendum 4.10)", () => {
   it("shows nothing for one piece", () => {
     const { container } = render(<SelectionBar selected={[chunk("n-a", 0)]} onGroup={vi.fn()} />);
     expect(container.innerHTML).toBe("");
+  });
+  it("● colours every selected piece as one step", () => {
+    const a = chunk("n-a", 0), b = { ...chunk("n-b", 300), data: { ...chunk("n-b", 300).data, tags: ["t-x", "t-y"] } };
+    vi.mocked(api.join).mockResolvedValue(null);
+    const { getByRole } = render(<SelectionBar selected={[a, b]} onGroup={vi.fn()} />);
+    fireEvent.click(getByRole("button", { name: "question" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "setNodeTags", tags: { "n-a": ["t-q"], "n-b": ["t-q", "t-y"] } });
   });
 });

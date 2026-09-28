@@ -13,6 +13,7 @@ vi.mock("../BoardActions", () => ({ useBoardActions: () => actions }));
 vi.mock("@xyflow/react", () => ({ Handle: () => null, NodeResizer: () => null, Position: { Left: "left", Right: "right" } }));
 vi.mock("./NodeTags", () => ({ NodeTags: () => null }));
 vi.mock("./CollapseToggle", () => ({ CollapseToggle: () => null }));
+vi.mock("../CardBar", () => ({ CardBar: () => null, useMainTagStyle: () => ({ className: "" }) }));
 import { NoteNode } from "./NoteNode";
 
 const props = { id: "n-1", data: { tags: [], collapsed: false, note: "notes/n-1.md" }, selected: false, width: 240, height: 120 } as unknown as NodeProps<NoteNodeType>;

@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { emptyBoard, type ChunkNode, type Source } from "../model/types";
 
 vi.mock("./PageMargin", () => ({ Margin: () => null }));
+vi.mock("../state/TagsProvider", () => ({
+  useTags: () => ({ byId: new Map([["t-q", { id: "t-q", name: "question", colour: "#7C3AED" }], ["t-s", { id: "t-s", name: "supports", colour: "#15803D" }]]) }),
+}));
 import { PageOverlay } from "./PageOverlay";
 
 const q = { exact: "x", prefix: "", suffix: "" };
@@ -46,5 +49,24 @@ describe("PageOverlay cut ruler", () => {
     expect(container.querySelectorAll(".cut-tint")).toHaveLength(1);
     fireEvent.click(stretch);
     expect(onOpen).toHaveBeenCalledWith("n-cut");
+  });
+});
+
+describe("PageOverlay marks (spec A2)", () => {
+  const mark = (tags: string[]) => ({ id: "h-1", tags, anchor: { rects: [{ page: 0, rect: [0, 0, 10, 10] as [number, number, number, number] }], quote: q, position: 0, state: "anchored" as const } });
+  const drawMark = (tags: string[]) => render(<PageOverlay page={0} scale={1} board={{ ...emptyBoard("p"), highlights: [mark(tags)] }} source={source}
+    onOutlineClick={vi.fn()} onJump={() => undefined} onOpenNote={() => undefined} />);
+  it("paints a mark in its main tag's colour, and plain yellow with no tag", () => {
+    const { container, unmount } = drawMark(["t-q"]);
+    expect((container.querySelector(".mark") as HTMLElement).style.getPropertyValue("--mark-colour")).toBe("#7C3AED");
+    unmount();
+    const plain = drawMark([]);
+    expect((plain.container.querySelector(".mark") as HTMLElement).style.getPropertyValue("--mark-colour")).toBe("");
+  });
+  it("shows each extra tag as a small chip and leaves the colour alone", () => {
+    const { container } = drawMark(["t-q", "t-s"]);
+    const chips = container.querySelectorAll(".mark-extras .mark-extra");
+    expect(chips).toHaveLength(1);
+    expect((chips[0] as HTMLElement).title).toBe("supports");
   });
 });

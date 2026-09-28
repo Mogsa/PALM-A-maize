@@ -7,6 +7,7 @@ const source: Source = {
   figures: [{ id: "fig-4", kind: "figure", label: "Figure 4", caption: "Figure 4. Training.", caption_rect: null, rect: { page: 4, rect: [80, 247, 515, 394] }, confidence: "region" }],
 };
 vi.mock("../../state/BoardProvider", () => ({ useBoard: () => ({ paperId: "p", source }) }));
+vi.mock("../../state/TagsProvider", () => ({ useTags: () => ({ byId: new Map([["t-q", { id: "t-q", name: "question", colour: "#7C3AED" }]]) }) }));
 import { ChunkBody } from "./ChunkBody";
 
 afterEach(cleanup);
@@ -19,12 +20,17 @@ describe("ChunkBody (D26): references the paper can show are underlined and focu
       { text: "shown in Fig. 4 and Fig. 2, and ", highlightId: null },
       { text: "Figure 4 marked", highlightId: "h-1" },
     ] }];
-    const { container } = render(<ChunkBody painted={painted} dimmed={() => false} />);
+    const { container } = render(<ChunkBody painted={painted} dimmed={() => false} tagsOf={() => []} />);
     const refs = container.querySelectorAll(".ref");
     expect(Array.from(refs).map((r) => r.textContent)).toEqual(["Fig. 4"]);
     expect(refs[0].getAttribute("data-ref-kind")).toBe("figure");
     expect(refs[0].getAttribute("data-ref-key")).toBe("4");
     expect(refs[0].getAttribute("tabindex")).toBe("0");
     expect(container.querySelector("p")!.textContent).toBe("shown in Fig. 4 and Fig. 2, and Figure 4 marked");
+  });
+  it("paints a mark on a card in its main tag's colour (spec A2)", () => {
+    const painted = [{ block, runs: [{ text: "marked", highlightId: "h-1" }] }];
+    const { container } = render(<ChunkBody painted={painted} dimmed={() => false} tagsOf={() => ["t-q"]} />);
+    expect((container.querySelector("mark") as HTMLElement).style.getPropertyValue("--mark-colour")).toBe("#7C3AED");
   });
 });
