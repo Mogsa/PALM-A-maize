@@ -23,6 +23,7 @@ from paperboard.ai_client import (
     READER_EFFORT,
     READER_MODEL,
     AiError,
+    ReadResult,
 )
 
 CLAUDE_EXE = "claude"
@@ -134,14 +135,12 @@ class ClaudeCodeClaude:
         self._env = env
         self._define_timeout = define_timeout
         self._stderr_factory = stderr_factory   # a real file, never a pipe: see define()
-        self.last_raw: str | None = None
 
     def _child_env(self) -> dict[str, str]:
         env = os.environ if self._env is None else self._env
         return {k: v for k, v in env.items() if k not in STRIPPED_ENV}
 
-    def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
-        self.last_raw = None
+    def read_paper(self, system: str, prompt: str, schema: dict) -> ReadResult:
         argv = _argv(READER_MODEL, READER_EFFORT, system, schema, stream=False)
         with tempfile.TemporaryDirectory(prefix="paperboard-claude-") as cwd:
             try:
@@ -151,14 +150,13 @@ class ClaudeCodeClaude:
                 raise AiError("timeout", "Claude Code took longer than 10 minutes") from exc
             except FileNotFoundError as exc:
                 raise AiError("no_claude", "the `claude` command was not found") from exc
-        self.last_raw = done.stdout
         try:
             result = json.loads(done.stdout)
         except json.JSONDecodeError as exc:
             if done.returncode != 0:
                 raise _failure(done.stderr or done.stdout) from exc
             raise AiError("invalid_output", "Claude Code's output was not valid JSON") from exc
-        return _structured(result)
+        return ReadResult(_structured(result), done.stdout)
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
         argv = _argv(DEFINER_MODEL, DEFINER_EFFORT, system, schema, stream=True)

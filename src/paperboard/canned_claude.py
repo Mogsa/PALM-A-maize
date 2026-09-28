@@ -9,6 +9,8 @@ import json
 from collections.abc import Iterator
 from pathlib import Path
 
+from paperboard.ai_client import ReadResult
+
 
 class CannedClaude:
     route = "canned"
@@ -17,11 +19,9 @@ class CannedClaude:
         answer = json.loads(answer_file.read_text(encoding="utf-8"))
         self.paper: dict = answer.get("read_paper", {"terms": [], "where_to_look": []})
         self.deltas: list[str] = answer.get("define", [])
-        self.last_raw: str | None = None
 
-    def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
-        self.last_raw = json.dumps(self.paper)
-        return self.paper
+    def read_paper(self, system: str, prompt: str, schema: dict) -> ReadResult:
+        return ReadResult(self.paper, json.dumps(self.paper))
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
         yield from self.deltas

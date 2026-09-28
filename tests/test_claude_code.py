@@ -128,7 +128,8 @@ def test_read_strips_api_keys_runs_in_a_fresh_empty_dir_with_a_timeout():
 
 def test_read_unwraps_the_structured_output_from_the_envelope():
     run = FakeRun(envelope(structured_output={"terms": [], "where_to_look": []}))
-    assert ClaudeCodeClaude(run=run, env=ENV).read_paper("S", "p", SCHEMA) == {"terms": [], "where_to_look": []}
+    read = ClaudeCodeClaude(run=run, env=ENV).read_paper("S", "p", SCHEMA)
+    assert read.answer == {"terms": [], "where_to_look": []}
 
 
 @pytest.mark.parametrize("run, code", [
@@ -224,11 +225,10 @@ def test_define_uses_sonnet_low_stream_json_stdin_stripped_env_and_a_fresh_dir()
     assert DEFINE_TIMEOUT == 60
 
 
-def test_read_records_the_raw_text_it_received():
+def test_read_returns_the_raw_text_it_received_alongside_the_answer():
     run = FakeRun(envelope(structured_output={"terms": [], "where_to_look": []}))
-    client = ClaudeCodeClaude(run=run, env=ENV)
-    client.read_paper("S", "p", SCHEMA)
-    assert json.loads(client.last_raw) == json.loads(run.stdout)
+    read = ClaudeCodeClaude(run=run, env=ENV).read_paper("S", "p", SCHEMA)
+    assert json.loads(read.raw) == json.loads(run.stdout)
 
 
 def test_define_never_uses_a_pipe_for_stderr_so_the_child_cannot_block_on_it():

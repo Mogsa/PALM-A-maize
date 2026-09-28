@@ -4,6 +4,7 @@
 import json
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Protocol
 
 import anthropic
@@ -22,16 +23,23 @@ class AiError(Exception):
         self.code = code
 
 
+@dataclass(frozen=True)
+class ReadResult:
+    """A read_paper call's answer together with the raw text it came from, for
+    the AI log (spec B3). Bundled in one return value, never on the client
+    instance: the client is shared and calls can run concurrently (a Define
+    alongside a pass), so nothing about one call may be read off shared state
+    after another call has started."""
+
+    answer: dict
+    raw: str | None
+
+
 class ClaudeClient(Protocol):
     # Which route answered, for the AI log (spec B3): "api", "claude-code" or "canned".
     route: str
-    # The model's raw answer text (or JSON) for the last read_paper call, exactly
-    # as received, or None if none has completed. The AI log reads this right
-    # after read_paper returns or raises. Define needs no such attribute: its
-    # caller already assembles the raw text from the deltas it streams.
-    last_raw: str | None
 
-    def read_paper(self, system: str, prompt: str, schema: dict) -> dict: ...
+    def read_paper(self, system: str, prompt: str, schema: dict) -> ReadResult: ...
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]: ...
 
@@ -40,12 +48,11 @@ class NoClaude:
     """What serve uses when there is neither an API key nor Claude Code: every call fails plainly."""
 
     route = "api"
-    last_raw: str | None = None
 
     def _fail(self):
         raise AiError("no_claude", "no Claude available: log in to Claude Code, or save an API key")
 
-    def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
+    def read_paper(self, system: str, prompt: str, schema: dict) -> ReadResult:
         self._fail()
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
@@ -96,7 +103,6 @@ class AnthropicClaude:
 
     def __init__(self, sdk: anthropic.Anthropic | None = None):
         self._sdk = sdk
-        self.last_raw: str | None = None
 
     def _client(self) -> anthropic.Anthropic:
         if self._sdk is None:
@@ -110,14 +116,12 @@ class AnthropicClaude:
             output_config=_output_config(effort, schema),
         )
 
-    def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
-        self.last_raw = None
+    def read_paper(self, system: str, prompt: str, schema: dict) -> ReadResult:
         with _plain_errors():  # noqa: SIM117 -- kept separate: one guards SDK errors, the other is the stream
             with self._stream(READER_MODEL, READER_MAX_TOKENS, READER_EFFORT, system, prompt, schema) as stream:
                 message = stream.get_final_message()
         text = _final_text(message)
-        self.last_raw = text
-        return _json(text)
+        return ReadResult(_json(text), text)
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
         with _plain_errors():  # noqa: SIM117 -- kept separate: one guards SDK errors, the other is the stream

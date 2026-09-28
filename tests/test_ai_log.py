@@ -186,3 +186,49 @@ def test_two_concurrent_appends_do_not_interleave(store_root, paper):
     assert len(lines) == 20
     for line in lines:
         json.loads(line)   # every line parses on its own: none is a fragment of another
+
+
+def test_a_pass_and_a_define_running_concurrently_each_log_their_own_raw(store_root, define_setup):
+    """The client is shared across requests. A Define for one word must never
+    end up logging the whole-paper pass's raw answer, or vice versa, even when
+    the two run at the same time on that one client instance."""
+    from paperboard.ai_client import ReadResult
+
+    store, pid, span, word = define_setup
+    with pymupdf.open(store.pdf_path(pid)) as pdf:
+        spans = paper_spans(store.read_source(pid), pdf)
+    pass_span = next(s for s in spans if s.id != span.id)
+    pass_answer = _answer(pass_span)
+    define_answer = _define_answer(span)
+
+    entered, release = threading.Event(), threading.Event()
+
+    class Interleaved:
+        route = "api"
+
+        def read_paper(self, system, prompt, schema):
+            entered.set()
+            release.wait(5)   # blocked here while the Define below runs to completion
+            return ReadResult(pass_answer, json.dumps(pass_answer))
+
+        def define(self, system, prompt, schema):
+            yield define_answer
+
+    claude = Interleaved()
+    client = _client(store_root, claude)
+    _turn_on(client, pid)
+
+    pass_thread = threading.Thread(target=client.post, args=(f"/api/papers/{pid}/ai",))
+    pass_thread.start()
+    assert entered.wait(5)
+
+    _post(client, pid, word)   # completes, and logs, while the pass is still inside read_paper
+
+    release.set()
+    pass_thread.join(5)
+
+    lines = _lines(store, pid)
+    assert len(lines) == 2
+    by_kind = {entry["kind"]: entry for entry in lines}
+    assert json.loads(by_kind["read"]["raw"]) == pass_answer
+    assert by_kind["define"]["raw"] == define_answer

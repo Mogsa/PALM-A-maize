@@ -81,26 +81,26 @@ def run_pass(doc: SourceDocument, pdf: pymupdf.Document, slot_names: list[str], 
     spans = paper_spans(doc, pdf)
     prompt = pass_prompt(spans, slot_names)
 
-    def _log(grounded, error):
+    def _log(raw, grounded, error):
         if on_log:
-            on_log(log_entry("read", claude, READER_MODEL, READER_SYSTEM, prompt, claude.last_raw,
+            on_log(log_entry("read", claude, READER_MODEL, READER_SYSTEM, prompt, raw,
                              grounded, error, doc.extracted_at))
 
     try:
-        raw = claude.read_paper(READER_SYSTEM, prompt, PASS_SCHEMA)
+        read = claude.read_paper(READER_SYSTEM, prompt, PASS_SCHEMA)
     except AiError as exc:
-        _log(None, exc)
+        _log(None, None, exc)
         raise
     try:
-        terms, where = ground_pass(raw, {s.id: s for s in spans}, slot_names)
+        terms, where = ground_pass(read.answer, {s.id: s for s in spans}, slot_names)
     except ValueError as exc:
         err = AiError("invalid_output", str(exc))
-        _log(None, err)
+        _log(read.raw, None, err)
         raise err from exc
     pages = words_by_page(pdf)
     terms = [t.model_copy(update={"occurrences": term_occurrences(t.term, pages)}) for t in terms]
     reader = ReaderPass(model=READER_MODEL, made_at=datetime.now(UTC), terms=terms, where_to_look=where)
-    _log(reader.model_dump(mode="json"), None)
+    _log(read.raw, reader.model_dump(mode="json"), None)
     return reader
 
 

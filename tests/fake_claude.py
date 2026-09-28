@@ -3,7 +3,7 @@
 import json
 from collections.abc import Iterator
 
-from paperboard.ai_client import AiError
+from paperboard.ai_client import AiError, ReadResult
 
 
 class FakeClaude:
@@ -14,14 +14,12 @@ class FakeClaude:
         self.error = error
         self.route = route
         self.calls: list[tuple[str, str]] = []
-        self.last_raw: str | None = None
 
-    def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
+    def read_paper(self, system: str, prompt: str, schema: dict) -> ReadResult:
         self.calls.append(("read_paper", prompt))
         if self.error:
             raise self.error
-        self.last_raw = json.dumps(self.paper)
-        return self.paper
+        return ReadResult(self.paper, json.dumps(self.paper))
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
         self.calls.append(("define", prompt))
