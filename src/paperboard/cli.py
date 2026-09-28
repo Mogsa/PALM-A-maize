@@ -1,16 +1,19 @@
 """`paperboard extract` and `paperboard serve`."""
 
 import os
-from collections.abc import Mapping
+import shutil
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
+import anthropic
 import typer
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from paperboard.ai_client import ClaudeClient
+from paperboard.ai_client import AnthropicClaude, ClaudeClient, NoClaude
 from paperboard.api import create_app
 from paperboard.canned_claude import CannedClaude
+from paperboard.claude_code import CLAUDE_EXE, ClaudeCodeClaude
 from paperboard.extract import extract
 from paperboard.store import atomic_write
 
@@ -19,6 +22,8 @@ DEFAULT_PORT = 8765
 DEFAULT_WEB = Path("web") / "dist"
 # TEST ONLY: names a JSON answer for a canned Claude (e2e). Unset, serve talks to the real API.
 FAKE_CLAUDE_ENV = "PAPERBOARD_FAKE_CLAUDE"
+API_KEY_ENV = "ANTHROPIC_API_KEY"
+KEY_FILE = Path.home() / ".config" / "paperboard" / "anthropic_key"
 
 app = typer.Typer(help="Take a paper apart so its ideas can be laid out.")
 
@@ -38,6 +43,28 @@ def claude_from_env(env: Mapping[str, str]) -> ClaudeClient | None:
     """TEST ONLY: the canned Claude FAKE_CLAUDE_ENV names, else None (the real one)."""
     answer = env.get(FAKE_CLAUDE_ENV)
     return CannedClaude(Path(answer)) if answer else None
+
+
+def _saved_key(env: Mapping[str, str], key_file: Path) -> str | None:
+    """An API key from the env, else from the key file. Never logged."""
+    key = env.get(API_KEY_ENV, "").strip()
+    if not key and key_file.is_file():
+        key = key_file.read_text(encoding="utf-8").strip()
+    return key or None
+
+
+def choose_claude(env: Mapping[str, str], key_file: Path = KEY_FILE,
+                  which: Callable[[str], str | None] = shutil.which) -> tuple[ClaudeClient, str]:
+    """The Claude serve uses, and one line saying which: canned (tests) > API key > Claude Code > none."""
+    canned = claude_from_env(env)
+    if canned:
+        return canned, "AI help: canned answers (test only)"
+    key = _saved_key(env, key_file)
+    if key:
+        return AnthropicClaude(anthropic.Anthropic(api_key=key)), "AI help: your API key"
+    if which(CLAUDE_EXE):
+        return ClaudeCodeClaude(), "AI help: your Claude Code login"
+    return NoClaude(), "AI help: none (log in to Claude Code, or save an API key)"
 
 
 def build_app(root: Path, web: Path = DEFAULT_WEB, claude: ClaudeClient | None = None) -> FastAPI:
@@ -90,4 +117,6 @@ def serve_command(
     import uvicorn
 
     typer.echo(f"paperboard at http://{HOST}:{port}  (data: {root.resolve()}, web: {web.resolve()})")
-    uvicorn.run(build_app(root, web, claude_from_env(os.environ)), host=HOST, port=port, log_level="warning")
+    claude, which_claude = choose_claude(os.environ)
+    typer.echo(which_claude)
+    uvicorn.run(build_app(root, web, claude), host=HOST, port=port, log_level="warning")

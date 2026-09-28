@@ -28,6 +28,20 @@ class ClaudeClient(Protocol):
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]: ...
 
 
+class NoClaude:
+    """What serve uses when there is neither an API key nor Claude Code: every call fails plainly."""
+
+    def _fail(self):
+        raise AiError("no_claude", "no Claude available: log in to Claude Code, or save an API key")
+
+    def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
+        self._fail()
+
+    def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
+        self._fail()
+        yield ""
+
+
 def _output_config(effort: str, schema: dict) -> dict:
     return {"effort": effort, "format": {"type": "json_schema", "schema": schema}}
 
