@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { aiGlossary } from "../ai/terms";
+import type { AiFile } from "../ai/types";
 import { firstLine } from "../model/notes";
 import type { PageRect } from "../model/types";
 import { NoteMarkdown } from "../notes/NoteMarkdown";
@@ -9,7 +11,14 @@ import { useTags } from "../state/TagsProvider";
 /** How much of the reader's definition a row shows: its first line. */
 export const GLOSSARY_LINE_CHARS = 120;
 
-type Props = { onJump: (at: PageRect) => void; onOpenNote: (noteId: string) => void };
+// `ai`/`aiStale` are optional: Task 9's AiProvider passes them once built (useAi().ai, useAi().status.stale).
+// Absent, the Glossary works unchanged and shows no AI rows.
+type Props = {
+  onJump: (at: PageRect) => void;
+  onOpenNote: (noteId: string) => void;
+  ai?: AiFile | null;
+  aiStale?: boolean;
+};
 
 function Definition({ noteId, onOpen }: { noteId: string; onOpen: (id: string) => void }) {
   const { text } = useNote(noteId);
@@ -33,15 +42,27 @@ function Row({ entry, onJump, onOpenNote }: { entry: GlossaryEntry } & Props) {
 
 /** Every mark tagged term in this paper, alphabetically (D27): the term, the first line of the reader's own
  *  definition, and a jump to where it is used. Nothing is edited here; a definition opens its note. */
-export function Glossary(props: Props) {
+export function Glossary({ ai, aiStale, ...props }: Props) {
   const { state } = useBoard();
   const { tags } = useTags();
   const entries = useMemo(() => glossary(state.board, termTagIds(tags)), [state.board, tags]);
+  const aiEntries = useMemo(
+    () => (ai && !aiStale ? aiGlossary(ai, entries.map((e) => e.term)) : []),
+    [ai, aiStale, entries],
+  );
   return (
     <section className="glossary" aria-label="Glossary">
       <h3>Glossary</h3>
-      {!entries.length && <p className="hint">Tag a marked word <i>term</i> and it is listed here.</p>}
-      <ul>{entries.map((entry) => <Row key={entry.highlight.id} entry={entry} {...props} />)}</ul>
+      {!entries.length && !aiEntries.length && <p className="hint">Tag a marked word <i>term</i> and it is listed here.</p>}
+      <ul>
+        {entries.map((entry) => <Row key={entry.highlight.id} entry={entry} {...props} />)}
+        {aiEntries.map((e) => (
+          <li key={`ai-${e.term}`} className="ai">
+            <span className="term">{e.term}</span> <span className="ai-badge">AI</span>
+            {e.explanation && <span className="hint">{e.explanation}</span>}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
