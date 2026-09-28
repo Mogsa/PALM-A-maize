@@ -3,6 +3,7 @@ exported. `reader` is the whole-paper pass; `defined` holds quick definitions,
 keyed by the normalised word."""
 
 from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -51,6 +52,32 @@ class AiFile(BaseModel):
     defined: dict[str, Definition] = {}
 
     model_config = {"populate_by_name": True}
+
+
+class AiLogPrompt(BaseModel):
+    system: str
+    user: str
+
+
+class AiLogError(BaseModel):
+    code: str
+    message: str
+
+
+class AiLogEntry(BaseModel):
+    """One line of `papers/<id>/ai-log.jsonl` (a call to Claude, never rewritten,
+    only appended). `raw` is the model's answer text or JSON exactly as received;
+    `grounded` is what survived grounding, or null; `error` is set only on failure."""
+
+    time: datetime
+    kind: Literal["read", "define"]
+    model: str
+    route: Literal["api", "claude-code", "canned"]
+    prompt: AiLogPrompt
+    raw: str | None = None
+    grounded: Any | None = None
+    error: AiLogError | None = None
+    extracted_at: datetime
 
 
 _GROUND = {

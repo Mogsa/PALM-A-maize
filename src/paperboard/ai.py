@@ -3,6 +3,7 @@ model is reached only through a ClaudeClient; every answer passes grounding."""
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape
@@ -10,7 +11,15 @@ from html import escape
 import pymupdf
 
 from paperboard.ai_client import DEFINER_MODEL, READER_MODEL, AiError, ClaudeClient
-from paperboard.ai_model import DEFINE_SCHEMA, PASS_SCHEMA, Definition, ReaderPass
+from paperboard.ai_model import (
+    DEFINE_SCHEMA,
+    PASS_SCHEMA,
+    AiLogEntry,
+    AiLogError,
+    AiLogPrompt,
+    Definition,
+    ReaderPass,
+)
 from paperboard.geometry import Rect
 from paperboard.grounding import ground_all, ground_pass, normalise
 from paperboard.source_model import SourceDocument
@@ -56,16 +65,43 @@ def pass_prompt(spans: list[Span], slot_names: list[str]) -> str:
     return f"{spans_block(spans)}\n\nSlots: {', '.join(slot_names)}"
 
 
-def run_pass(doc: SourceDocument, pdf: pymupdf.Document, slot_names: list[str], claude: ClaudeClient) -> ReaderPass:
+def log_entry(kind: str, claude: ClaudeClient, model: str, system: str, user: str, raw: str | None,
+              grounded: object | None, error: AiError | None, extracted_at: datetime) -> AiLogEntry:
+    """One line for `papers/<id>/ai-log.jsonl` (spec B3): never rewritten, only appended."""
+    return AiLogEntry(
+        time=datetime.now(UTC), kind=kind, model=model, route=claude.route,
+        prompt=AiLogPrompt(system=system, user=user), raw=raw, grounded=grounded,
+        error=AiLogError(code=error.code, message=str(error)) if error else None,
+        extracted_at=extracted_at,
+    )
+
+
+def run_pass(doc: SourceDocument, pdf: pymupdf.Document, slot_names: list[str], claude: ClaudeClient,
+             on_log: Callable[[AiLogEntry], None] | None = None) -> ReaderPass:
     spans = paper_spans(doc, pdf)
-    raw = claude.read_paper(READER_SYSTEM, pass_prompt(spans, slot_names), PASS_SCHEMA)
+    prompt = pass_prompt(spans, slot_names)
+
+    def _log(raw, grounded, error):
+        if on_log:
+            on_log(log_entry("read", claude, READER_MODEL, READER_SYSTEM, prompt, raw,
+                             grounded, error, doc.extracted_at))
+
     try:
-        terms, where = ground_pass(raw, {s.id: s for s in spans}, slot_names)
+        read = claude.read_paper(READER_SYSTEM, prompt, PASS_SCHEMA)
+    except AiError as exc:
+        _log(None, None, exc)
+        raise
+    try:
+        terms, where = ground_pass(read.answer, {s.id: s for s in spans}, slot_names)
     except ValueError as exc:
-        raise AiError("invalid_output", str(exc)) from exc
+        err = AiError("invalid_output", str(exc))
+        _log(read.raw, None, err)
+        raise err from exc
     pages = words_by_page(pdf)
     terms = [t.model_copy(update={"occurrences": term_occurrences(t.term, pages)}) for t in terms]
-    return ReaderPass(model=READER_MODEL, made_at=datetime.now(UTC), terms=terms, where_to_look=where)
+    reader = ReaderPass(model=READER_MODEL, made_at=datetime.now(UTC), terms=terms, where_to_look=where)
+    _log(read.raw, reader.model_dump(mode="json"), None)
+    return reader
 
 
 def word_key(word: str) -> str:

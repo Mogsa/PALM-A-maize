@@ -10,7 +10,8 @@ from paperboard.ai_client import DEFINER_MODEL, READER_MODEL, AiError
 from paperboard.claude_code import DEFINE_TIMEOUT, READ_TIMEOUT, ClaudeCodeClaude
 
 SCHEMA = {"type": "object", "properties": {"x": {"type": "string"}}}
-ENV = {"PATH": "/bin", "HOME": "/home/me", "ANTHROPIC_API_KEY": "sk-secret", "ANTHROPIC_AUTH_TOKEN": "tok"}
+ENV = {"PATH": "/bin", "HOME": "/home/me", "ANTHROPIC_API_KEY": "sk-secret", "ANTHROPIC_AUTH_TOKEN": "tok",
+       "ANTHROPIC_BASE_URL": "https://example.invalid"}
 
 
 def envelope(**over) -> str:
@@ -52,8 +53,10 @@ class FakeProc:
         self.stderr = _Readable(stderr)
         self.returncode = returncode
         self.killed = False
+        self.wait_calls = 0
 
     def wait(self, timeout=None):
+        self.wait_calls += 1
         return self.returncode
 
     def kill(self):
@@ -115,6 +118,7 @@ def test_read_strips_api_keys_runs_in_a_fresh_empty_dir_with_a_timeout():
     ClaudeCodeClaude(run=run, env=ENV).read_paper("SYS", "p", SCHEMA)
     env = run.kwargs["env"]
     assert "ANTHROPIC_API_KEY" not in env and "ANTHROPIC_AUTH_TOKEN" not in env
+    assert "ANTHROPIC_BASE_URL" not in env
     assert env["PATH"] == "/bin" and env["HOME"] == "/home/me"
     assert run.cwd_existed and run.cwd_was_empty
     assert Path(run.kwargs["cwd"]).resolve() != Path.cwd().resolve()
@@ -124,7 +128,8 @@ def test_read_strips_api_keys_runs_in_a_fresh_empty_dir_with_a_timeout():
 
 def test_read_unwraps_the_structured_output_from_the_envelope():
     run = FakeRun(envelope(structured_output={"terms": [], "where_to_look": []}))
-    assert ClaudeCodeClaude(run=run, env=ENV).read_paper("S", "p", SCHEMA) == {"terms": [], "where_to_look": []}
+    read = ClaudeCodeClaude(run=run, env=ENV).read_paper("S", "p", SCHEMA)
+    assert read.answer == {"terms": [], "where_to_look": []}
 
 
 @pytest.mark.parametrize("run, code", [
@@ -132,7 +137,8 @@ def test_read_unwraps_the_structured_output_from_the_envelope():
      "not_logged_in"),
     (FakeRun("", returncode=1, stderr="Invalid API key · Please run /login"), "not_logged_in"),
     (FakeRun(envelope(is_error=True, result="Claude AI usage limit reached|1759000000"), returncode=1), "rate_limited"),
-    (FakeRun(envelope(is_error=True, result="You've hit your limit · resets 5pm"), returncode=1), "rate_limited"),
+    (FakeRun(envelope(is_error=True, result="You've reached your rate limit · resets 5pm"), returncode=1),
+     "rate_limited"),
     (FakeRun(envelope(stop_reason="refusal", structured_output=None)), "refused"),
     (FakeRun(envelope(subtype="error_max_structured_output_retries", is_error=True), returncode=1), "invalid_output"),
     (FakeRun(envelope(structured_output=None)), "invalid_output"),
@@ -140,6 +146,12 @@ def test_read_unwraps_the_structured_output_from_the_envelope():
     (FakeRun("", returncode=2, stderr="something broke"), "api_error"),
     (FakeRun(envelope(is_error=True, subtype="error_during_execution", result="API Error: 500"), returncode=1),
      "api_error"),
+    # A bare "limit" (no narrow phrase) is never mistaken for a rate limit.
+    (FakeRun(envelope(is_error=True, result="You've hit your limit · resets 5pm"), returncode=1), "api_error"),
+    # The subtype is checked before any text matching: the result text here even
+    # says "limit", but the subtype alone decides this is invalid_output.
+    (FakeRun(envelope(is_error=True, subtype="error_max_structured_output_retries",
+                       result="reached the retry limit"), returncode=1), "invalid_output"),
     (FakeRun(raises=subprocess.TimeoutExpired("claude", 600)), "timeout"),
     (FakeRun(raises=FileNotFoundError("claude")), "no_claude"),
 ])
@@ -208,8 +220,64 @@ def test_define_uses_sonnet_low_stream_json_stdin_stripped_env_and_a_fresh_dir()
     assert proc.stdin.text == "Word: x" and proc.stdin.closed
     assert "Word: x" not in argv and not popen.kwargs.get("shell")
     assert "ANTHROPIC_API_KEY" not in popen.kwargs["env"] and "ANTHROPIC_AUTH_TOKEN" not in popen.kwargs["env"]
+    assert "ANTHROPIC_BASE_URL" not in popen.kwargs["env"]
     assert popen.cwd_existed and not Path(popen.kwargs["cwd"]).exists()
     assert DEFINE_TIMEOUT == 60
+
+
+def test_read_returns_the_raw_text_it_received_alongside_the_answer():
+    run = FakeRun(envelope(structured_output={"terms": [], "where_to_look": []}))
+    read = ClaudeCodeClaude(run=run, env=ENV).read_paper("S", "p", SCHEMA)
+    assert json.loads(read.raw) == json.loads(run.stdout)
+
+
+def test_define_never_uses_a_pipe_for_stderr_so_the_child_cannot_block_on_it():
+    """Streamed stderr=PIPE with nobody reading it can fill the pipe buffer and
+    block the child. Define must hand the child a real file instead."""
+    popen = FakePopen(FakeProc(STREAM))
+    list(ClaudeCodeClaude(popen=popen, env=ENV).define("SYS", "Word: x", SCHEMA))
+    assert popen.kwargs["stderr"] is not subprocess.PIPE
+    assert hasattr(popen.kwargs["stderr"], "fileno")   # a real file, not a pipe
+
+
+class _StderrCapture:
+    """Test seam standing in for ClaudeCodeClaude's real tempfile: writes `text`
+    into it up front, as if the child process had already written its stderr."""
+
+    def __init__(self, text):
+        self._text = text
+
+    def __call__(self):
+        import io
+        f = io.StringIO()
+        f.write(self._text)
+        f.seek(0)
+        return f
+
+
+def test_define_reads_the_stderr_file_capped_for_the_failure_message():
+    """No result line at all (the process died before Claude Code emitted one):
+    the failure message comes from the child's stderr, capped at DETAIL_CHARS."""
+    stderr = "x" * 500
+    client = ClaudeCodeClaude(popen=FakePopen(FakeProc([], returncode=1)), env=ENV,
+                              stderr_factory=_StderrCapture(stderr))
+    with pytest.raises(AiError) as err:
+        list(client.define("S", "w", SCHEMA))
+    assert err.value.code == "api_error"
+    assert "x" * 200 in str(err.value)
+    assert "x" * 201 not in str(err.value)
+
+
+def test_define_ignores_a_second_structured_output_block_from_a_retry():
+    """Claude Code can retry a StructuredOutput call that failed its own schema
+    check: a second tool_use block starts, with its own deltas. Only the first
+    block's fragments are ever forwarded, so concatenating them never builds
+    invalid JSON out of two separate attempts."""
+    lines = [tool_start(0), json_delta(0, '{"explanation": "first'),
+             tool_start(1), json_delta(1, '"nope"'),
+             envelope(structured_output={"explanation": "first, complete"})]
+    deltas = list(ClaudeCodeClaude(popen=FakePopen(FakeProc(lines)), env=ENV).define("S", "w", SCHEMA))
+    assert deltas == ['{"explanation": "first']
 
 
 def test_define_ignores_json_deltas_from_other_tools_and_subagents():

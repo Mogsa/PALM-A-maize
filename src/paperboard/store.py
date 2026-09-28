@@ -17,7 +17,7 @@ from typing import Any
 import pymupdf
 from pydantic import BaseModel, TypeAdapter
 
-from paperboard.ai_model import AiFile
+from paperboard.ai_model import AiFile, AiLogEntry
 from paperboard.board_model import (
     DEFAULT_SLOTS,
     PRESET_TAGS,
@@ -108,6 +108,9 @@ class Store:
     # same version can both read it, both pass the check, and both succeed.
     _board_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
     _ai_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
+    # Guards only the append itself (never a Claude call): distinct from _ai_lock,
+    # which guards the read-modify-write of ai.json.
+    _ai_log_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
 
     @property
     def papers_dir(self) -> Path:
@@ -249,6 +252,16 @@ class Store:
     def ai_is_stale(self, paper_id: str, ai: AiFile) -> bool:
         """Made from an older extraction: its span ids and rects may point elsewhere now."""
         return self.read_source(paper_id).extracted_at > ai.extracted_at
+
+    def append_ai_log(self, paper_id: str, entry: AiLogEntry) -> None:
+        """Append one JSON line to `papers/<id>/ai-log.jsonl`. The file only grows:
+        this never rewrites it, and the lock here guards only the append, never a
+        Claude call (the caller writes after its call to Claude has already ended)."""
+        path = self.paper_dir(paper_id) / "ai-log.jsonl"
+        line = entry.model_dump_json(by_alias=True) + "\n"
+        with self._ai_log_lock, open(path, "a", encoding="utf-8") as handle:
+            handle.write(line)
+            handle.flush()
 
     # -- notes --------------------------------------------------------------
 

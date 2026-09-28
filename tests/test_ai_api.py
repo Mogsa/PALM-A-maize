@@ -97,14 +97,14 @@ def test_an_answer_of_the_wrong_shape_fails_plainly(store_root, paper):
 
 def test_a_second_pass_while_one_runs_is_refused(store_root, paper):
     import threading
-    _, pid, spans = paper
+    _, pid, _spans = paper
     entered, release = threading.Event(), threading.Event()
 
     class Slow(FakeClaude):
         def read_paper(self, system, prompt, schema):
             entered.set()
             release.wait(5)
-            return _answer(spans[0])
+            return super().read_paper(system, prompt, schema)
 
     client = _client(store_root, Slow())
     _turn_on(client, pid)

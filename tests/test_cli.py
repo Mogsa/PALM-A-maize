@@ -119,7 +119,7 @@ def test_the_test_env_gives_serve_a_canned_claude(tmp_path):
     answer = tmp_path / "answer.json"
     answer.write_text(json.dumps({"read_paper": {"terms": [], "where_to_look": []}, "define": ['{"a"', ": 1}"]}))
     claude = claude_from_env({FAKE_CLAUDE_ENV: str(answer)})
-    assert claude.read_paper("s", "p", {}) == {"terms": [], "where_to_look": []}
+    assert claude.read_paper("s", "p", {}).answer == {"terms": [], "where_to_look": []}
     assert "".join(claude.define("s", "p", {})) == '{"a": 1}'
 
 

@@ -171,3 +171,37 @@ def _stub_definition(span):
     from paperboard.ai_model import Definition, Ground
     return Definition(model="claude-sonnet-5", explanation="Old.",
                        grounds=[Ground(span=span.id, quote=span.text.split()[0])])
+
+
+def test_define_stream_closes_the_generator_and_kills_the_child_on_disconnect(store_root, setup):
+    """A client disconnect makes Starlette close the streaming generator early.
+    The route must propagate that close deterministically into define_stream and
+    into ClaudeCodeClaude.define, so the child Claude Code process is killed and
+    reaped right then, not whenever Python happens to garbage-collect it."""
+    from test_claude_code import ENV, STREAM, FakePopen, FakeProc
+
+    _, pid, _, word = setup
+    proc = FakeProc(STREAM)
+    popen = FakePopen(proc)
+    from paperboard.claude_code import ClaudeCodeClaude
+    claude = ClaudeCodeClaude(popen=popen, env=ENV)
+    app = create_app(store_root, claude=claude)
+    client = local_client(app)
+    _on(client, pid)
+
+    route = next(r for r in app.routes if getattr(r, "path", None) == "/api/papers/{paper_id}/ai/define")
+    from paperboard.api import DefineRequest
+    body = DefineRequest(word=word[4], page=0, rect=list(word[:4]), definition=None)
+    response = route.endpoint(pid, body)
+
+    import asyncio
+
+    async def drive():
+        gen = response.body_iterator
+        await gen.__anext__()   # the first delta: this is when the child actually starts streaming
+        await gen.aclose()
+
+    asyncio.run(drive())
+
+    assert proc.killed
+    assert proc.wait_calls >= 1

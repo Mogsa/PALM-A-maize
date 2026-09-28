@@ -46,7 +46,9 @@ def _message(text, stop="end_turn"):
 
 def test_read_paper_sends_opus_high_effort_and_the_schema_and_parses_json():
     sdk = _Sdk(_message('{"terms": [], "where_to_look": []}'))
-    assert AnthropicClaude(sdk).read_paper("sys", "paper", {"type": "object"}) == {"terms": [], "where_to_look": []}
+    read = AnthropicClaude(sdk).read_paper("sys", "paper", {"type": "object"})
+    assert read.answer == {"terms": [], "where_to_look": []}
+    assert read.raw == '{"terms": [], "where_to_look": []}'
     assert sdk.kwargs["model"] == READER_MODEL == "claude-opus-5-5"
     assert sdk.kwargs["max_tokens"] == 64000
     assert sdk.kwargs["output_config"]["effort"] == "high"
