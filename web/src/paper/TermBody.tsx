@@ -1,8 +1,11 @@
 import { useMemo } from "react";
+import { AiPartView } from "../ai/AiTermBody";
+import { useAi } from "../ai/AiProvider";
+import { aiEntryFor, cardParts, type AiPart } from "../ai/terms";
 import type { Highlight, PageRect } from "../model/types";
 import { NoteMarkdown } from "../notes/NoteMarkdown";
 import { useBoard, useNote } from "../state/BoardProvider";
-import { termCard, type TermPart } from "./term";
+import { termCard, termOf, type TermPart } from "./term";
 
 type Props = { highlight: Highlight; onGo: (at: PageRect) => void; onOpenNote: (noteId: string) => void };
 
@@ -34,13 +37,16 @@ function PaperDefinition({ part, onGo }: { part: Extract<TermPart, { kind: "defi
  *  elsewhere is on the mark's right-click. */
 export function TermBody({ highlight, onGo, onOpenNote }: Props) {
   const { state, source } = useBoard();
-  const parts = useMemo(() => termCard(state.board, source, highlight), [state.board, source, highlight]);
+  const { ai } = useAi();
+  const parts = useMemo(() => cardParts(termCard(state.board, source, highlight), aiEntryFor(ai, termOf(highlight))),
+    [state.board, source, highlight, ai]);
   return (
     <>
-      {parts.map((part) => {
+      {parts.map((part: TermPart | AiPart) => {
         switch (part.kind) {
           case "note": return <ReaderDefinition key="note" noteId={part.noteId} onOpen={onOpenNote} />;
           case "definition": return <PaperDefinition key="definition" part={part} onGo={onGo} />;
+          case "ai": return <AiPartView key="ai" part={part} onGo={onGo} />;
         }
       })}
     </>

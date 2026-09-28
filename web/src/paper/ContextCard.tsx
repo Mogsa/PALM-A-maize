@@ -1,4 +1,5 @@
 import { api } from "../api/client";
+import { AiTermBody } from "../ai/AiTermBody";
 import { reflow } from "../board/marks";
 import type { PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
@@ -19,6 +20,13 @@ export function ContextCard({ card, hover, onGo, onOpenNote }: Props) {
     return (
       <CitationCard at={card.at} text={content.text && reflow(content.text, words)} failed={content.failed} clip={content.clip && api.renderUrl(paperId, content.clip)}
                     onGo={() => go(content.go)} {...hover.cardHandlers} />
+    );
+  }
+  if (content.kind === "aiTerm") {
+    return (
+      <CitationCard at={card.at} label={content.term} {...hover.cardHandlers}>
+        <AiTermBody term={content.term} at={content.at} onGo={go} onOpenNote={(id) => { onOpenNote(id); hover.close(); }} />
+      </CitationCard>
     );
   }
   const highlight = state.board.highlights.find((h) => h.id === content.highlightId);
