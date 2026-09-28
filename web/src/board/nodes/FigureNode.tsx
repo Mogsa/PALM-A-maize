@@ -4,6 +4,7 @@ import { notesConnectedTo } from "../../model/links";
 import type { FigureNode as FigureNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
 import { inHandle, outHandle } from "../handles";
+import { CardBar, useMainTagStyle } from "../CardBar";
 import { CollapseToggle } from "./CollapseToggle";
 import { Counts } from "./Counts";
 import { NodeTags } from "./NodeTags";
@@ -15,8 +16,10 @@ export function FigureNode({ id, data, selected }: NodeProps<FigureNodeType>) {
   const title = data.caption.split(/[:.]/)[0] || "Figure";
   const marks = highlightsIn(state.board.highlights, data.region);
   const notes = notesConnectedTo(state.board, [id, ...marks.map((m) => m.id)]).length;
+  const main = useMainTagStyle(data.tags);
   return (
-    <div className={`node figure ${data.region.state}`}>
+    <div className={`node figure ${data.region.state} ${main.className}`} style={main.style}>
+      <CardBar id={id} tags={data.tags} collapsed={data.collapsed} source={data.region.rects[0]} />
       <NodeResizer isVisible={selected && !data.collapsed} minWidth={160} minHeight={60} keepAspectRatio />
       <div className="node-head">
         <CollapseToggle id={id} collapsed={data.collapsed} />

@@ -4,6 +4,7 @@ import { newNote } from "../../model/notes";
 import type { GroupNode as GroupNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
 import { useBoardActions } from "../BoardActions";
+import { CardBar } from "../CardBar";
 import { inHandle, outHandle } from "../handles";
 import { hasNote, SLOT_NOTE_AT } from "../slots";
 import { NodeTags } from "./NodeTags";
@@ -40,6 +41,7 @@ export function GroupNode({ id, data, selected }: NodeProps<GroupNodeType>) {
   const classes = ["node", "group", data.tray ? "tray" : "", data.prompt ? "slot" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
   return (
     <div className={classes}>
+      <CardBar id={id} tags={data.tags} />
       <NodeResizer isVisible={selected} minWidth={160} minHeight={120} />
       <div className="group-head"><GroupName id={id} name={data.name} /><NodeTags id={id} tags={data.tags} /></div>
       {data.prompt && !hasNote(state.board.nodes, id) && (

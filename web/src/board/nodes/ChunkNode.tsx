@@ -10,6 +10,7 @@ import { inHandle, outHandle } from "../handles";
 import { HEAD_MIDDLE_PX, useMarkOffsets } from "../markOffsets";
 import { paintBlocks, paintedIds, reflow } from "../marks";
 import { useOverflow } from "../overflow";
+import { CardBar, useMainTagStyle } from "../CardBar";
 import { ChunkBody } from "./ChunkBody";
 import { CollapseToggle } from "./CollapseToggle";
 import { Counts } from "./Counts";
@@ -34,9 +35,11 @@ export function ChunkNode({ id, data, selected }: NodeProps<ChunkNodeType>) {
   const tagsOf = (highlightId: string) => marks.find((m) => m.id === highlightId)?.tags ?? [];
   const title = reflow(data.region.start.exact, words).slice(0, 80);
   const page = data.region.rects[0].page + 1;
-  const classes = ["node", "chunk", data.region.state, height !== undefined && !data.collapsed ? "sized" : "", overflowing ? "overflowing" : ""].filter(Boolean).join(" ");
+  const main = useMainTagStyle(data.tags);
+  const classes = ["node", "chunk", data.region.state, height !== undefined && !data.collapsed ? "sized" : "", overflowing ? "overflowing" : "", main.className].filter(Boolean).join(" ");
   return (
-    <div className={classes}>
+    <div className={classes} style={main.style}>
+      <CardBar id={id} tags={data.tags} collapsed={data.collapsed} source={data.region.rects[0]} peek={peek} />
       <NodeResizer isVisible={selected && !data.collapsed} minWidth={200} minHeight={60} />
       <div className="node-head">
         <CollapseToggle id={id} collapsed={data.collapsed} />
