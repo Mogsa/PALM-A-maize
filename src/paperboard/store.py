@@ -9,6 +9,7 @@ import os
 import re
 import tempfile
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from typing import Any
 import pymupdf
 from pydantic import BaseModel, TypeAdapter
 
+from paperboard.ai_model import AiFile
 from paperboard.board_model import (
     DEFAULT_SLOTS,
     PRESET_TAGS,
@@ -105,6 +107,7 @@ class Store:
     # FastAPI runs sync routes in a thread pool: without this, two writes of the
     # same version can both read it, both pass the check, and both succeed.
     _board_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
+    _ai_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
 
     @property
     def papers_dir(self) -> Path:
@@ -225,6 +228,27 @@ class Store:
     def write_view(self, paper_id: str, view: ViewState) -> None:
         """No version and no lock: the last write wins, as for a scroll position."""
         atomic_write(self._view_path(paper_id), (view.model_dump_json(indent=2) + "\n").encode())
+
+    # -- ai (spec B3) ---------------------------------------------------------
+
+    def _ai_path(self, paper_id: str) -> Path:
+        return self.paper_dir(paper_id) / "ai.json"
+
+    def read_ai(self, paper_id: str) -> AiFile | None:
+        path = self._ai_path(paper_id)
+        return AiFile.model_validate_json(path.read_bytes()) if path.exists() else None
+
+    def update_ai(self, paper_id: str, change: Callable[[AiFile | None], AiFile]) -> AiFile:
+        """Read, change and write under one lock: the pass and a quick definition
+        both write ai.json, and neither may drop what the other wrote."""
+        with self._ai_lock:
+            ai = change(self.read_ai(paper_id))
+            atomic_write(self._ai_path(paper_id), ai.model_dump_json(by_alias=True, indent=2).encode())
+            return ai
+
+    def ai_is_stale(self, paper_id: str, ai: AiFile) -> bool:
+        """Made from an older extraction: its span ids and rects may point elsewhere now."""
+        return self.read_source(paper_id).extracted_at > ai.extracted_at
 
     # -- notes --------------------------------------------------------------
 
