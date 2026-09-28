@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { emptyBoard, type ChunkNode, type Rect } from "../model/types";
 
 const dispatch = vi.fn();
+const find = vi.fn();
 const q = (exact: string) => ({ exact, prefix: "", suffix: "" });
 const region = { rects: [{ page: 2, rect: [50, 100, 286, 400] as Rect }], start: q("a"), end: q("b"), position: 0, state: "anchored" as const };
 const chunk: ChunkNode = { id: "n-c", type: "chunk", position: { x: 0, y: 0 }, width: 320, data: { tags: [], collapsed: false, region, blocks: [], user_sized: false } };
 vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ state: { board: { ...emptyBoard("p"), nodes: [chunk] } }, dispatch, paperId: "p" }) }));
 vi.mock("../api/client", () => ({ api: { highlightInChunk: vi.fn(), recut: vi.fn() } }));
+vi.mock("./BoardActions", () => ({ useBoardActions: () => ({ find }) }));
+vi.mock("../state/TagsProvider", () => ({ useTags: () => ({ tags: [{ id: "t-q", name: "question", colour: "#7C3AED" }], byId: new Map() }) }));
 import { api } from "../api/client";
 import { NOT_FOUND_MESSAGE, NOTHING_TO_DIVIDE, TextPopover } from "./TextPopover";
 
@@ -18,13 +21,26 @@ beforeEach(() => { vi.spyOn(console, "error").mockImplementation(() => undefined
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("TextPopover (D20, D21)", () => {
-  it("offers Highlight on a selection, and Split here and Cut out only on a right-click", () => {
-    const { queryByRole, rerender } = render(<TextPopover selection={selection} onClose={vi.fn()} />);
-    expect(queryByRole("button", { name: "Highlight" })).not.toBeNull();
-    expect(queryByRole("button", { name: "Split here" })).toBeNull();
-    rerender(<TextPopover selection={selection} actions="recut" onClose={vi.fn()} />);
-    expect(queryByRole("button", { name: "Highlight" })).toBeNull();
-    expect(queryByRole("button", { name: "Cut out" })).not.toBeNull();
+  it("reads: colour dots | ✂ 🔍 ›, with Split here in the › (spec A2)", () => {
+    const { getByRole, queryByRole } = render(<TextPopover selection={selection} onClose={vi.fn()} />);
+    expect(getByRole("button", { name: "Highlight" })).toBeTruthy();
+    expect(getByRole("button", { name: "Cut out" })).toBeTruthy();
+    expect(queryByRole("menuitem", { name: "Split here" })).toBeNull();
+    fireEvent.click(getByRole("button", { name: "More actions" }));
+    expect(getByRole("menuitem", { name: "Split here" })).toBeTruthy();
+  });
+  it("opens with the › list shown on a right-click", () => {
+    const { getByRole } = render(<TextPopover selection={selection} menuOpen onClose={vi.fn()} />);
+    expect(getByRole("menuitem", { name: "Split here" })).toBeTruthy();
+  });
+  it("a colour highlights with that main tag; 🔍 finds the words in the paper", async () => {
+    const anchor = { rects: region.rects, quote: q("residual learning"), position: 9, state: "anchored" as const };
+    vi.mocked(api.highlightInChunk).mockResolvedValue(anchor);
+    const { getByRole } = render(<TextPopover selection={selection} onClose={vi.fn()} />);
+    fireEvent.click(getByRole("button", { name: "Find" }));
+    expect(find).toHaveBeenCalledWith("residual learning");
+    fireEvent.click(getByRole("button", { name: "question" }));
+    await waitFor(() => expect(dispatch).toHaveBeenCalledWith({ type: "addHighlight", highlight: { id: expect.stringMatching(/^h-/), tags: ["t-q"], anchor } }));
   });
 
   it("Highlight asks the server for the anchor inside the chunk and adds it as one highlight", async () => {
@@ -40,7 +56,7 @@ describe("TextPopover (D20, D21)", () => {
 
   it("Cut out replaces the chunk by its pieces as one reshape", async () => {
     vi.mocked(api.recut).mockResolvedValue([piece(0), piece(1), piece(2)]);
-    const { getByRole } = render(<TextPopover selection={selection} actions="recut" onClose={vi.fn()} />);
+    const { getByRole } = render(<TextPopover selection={selection} menuOpen onClose={vi.fn()} />);
     fireEvent.click(getByRole("button", { name: "Cut out" }));
     await waitFor(() => expect(dispatch).toHaveBeenCalledTimes(1));
     expect(api.recut).toHaveBeenCalledWith("p", region, selection.quote, "cut");
@@ -52,8 +68,8 @@ describe("TextPopover (D20, D21)", () => {
 
   it("changes nothing and says so when there is nothing to divide (Review Focus 4)", async () => {
     vi.mocked(api.recut).mockResolvedValue([piece(0)]);
-    const { getByRole, findByRole } = render(<TextPopover selection={selection} actions="recut" onClose={vi.fn()} />);
-    fireEvent.click(getByRole("button", { name: "Split here" }));
+    const { getByRole, findByRole } = render(<TextPopover selection={selection} menuOpen onClose={vi.fn()} />);
+    fireEvent.click(getByRole("menuitem", { name: "Split here" }));
     expect((await findByRole("status")).textContent).toBe(NOTHING_TO_DIVIDE.split);
     expect(dispatch).not.toHaveBeenCalled();
   });

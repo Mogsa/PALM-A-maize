@@ -27,7 +27,7 @@ import { FigureNode } from "./nodes/FigureNode";
 import { GroupNode } from "./nodes/GroupNode";
 import { NoteNode } from "./nodes/NoteNode";
 import { SelectionBar } from "./SelectionBar";
-import { TextPopover, type TextActions } from "./TextPopover";
+import { TextPopover } from "./TextPopover";
 import { ContextMenu } from "../ui/ContextMenu";
 import { useBoardCards } from "./useBoardCards";
 
@@ -57,7 +57,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
   const initialized = useNodesInitialized();
   const [selectedEdges, setSelectedEdges] = useState<ReadonlySet<string>>(() => new Set());
   const [edgeMenu, setEdgeMenu] = useState<{ id: string; at: DOMRect } | null>(null);
-  const [textMenu, setTextMenu] = useState<(CardSelection & { actions: TextActions }) | null>(null);
+  const [textMenu, setTextMenu] = useState<(CardSelection & { menuOpen: boolean }) | null>(null);
   const [paneMenu, setPaneMenu] = useState<{ at: DOMRect; flow: { x: number; y: number } } | null>(null);
   // The note being written stays in sight whatever the filter: a new note carries no tag yet (D8).
   const hidden = useMemo(() => {
@@ -124,13 +124,14 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
     setPaneMenu(null);
   };
 
-  /** A right-click (or the menu key) on words selected on a card offers Split here and Cut out; on the empty board,
-   *  New group. Anywhere else the browser keeps its own menu. A menu key press has no pointer: the board's middle. */
+  /** A right-click (or the menu key) on words selected on a card opens the same bar as a plain selection, with its ›
+   *  list already shown; on the empty board, New group. Anywhere else the browser keeps its own menu. A menu key
+   *  press has no pointer: the board's middle. */
   const openMenu = (event: React.SyntheticEvent, point: { x: number; y: number }, keyboard: boolean) => {
     const words = readCardSelection(boardRef.current!);
     if (words) {
       event.preventDefault();
-      setTextMenu({ ...words, at: new DOMRect(point.x, point.y, 0, 0), actions: "recut" });
+      setTextMenu({ ...words, at: new DOMRect(point.x, point.y, 0, 0), menuOpen: true });
       return;
     }
     const target = event.target as Element;
@@ -151,12 +152,12 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
   };
   const closePaneMenu = useCallback(() => setPaneMenu(null), []);
 
-  /** Words selected on a card offer Highlight, Split here and Cut out (D20, D21). The popover follows the selection:
-   *  it closes when the words are no longer selected, and closing it clears them so it does not come back. */
+  /** Words selected on a card offer colour dots, Cut out, Find and a › list (D20, D21, spec A2). The popover follows
+   *  the selection: it closes when the words are no longer selected, and closing it clears them so it does not come back. */
   const onBoardMouseUp = (event: React.MouseEvent) => {
     if (event.button !== 0) return;   // a right-click opens its own menu
     const next = textMenuAfterMouseUp(boardRef.current!, event.target);
-    if (next !== undefined) setTextMenu(next && { ...next, actions: "highlight" });
+    if (next !== undefined) setTextMenu(next && { ...next, menuOpen: false });
   };
   const closeTextMenu = useCallback(() => {
     clearCardSelection(boardRef.current);
@@ -241,7 +242,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
         <Controls />
       </ReactFlow>
       {edgeMenu && <EdgePopover edgeId={edgeMenu.id} at={edgeMenu.at} onClose={closeEdgeMenu} />}
-      {textMenu && <TextPopover selection={textMenu} actions={textMenu.actions} onClose={closeTextMenu} />}
+      {textMenu && <TextPopover selection={textMenu} menuOpen={textMenu.menuOpen} onClose={closeTextMenu} />}
       {paneMenu && (
         <ContextMenu at={paneMenu.at} label="Board" onClose={closePaneMenu}>
           <button type="button" className="action" role="menuitem" onClick={() => addGroup(paneMenu.flow)}>
