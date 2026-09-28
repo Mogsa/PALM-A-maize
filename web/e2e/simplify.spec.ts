@@ -100,13 +100,15 @@ test("a note by double-click on empty board, and by ⌘K (A3)", async ({ page })
   await expect.poll(async () => (await boardOf(page)).nodes.filter((n: Json) => n.type === "note").length).toBe(2);
 });
 
-test("a lasso selects, then Group; shift-click selects, then ● colours them all (A3)", async ({ page }) => {
+test("Shift and drag draws a lasso that selects, then Group; ● colours them all (A3)", async ({ page }) => {
   await seed(page, "board", [chunk("n-a", 40, 60, "First."), chunk("n-b", 420, 60, "Second.")]);
   const pane = (await page.locator(".react-flow__pane").boundingBox())!;
+  await page.keyboard.down("Shift");
   await page.mouse.move(pane.x + 10, pane.y + 10);
   await page.mouse.down();
   await page.mouse.move(pane.x + 900, pane.y + 400, { steps: 10 });
   await page.mouse.up();
+  await page.keyboard.up("Shift");
   await expect(page.locator(".react-flow__node.selected")).toHaveCount(2);
   const bar = page.getByRole("toolbar", { name: "Selected pieces" });
   await bar.getByRole("button", { name: "question", exact: true }).click();
@@ -156,16 +158,14 @@ test("a hint shows once, faintly, and not again after it is done (A4)", async ({
   await expect(page.getByRole("note")).toHaveCount(0);
 });
 
-test("Space and drag pans the board", async ({ page }) => {
+test("a plain drag on empty board pans it", async ({ page }) => {
   await seed(page, "board", [chunk("n-a", 40, 60, "First.")]);
   const pane = (await page.locator(".react-flow__pane").boundingBox())!;
   const before = (await page.locator('.react-flow__node[data-id="n-a"]').boundingBox())!;
-  await page.keyboard.down("Space");
   await page.mouse.move(pane.x + 400, pane.y + 300);
   await page.mouse.down();
   await page.mouse.move(pane.x + 150, pane.y + 100, { steps: 10 });
   await page.mouse.up();
-  await page.keyboard.up("Space");
   const after = (await page.locator('.react-flow__node[data-id="n-a"]').boundingBox())!;
   expect(Math.abs(after.x - before.x)).toBeGreaterThan(50);
   await expect(page.locator(".react-flow__node.selected")).toHaveCount(0);   // it panned, it did not lasso-select
