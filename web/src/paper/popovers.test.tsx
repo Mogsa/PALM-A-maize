@@ -11,7 +11,7 @@ vi.mock("../state/BoardProvider", () => ({
   useNote: () => note,
 }));
 vi.mock("../tags/TagPicker", () => ({ TagPicker: () => <input type="text" aria-label="New tag" /> }));
-vi.mock("../state/TagsProvider", () => ({ useTags: () => ({ tags: [] }) }));
+vi.mock("../state/TagsProvider", () => ({ useTags: () => ({ tags: [{ id: "t-q", name: "question", colour: "#7C3AED" }], byId: new Map() }) }));
 vi.mock("../api/client", async (actual) => ({ api: { ...(await actual<typeof import("../api/client")>()).api, postText: vi.fn() } }));
 import { MarkPopover } from "./MarkPopover";
 import { NoteEditor } from "./NoteEditor";
@@ -30,12 +30,21 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); vi.restoreAllMocks(); Object.as
 
 describe("MarkPopover", () => {
   it("Delete typed into a text field is the field's; Delete elsewhere removes the mark once", () => {
-    const { getByLabelText } = render(<MarkPopover highlight={board.highlights[0]} at={at} onClose={() => undefined} onConnect={() => undefined} />);
+    const { getByLabelText } = render(<MarkPopover highlight={board.highlights[0]} at={at} addTag onClose={() => undefined} onConnect={() => undefined} />);
     fireEvent.keyDown(getByLabelText("New tag"), { key: "Backspace" });
     expect(dispatch).not.toHaveBeenCalled();
     fireEvent.keyDown(window, { key: "Delete" });
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledWith({ type: "remove", highlightIds: ["h-1"] });
+  });
+  it("a colour sets the mark's main tag; the tag list waits behind Add tag (spec A2, A5)", () => {
+    const h = { ...board.highlights[0], tags: ["t-a", "t-b"] };
+    const { getByRole, queryByLabelText } = render(<MarkPopover highlight={h} at={at} onClose={() => undefined} onConnect={() => undefined} />);
+    expect(queryByLabelText("New tag")).toBeNull();
+    fireEvent.click(getByRole("button", { name: "question" }));
+    expect(dispatch).toHaveBeenCalledWith({ type: "setTags", target: "highlight", id: "h-1", tags: ["t-q", "t-b"] });
+    fireEvent.click(getByRole("button", { name: "Add tag" }));
+    expect(queryByLabelText("New tag")).not.toBeNull();
   });
   it("is placed by its real height, so its buttons stay on screen", () => {
     Object.assign(window, { innerWidth: 1400, innerHeight: 900 });
