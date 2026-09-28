@@ -13,6 +13,7 @@ export const SHORTCUTS: [string, string][] = [
   ["Double-click empty board", "New note (or ⌘K)"],
   ["Drag on empty board", "Move around the board"],
   ["Scroll on the board", "Zoom in and out"],
+  ["Right-click empty board", "New note or New group there"],
   ["Shift and drag on empty board", "Select several, then Group"],
   ["Shift-click", "Add a card to the selection"],
   ["⌘Z / ⇧⌘Z", "Undo / redo"],

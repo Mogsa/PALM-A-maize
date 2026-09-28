@@ -187,3 +187,13 @@ test("scrolling zooms the board, and scrolls the paper up and down", async ({ pa
   await page.mouse.wheel(0, 600);
   await expect.poll(() => paperPane.evaluate((el) => el.scrollTop)).toBeGreaterThan(top + 100);   // the paper moved down
 });
+
+test("right-click on empty board makes a free note there, with nothing highlighted", async ({ page }) => {
+  await seed(page, "board");
+  await page.locator(".react-flow__pane").click({ position: { x: 500, y: 300 }, button: "right" });
+  await page.getByRole("menu", { name: "Board" }).getByRole("menuitem", { name: /New note/ }).click();
+  await expect(page.locator("textarea.note-text")).toBeFocused();
+  await page.keyboard.type("My own idea.");
+  await expect.poll(async () => (await boardOf(page)).nodes.filter((n: Json) => n.type === "note").length).toBe(1);
+  await expect(page.getByRole("menu", { name: "Board" })).toHaveCount(0);
+});

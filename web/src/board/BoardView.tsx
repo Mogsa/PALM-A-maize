@@ -130,7 +130,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
   };
 
   /** A right-click (or the menu key) on words selected on a card opens the same bar as a plain selection, with its ›
-   *  list already shown; on the empty board, New group. Anywhere else the browser keeps its own menu. A menu key
+   *  list already shown; on the empty board, New note and New group. Anywhere else the browser keeps its own menu. A menu key
    *  press has no pointer: the board's middle. */
   const openMenu = (event: React.SyntheticEvent, point: { x: number; y: number }, keyboard: boolean) => {
     const words = readCardSelection(boardRef.current!);
@@ -197,13 +197,17 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
       setDropError("That could not be cut. Nothing was added.");
     });
   };
-  /** A double-click on empty board makes a note there, ready for typing (spec A3). */
-  const onDoubleClick = (event: React.MouseEvent) => {
-    if (!emptyPaneAt(event.target as Element)) return;
-    const note = newNote({ position: screenToFlowPosition({ x: event.clientX, y: event.clientY }), origin: "reader" });
+  /** A note of the reader's own at a board point, ready for typing: from a double-click or the right-click menu. */
+  const addNoteAt = (at: { x: number; y: number }) => {
+    const note = newNote({ position: at, origin: "reader" });
     dispatch({ type: "add", nodes: [note] });
     setEditing(note.id);
     closeHint("dblclick-note");
+  };
+  /** A double-click on empty board makes a note there (spec A3). */
+  const onDoubleClick = (event: React.MouseEvent) => {
+    if (!emptyPaneAt(event.target as Element)) return;
+    addNoteAt(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
   };
 
   /** Group, one gesture (addendum 4.10): a new group just around the selected pieces, one undo step. */
@@ -292,6 +296,9 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
       {textMenu && <TextPopover selection={textMenu} menuOpen={textMenu.menuOpen} onClose={closeTextMenu} />}
       {paneMenu && (
         <ContextMenu at={paneMenu.at} label="Board" onClose={closePaneMenu}>
+          <button type="button" className="action" role="menuitem" onClick={() => { addNoteAt(paneMenu.flow); setPaneMenu(null); }}>
+            <span aria-hidden="true">✎</span> New note
+          </button>
           <button type="button" className="action" role="menuitem" onClick={() => addGroup(paneMenu.flow)}>
             <span aria-hidden="true">▢</span> New group
           </button>

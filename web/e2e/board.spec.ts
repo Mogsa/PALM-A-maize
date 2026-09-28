@@ -304,12 +304,11 @@ test('the top bar keeps the paper, the switch, the goal and ⌘K; New group is o
   await expect(page.locator('.node.group')).toHaveCount(1);
   await expect(page.getByRole('menu', {name: 'Board'})).toHaveCount(0);
 
-  // from the keyboard: the menu key on the board
+  // from the keyboard: the menu key on the board opens the same menu, New note first
   await page.locator('.board').focus();
   await page.keyboard.press('Shift+F10');
-  await expect(page.getByRole('menuitem', {name: /New group/})).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(page.locator('.node.group')).toHaveCount(2);
+  await expect(page.getByRole('menuitem', {name: /New note/})).toBeFocused();
+  await page.keyboard.press('Escape');
 
   const group = page.locator('.react-flow__node-group').first();
   await group.getByRole('button', {name: 'Tags', exact: true}).click();
