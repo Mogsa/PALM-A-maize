@@ -165,8 +165,9 @@ def _anchors(board: Board) -> dict[str, tuple]:
 def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     store = Store(root)
     claude = claude or AnthropicClaude()   # built lazily: no credentials are read until a call
-    ai_passes: dict[str, str] = {}          # paper id -> "running" or "failed"; in memory only
-    ai_messages: dict[str, str] = {}
+    # Papers whose pass is running; in memory only. A failure is not kept: it is told once, in the POST's
+    # answer, so turning AI on again finds no pass and runs one.
+    ai_running: set[str] = set()
     ai_lock = threading.Lock()
     view_lock = threading.Lock()   # guards every read-modify-write of view.json: a client's
                                     # PUT and an AI failure's _turn_ai_off both read then write
@@ -505,12 +506,12 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
 
     def ai_status(paper_id: str, status: str, ai: AiFile | None) -> dict:
         return {"status": status, "stale": bool(ai and store.ai_is_stale(paper_id, ai)),
-                "message": ai_messages.get(paper_id), "ai": ai.model_dump(mode="json", by_alias=True) if ai else None}
+                "message": None, "ai": ai.model_dump(mode="json", by_alias=True) if ai else None}
 
     @app.get("/api/papers/{paper_id}/ai")
     def get_ai(paper_id: str):
         ai = store.read_ai(paper_id)
-        status = ai_passes.get(paper_id) or ("done" if ai and ai.reader else "none")
+        status = "running" if paper_id in ai_running else ("done" if ai and ai.reader else "none")
         if ai is None and status == "none":
             return _error(404, "ai_not_found", f"no AI pass for {paper_id}")
         return ai_status(paper_id, status, ai)
@@ -527,12 +528,11 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
         if (refused := ai_off(paper_id)) is not None:
             return refused
         with ai_lock:
-            if ai_passes.get(paper_id) == "running":
+            if paper_id in ai_running:
                 return _error(409, "ai_running", "an AI pass is already running for this paper")
-            ai_passes[paper_id] = "running"
-            ai_messages.pop(paper_id, None)
+            ai_running.add(paper_id)
         # Everything from here on runs while the paper is marked "running": any exception,
-        # known or not, must clear that back to "failed" so a pass can never get stuck running.
+        # known or not, must clear it so a pass can never get stuck running.
         try:
             doc = store.read_source(paper_id)
             slots = [s.name for s in store.read_template().slots]
@@ -546,18 +546,16 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
             ai = store.update_ai(paper_id, with_reader)
         except (AiError, ValueError) as exc:
             message = f"AI help could not run: {exc}"
-            ai_passes[paper_id], ai_messages[paper_id] = "failed", message
             _turn_ai_off(paper_id)
             return _error(502, "ai_failed", message)
-        except Exception as exc:
-            message = f"AI help could not run: {type(exc).__name__}: {exc}"
-            ai_passes[paper_id], ai_messages[paper_id] = "failed", message
+        except Exception:
             _turn_ai_off(paper_id)
             logger.exception("unexpected error running the AI pass for %s", paper_id)
             raise
         else:
-            ai_passes.pop(paper_id, None)
             return ai_status(paper_id, "done", ai)
+        finally:
+            ai_running.discard(paper_id)
 
     def ndjson(line: dict) -> bytes:
         return (json.dumps(line) + "\n").encode()

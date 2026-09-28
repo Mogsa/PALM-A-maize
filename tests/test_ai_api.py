@@ -73,8 +73,19 @@ def test_a_failed_pass_is_one_plain_line_and_turns_ai_off(store_root, paper, cod
     assert response.status_code == 502
     assert response.json()["error"] == {"code": "ai_failed", "message": "AI help could not run: a reason"}
     assert store.read_view(pid).ai is False and store.read_ai(pid) is None
+    # The failure is told once, in the POST's answer; afterwards the paper has no pass, so turning AI on runs it again.
+    assert client.get(f"/api/papers/{pid}/ai").json()["error"]["code"] == "ai_not_found"
+
+
+def test_after_a_failure_a_saved_definition_reports_none_not_failed(store_root, paper):
+    store, pid, _ = paper
+    from paperboard.ai_model import AiFile
+    store.update_ai(pid, lambda _: AiFile(extracted_at=store.read_source(pid).extracted_at, reader=None, defined={}))
+    client = _client(store_root, FakeClaude(error=AiError("network", "a reason")))
+    _turn_on(client, pid)
+    assert client.post(f"/api/papers/{pid}/ai").status_code == 502
     status = client.get(f"/api/papers/{pid}/ai").json()
-    assert status["status"] == "failed" and status["message"] == "AI help could not run: a reason"
+    assert status["status"] == "none" and status["message"] is None
 
 
 def test_an_answer_of_the_wrong_shape_fails_plainly(store_root, paper):
@@ -151,7 +162,7 @@ def test_update_ai_never_runs_claude_while_holding_the_lock(store_root, paper):
 
 def test_an_unexpected_error_clears_running_instead_of_sticking(store_root, paper, monkeypatch):
     """An exception the handler never anticipated (not AiError, not ValueError) must
-    still clear the in-memory "running" state to "failed", not leave it stuck: a
+    still clear the in-memory "running" state, not leave it stuck: a
     second POST right after must be allowed to try again, not refused as ai_running."""
     _, pid, spans = paper
     client = local_client(create_app(store_root, claude=FakeClaude(paper=_answer(spans[0]))), raise_server_exceptions=False)
@@ -171,8 +182,7 @@ def test_an_unexpected_error_clears_running_instead_of_sticking(store_root, pape
     first = client.post(f"/api/papers/{pid}/ai")
     assert first.status_code == 500
 
-    status = client.get(f"/api/papers/{pid}/ai").json()
-    assert status["status"] == "failed"
+    assert client.get(f"/api/papers/{pid}/ai").status_code == 404
 
     # The failure also turned view.ai off (as any AI failure does); turn it back on,
     # as the reader would, and confirm the retry is not refused as still "running".
