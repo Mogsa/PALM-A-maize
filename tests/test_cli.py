@@ -3,10 +3,14 @@ import os
 import re
 from datetime import UTC, datetime
 
+import pytest
 from conftest import FIXTURES, local_client
 from typer.testing import CliRunner
 
-from paperboard.cli import FAKE_CLAUDE_ENV, app, build_app, claude_from_env
+from paperboard.ai_client import AiError, AnthropicClaude
+from paperboard.canned_claude import CannedClaude
+from paperboard.claude_code import ClaudeCodeClaude
+from paperboard.cli import FAKE_CLAUDE_ENV, app, build_app, choose_claude, claude_from_env
 from paperboard.source_model import SourceDocument
 
 runner = CliRunner()
@@ -117,3 +121,59 @@ def test_the_test_env_gives_serve_a_canned_claude(tmp_path):
     claude = claude_from_env({FAKE_CLAUDE_ENV: str(answer)})
     assert claude.read_paper("s", "p", {}) == {"terms": [], "where_to_look": []}
     assert "".join(claude.define("s", "p", {})) == '{"a": 1}'
+
+
+# -- which Claude serve uses ------------------------------------------------------
+
+def _no_claude_cli(_name):
+    return None
+
+
+def _has_claude_cli(_name):
+    return "/usr/local/bin/claude"
+
+
+def test_the_canned_claude_comes_first(tmp_path):
+    answer = tmp_path / "answer.json"
+    answer.write_text("{}")
+    key = tmp_path / "anthropic_key"
+    key.write_text("sk-file")
+    env = {FAKE_CLAUDE_ENV: str(answer), "ANTHROPIC_API_KEY": "sk-env"}
+    claude, label = choose_claude(env, key_file=key, which=_has_claude_cli)
+    assert isinstance(claude, CannedClaude) and "canned" in label
+
+
+def test_an_env_api_key_uses_the_api(tmp_path):
+    claude, label = choose_claude({"ANTHROPIC_API_KEY": "sk-env"}, key_file=tmp_path / "none", which=_has_claude_cli)
+    assert isinstance(claude, AnthropicClaude) and label == "AI help: your API key"
+
+
+def test_a_saved_key_file_uses_the_api_with_that_key_stripped(tmp_path):
+    key = tmp_path / "anthropic_key"
+    key.write_text("  sk-file\n")
+    claude, label = choose_claude({}, key_file=key, which=_has_claude_cli)
+    assert isinstance(claude, AnthropicClaude) and label == "AI help: your API key"
+    assert "sk-file" not in label
+    assert claude._client().api_key == "sk-file"
+
+
+def test_an_empty_key_file_is_no_key(tmp_path):
+    key = tmp_path / "anthropic_key"
+    key.write_text("\n")
+    claude, _ = choose_claude({}, key_file=key, which=_has_claude_cli)
+    assert isinstance(claude, ClaudeCodeClaude)
+
+
+def test_no_key_but_claude_on_path_uses_claude_code(tmp_path):
+    claude, label = choose_claude({}, key_file=tmp_path / "none", which=_has_claude_cli)
+    assert isinstance(claude, ClaudeCodeClaude) and label == "AI help: your Claude Code login"
+
+
+def test_nothing_available_fails_plainly_on_each_call(tmp_path):
+    claude, label = choose_claude({}, key_file=tmp_path / "none", which=_no_claude_cli)
+    assert label == "AI help: none (log in to Claude Code, or save an API key)"
+    for call in (lambda: claude.read_paper("s", "p", {}), lambda: list(claude.define("s", "p", {}))):
+        with pytest.raises(AiError) as err:
+            call()
+        assert err.value.code == "no_claude"
+        assert str(err.value) == "no Claude available: log in to Claude Code, or save an API key"
