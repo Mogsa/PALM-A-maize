@@ -1,0 +1,14 @@
+{
+  "read_paper": {
+    "terms": [
+      {
+        "term": "residual learning",
+        "defined_in": [],
+        "explanation": "Each block learns what to add to its input, not a whole new output.",
+        "grounds": [{ "span": "p1-r8", "quote": "residual learning framework" }]
+      }
+    ],
+    "where_to_look": []
+  },
+  "define": []
+}

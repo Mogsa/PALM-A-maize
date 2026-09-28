@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from conftest import FIXTURES, local_client
 from typer.testing import CliRunner
 
-from paperboard.cli import app, build_app
+from paperboard.cli import FAKE_CLAUDE_ENV, app, build_app, claude_from_env
 from paperboard.source_model import SourceDocument
 
 runner = CliRunner()
@@ -104,3 +104,16 @@ def test_build_app_serves_the_frontend_when_built(tmp_path):
 def test_serve_command_exists():
     result = runner.invoke(app, ["serve", "--help"])
     assert result.exit_code == 0 and "--port" in _plain(result.output)
+
+
+def test_no_canned_claude_unless_the_test_env_names_one():
+    assert claude_from_env({}) is None
+    assert claude_from_env({FAKE_CLAUDE_ENV: ""}) is None
+
+
+def test_the_test_env_gives_serve_a_canned_claude(tmp_path):
+    answer = tmp_path / "answer.json"
+    answer.write_text(json.dumps({"read_paper": {"terms": [], "where_to_look": []}, "define": ['{"a"', ": 1}"]}))
+    claude = claude_from_env({FAKE_CLAUDE_ENV: str(answer)})
+    assert claude.read_paper("s", "p", {}) == {"terms": [], "where_to_look": []}
+    assert "".join(claude.define("s", "p", {})) == '{"a": 1}'
