@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client";
+import { extraSelectionItems, type MenuItem } from "./commands/registry";
 import { newId } from "./model/ids";
+import { newEdge } from "./model/links";
+import { newNote } from "./model/notes";
+import { spotForNoteOn } from "./model/placement";
 import { sectionLabel } from "./model/sections";
-import type { PageRect, PaperScroll, Section, SelectionMode } from "./model/types";
+import type { Highlight, PageRect, PaperScroll, Section, SelectionMode } from "./model/types";
 import { makeCut } from "./paper/cut";
 import { FindPanel, useFind } from "./paper/FindPanel";
 import type { PaperHit } from "./paper/hit";
 import type { JumpTarget } from "./paper/margin";
-import { AskElsewhere } from "./paper/AskElsewhere";
+import { MarkMenu } from "./paper/MarkMenu";
 import { MarkPopover } from "./paper/MarkPopover";
 import { ContextMenu } from "./ui/ContextMenu";
 import { PaperView } from "./paper/PaperView";
@@ -21,7 +25,7 @@ import { useBoard } from "./state/BoardProvider";
 type Pending = {
   rects: PageRect[]; lines?: PageRect[]; at: DOMRect; exact: boolean; text: string; preview: string; mode: SelectionMode; section?: Section;
 };
-type OpenMark = { id: string; at: DOMRect };
+type OpenMark = { id: string; at: DOMRect; addTag?: boolean };
 
 export const SELECTION_FAILED_MESSAGE = "Could not read that selection from the paper. Nothing was added.";
 
@@ -31,7 +35,8 @@ type Props = {
 };
 
 export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest, onFindHandled }: Props) {
-  const { state, dispatch, source, paperId, view, setView } = useBoard();
+  const board = useBoard();
+  const { state, dispatch, source, paperId, view, setView } = board;
   const [pending, setPending] = useState<Pending | null>(null);
   const [openMark, setOpenMark] = useState<OpenMark | null>(null);
   const [markMenu, setMarkMenu] = useState<OpenMark | null>(null);
@@ -59,14 +64,17 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
     cancelConnect();
   }, [active, cancelConnect]);
 
-  const choose = async (kind: "highlight" | "cut") => {
-    if (!pending) return;
+  /** Highlight (with a main tag, or plain) or cut the selection `p`. Resolves to the highlight made, if one was. */
+  const chooseFor = async (p: Pending, kind: "highlight" | "cut", tagId: string | null = null): Promise<Highlight | null> => {
     setBusy(true);
     setError(null);
+    let made: Highlight | null = null;
     try {
-      const selection = await api.postText(paperId, pending.rects, !pending.exact, pending.mode, pending.lines);
-      if (kind === "highlight") dispatch({ type: "addHighlight", highlight: { id: newId("h"), tags: [], anchor: selection.highlight } });
-      else dispatch({ type: "addNode", node: await makeCut(paperId, source, state.board, selection, { mode: pending.mode, sectionId: pending.section?.id }) });
+      const selection = await api.postText(paperId, p.rects, !p.exact, p.mode, p.lines);
+      if (kind === "highlight") {
+        made = { id: newId("h"), tags: tagId ? [tagId] : [], anchor: selection.highlight };
+        dispatch({ type: "addHighlight", highlight: made });
+      } else dispatch({ type: "addNode", node: await makeCut(paperId, source, state.board, selection, { mode: p.mode, sectionId: p.section?.id }) });
     } catch (failure) {
       console.error(SELECTION_FAILED_MESSAGE, failure);
       setError(SELECTION_FAILED_MESSAGE);
@@ -75,7 +83,9 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
       setPending(null);
       window.getSelection()?.removeAllRanges();
     }
+    return made;
   };
+  const choose = (kind: "highlight" | "cut", tagId: string | null = null) => (pending ? chooseFor(pending, kind, tagId) : Promise.resolve(null));
 
   const onClickPaper = (hit: PaperHit) => {
     setError(null);
@@ -105,12 +115,31 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
   const onMarkMenu = (mark: { id: string }, at: DOMRect) => { setPending(null); setOpenMark(null); setMarkMenu({ id: mark.id, at }); };
   const closeMarkMenu = useCallback(() => setMarkMenu(null), []);
 
+  /** A note of the reader's own, connected to the mark: one undo step (SPEC 5.1). */
+  const addNoteOn = (h: Highlight) => {
+    const note = newNote({ ...spotForNoteOn({ ...state.board, highlights: [...state.board.highlights, h] }, h.id), origin: "reader" });
+    dispatch({ type: "add", nodes: [note], edges: [newEdge(h.id, note.id)] });
+  };
+  /** A selection's ›: each item first makes a plain highlight, then acts on it (a mark is what these act on). */
+  const selectionMenu = (p: Pending): MenuItem[] => {
+    if (p.section) return [];
+    const markThen = (then: (h: Highlight) => void) => () => { void chooseFor(p, "highlight").then((h) => { if (h) then(h); }); };
+    return [
+      { id: "add-tag", label: "Add tag", run: markThen((h) => setOpenMark({ id: h.id, at: p.at, addTag: true })) },
+      { id: "connect", label: "Connect", run: markThen((h) => connect.start(h.id)) },
+      { id: "add-note", label: "Add note", run: markThen(addNoteOn) },
+      { id: "ask", label: "Ask elsewhere", run: markThen((h) => setMarkMenu({ id: h.id, at: p.at })) },
+      ...extraSelectionItems({ on: "paper", text: p.text, rects: p.rects, at: p.at }, board),
+    ];
+  };
+
   const selectionPopover = (p: Pending) => {
     const piece = existingPiece(p.section);
     return <SelectionPopover at={p.at} preview={p.preview} busy={busy} canHighlight={!p.section}
-                             onHighlight={() => choose("highlight")} onCut={() => choose("cut")} onDismiss={() => setPending(null)}
+                             onHighlight={(tagId) => void choose("highlight", tagId)} onCut={() => choose("cut")} onDismiss={() => setPending(null)}
                              onOpen={piece ? () => { setPending(null); onOpenOnBoard(piece.id); } : undefined}
-                             onFind={p.text.trim() ? () => { find.open(p.text); setPending(null); } : undefined} />;
+                             onFind={p.text.trim() ? () => { find.open(p.text); setPending(null); } : undefined}
+                             menu={selectionMenu(p)} />;
   };
 
   return (
@@ -122,11 +151,16 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
       {pending && selectionPopover(pending)}
       {find.query !== null && <FindPanel query={find.query} onQuery={find.edit} onPick={find.pick} onClose={find.close} />}
       {markOpen && openMark && (
-        <MarkPopover highlight={markOpen} at={openMark.at} onClose={() => setOpenMark(null)}
+        <MarkPopover highlight={markOpen} at={openMark.at} addTag={openMark.addTag} onClose={() => setOpenMark(null)}
                      onConnect={() => { connect.start(openMark.id); setOpenMark(null); }} />
       )}
       {menuMark && markMenu && (
-        <ContextMenu at={markMenu.at} label="Mark" onClose={closeMarkMenu}><AskElsewhere highlight={menuMark} /></ContextMenu>
+        <ContextMenu at={markMenu.at} label="Mark" onClose={closeMarkMenu}>
+          <MarkMenu highlight={menuMark}
+                    onAddTag={() => { setMarkMenu(null); setOpenMark({ id: menuMark.id, at: markMenu.at, addTag: true }); }}
+                    onConnect={() => { setMarkMenu(null); connect.start(menuMark.id); }}
+                    onAddNote={() => { setMarkMenu(null); addNoteOn(menuMark); }} />
+        </ContextMenu>
       )}
       {connect.connectingFrom && (
         <p className="connect-hint" role="status">Click another mark or a section heading to connect. <button className="quiet" onClick={connect.cancel}>Cancel</button></p>
