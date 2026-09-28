@@ -12,6 +12,8 @@ import { newNote } from "../model/notes";
 import { fitsInside, isDescendant, reparent, type Box } from "../model/reparent";
 import { parentsFirst } from "../model/serialize";
 import type { BoardNode, ChunkNode as ChunkNodeType, GroupNode as GroupNodeType, PageRect } from "../model/types";
+import { Hint } from "../hints/Hint";
+import { closeHint } from "../hints/hints";
 import { ContextCard } from "../paper/ContextCard";
 import { useHoverCard } from "../paper/useHoverCard";
 import { useBoard } from "../state/BoardProvider";
@@ -188,6 +190,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
     event.preventDefault();
     const drop = takeCut();
     if (!drop || !emptyPaneAt(event.target as Element)) return;
+    closeHint("drag-cut");
     setDropError(null);
     drop(screenToFlowPosition({ x: event.clientX, y: event.clientY })).catch((failure: unknown) => {
       console.error("drop to cut failed", failure);
@@ -200,6 +203,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
     const note = newNote({ position: screenToFlowPosition({ x: event.clientX, y: event.clientY }), origin: "reader" });
     dispatch({ type: "add", nodes: [note] });
     setEditing(note.id);
+    closeHint("dblclick-note");
   };
 
   /** Group, one gesture (addendum 4.10): a new group just around the selected pieces, one undo step. */
@@ -235,6 +239,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
 
   const onConnect: OnConnect = useCallback(({ source, sourceHandle, target, targetHandle }) => {
     dispatch({ type: "add", edges: [newEdge(endOf(source, sourceHandle), endOf(target, targetHandle))] });
+    closeHint("connect");
   }, [dispatch]);
   /** A line let go of on empty board makes a note there, connected (addendum 4.10): one undo step, then the note opens. */
   const onConnectEnd: OnConnectEnd = useCallback((event, connection) => {
@@ -244,6 +249,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
     const { note, edge } = noteAtDrop(connection.fromNode.id, connection.fromHandle?.id, screenToFlowPosition({ x: clientX, y: clientY }));
     dispatch({ type: "add", nodes: [note], edges: [edge] });
     setEditing(note.id);
+    closeHint("connect");
   }, [dispatch, screenToFlowPosition]);
   const onEdgesChange = useCallback((changes: EdgeChange<FlowEdge>[]) => setSelectedEdges((current) => applySelection(current, changes)), []);
 
@@ -293,6 +299,8 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
       )}
       {hover.card && <ContextCard card={hover.card} hover={hover} onGo={onOpenInPaper} onOpenNote={focusOn} />}
       {dropError && <p className="selection-error" role="alert" onClick={() => setDropError(null)}>{dropError}</p>}
+      <Hint id="connect" when={active && selectedNodes.length === 1} />
+      <Hint id="dblclick-note" when={active && !state.board.nodes.some((n) => n.type === "note")} />
     </div>
     </BoardActionsProvider>
   );

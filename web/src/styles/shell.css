@@ -21,6 +21,11 @@ button { cursor: pointer; }
 .view { grid-row: 1; grid-column: 1; min-height: 0; }
 /* both: the paper on the left, a divider, the board on the right; each pane keeps its own scroll and zoom */
 .views.both > .paper-pane { grid-column: 1; min-width: 0; }
+.paper-pane { position: relative; }
+
+/* a one-time gesture hint: faint, out of the way, never in the way of a click */
+.gesture-hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 15; margin: 0; padding: 5px 10px; pointer-events: none; color: var(--ink-muted); font-size: var(--text-ui-small); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-pill); box-shadow: var(--shadow-card); opacity: 0.9; }
+.gesture-hint button { pointer-events: auto; margin-left: 6px; color: var(--ink-faint); }
 /* the page is fitted to the pane in both: nothing scrolls sideways (margin notes past the pane are cut off) */
 .views.both .paper { overflow-x: hidden; }
 .views.both > .board-pane { grid-column: 3; min-width: 0; }
