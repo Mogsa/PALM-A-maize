@@ -3,6 +3,9 @@ import type {
   RecutMode, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload, Source, SplitDraft, TagFile, TemplateFile,
 } from "../model/types";
 import type { PaperViewState } from "../model/paperView";
+import type { AiStatus, DefineLine, DefineRequest, Definition } from "../ai/types";
+import { NO_AI } from "../ai/types";
+import { readNdjson } from "../ai/ndjson";
 
 /** One method per route of SPEC-ADDENDUM.md section 6. */
 
@@ -131,6 +134,34 @@ export const api = {
   /** The export is always in the paper's order. */
   postExport: (id: string, tags: string[]) =>
     send<ExportResult>("POST", `${paper(id)}/export`, { tags, order: "paper" }),
+
+  /** The AI pass and its status (spec B3); no pass yet is `NO_AI`, not an error. */
+  async getAi(id: string): Promise<AiStatus> {
+    try {
+      return await call<AiStatus>(`${paper(id)}/ai`);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "ai_not_found") return NO_AI;
+      throw error;
+    }
+  },
+  runAi: (id: string) => send<AiStatus>("POST", `${paper(id)}/ai`),
+  /** A quick definition, streamed: `onDelta` gets the model's raw text as it comes. */
+  async define(id: string, body: DefineRequest, onDelta: (text: string) => void): Promise<Definition> {
+    const response = await request(`${paper(id)}/ai/define`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!response.ok) await parse(response);   // throws ApiError with the server's code
+    let result: Definition | null = null;
+    let failure: string | null = null;
+    await readNdjson(response, (raw) => {
+      const line = raw as DefineLine;
+      if ("delta" in line) onDelta(line.delta);
+      else if ("done" in line) result = line.done;
+      else failure = line.error;
+    });
+    if (failure || !result) throw new Error(failure ?? "AI help could not run: the answer stopped early");
+    return result;
+  },
 
   getTags: () => call<TagFile>("/api/tags"),
   putTags: (tags: TagFile) => send<TagFile>("PUT", "/api/tags", tags),

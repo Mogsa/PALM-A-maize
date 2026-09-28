@@ -3,7 +3,7 @@ import { clampSplit, defaultPaperView, splitAt, withView } from "./paperView";
 
 describe("the paper's view state (kept apart from the board)", () => {
   it("defaults to the paper, no scroll, no filter, no viewport and a 0.4 split", () => {
-    expect(defaultPaperView).toEqual({ view: "paper", paper_scroll: null, active_tags: [], viewport: null, split: 0.4 });
+    expect(defaultPaperView).toEqual({ view: "paper", paper_scroll: null, active_tags: [], viewport: null, split: 0.4, ai: false });
   });
   it("returns the same object when nothing changes, so a restore event saves nothing", () => {
     const v = { ...defaultPaperView, viewport: { x: 1, y: 2, zoom: 1 }, paper_scroll: { page: 1, y: 10 } };

@@ -143,7 +143,7 @@ describe("api, schema 2 routes", () => {
   });
 
   it("the view is read and put at its own route, with no version", async () => {
-    const view = { view: "both" as const, paper_scroll: null, active_tags: [], viewport: null, split: 0.4 };
+    const view = { view: "both" as const, paper_scroll: null, active_tags: [], viewport: null, split: 0.4, ai: false };
     mockFetch(200, view);
     expect(await api.getView("p")).toEqual(view);
     const fn = vi.fn(async () => new Response(null, { status: 204 }));
@@ -152,6 +152,36 @@ describe("api, schema 2 routes", () => {
     const call = lastCall(fn);
     expect(call).toMatchObject({ url: "/api/papers/p/view", init: { method: "PUT" }, body: view });
     expect(new Headers(call.init.headers).get("if-match")).toBeNull();
+  });
+});
+
+describe("api, AI routes", () => {
+  it("getAi reads a 404 as no pass yet", async () => {
+    mockFetch(404, { error: { code: "ai_not_found", message: "none" } });
+    expect(await api.getAi("p")).toEqual({ status: "none", stale: false, message: null, ai: null });
+  });
+
+  it("runAi posts to /ai", async () => {
+    const fn = mockFetch(200, { status: "done", stale: false, message: null, ai: null });
+    await api.runAi("p");
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/ai", init: { method: "POST" } });
+  });
+
+  it("define streams deltas and resolves with the result", async () => {
+    const body = '{"delta":"{\\"explanation\\": \\"x"}\n{"done":{"model":"m","explanation":"x","grounds":[]}}\n';
+    const fn = vi.fn(async () => new Response(body, { status: 200 }));
+    vi.stubGlobal("fetch", fn);
+    const deltas: string[] = [];
+    const result = await api.define("p", { word: "w", page: 0, rect: [0, 0, 1, 1], definition: null }, (d) => deltas.push(d));
+    expect(result.explanation).toBe("x");
+    expect(deltas).toEqual(['{"explanation": "x']);
+    expect(lastCall(fn).body).toEqual({ word: "w", page: 0, rect: [0, 0, 1, 1], definition: null });
+  });
+
+  it("define rejects with the server's plain line", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":"AI help could not run: x"}\n', { status: 200 })));
+    await expect(api.define("p", { word: "w", page: 0, rect: [0, 0, 1, 1], definition: null }, () => {}))
+      .rejects.toThrow("AI help could not run: x");
   });
 });
 
