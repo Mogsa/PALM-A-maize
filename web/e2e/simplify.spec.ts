@@ -170,3 +170,20 @@ test("a plain drag on empty board pans it", async ({ page }) => {
   expect(Math.abs(after.x - before.x)).toBeGreaterThan(50);
   await expect(page.locator(".react-flow__node.selected")).toHaveCount(0);   // it panned, it did not lasso-select
 });
+
+test("scrolling zooms the board, and scrolls the paper up and down", async ({ page }) => {
+  await seed(page, "both", [chunk("n-a", 40, 60, "First.")]);
+  const card = page.locator('.react-flow__node[data-id="n-a"]');
+  const before = (await card.boundingBox())!;
+  const pane = (await page.locator(".react-flow__pane").boundingBox())!;
+  await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+  await page.mouse.wheel(0, -400);
+  await expect.poll(async () => (await card.boundingBox())!.width).toBeGreaterThan(before.width * 1.1);   // it zoomed in
+
+  const paperPane = page.locator(".paper");
+  const box = (await paperPane.boundingBox())!;
+  const top = await paperPane.evaluate((el) => el.scrollTop);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => paperPane.evaluate((el) => el.scrollTop)).toBeGreaterThan(top + 100);   // the paper moved down
+});

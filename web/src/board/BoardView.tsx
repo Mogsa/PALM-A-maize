@@ -282,7 +282,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
         defaultViewport={view.viewport ?? ORIGIN}
         onMoveStart={() => hover.hide()} onMoveEnd={(_, viewport) => setView({ viewport })}
         minZoom={0.2} fitView={false} deleteKeyCode={active ? DELETE_KEYS : null}
-        zoomOnDoubleClick={false} panOnDrag panOnScroll selectionKeyCode="Shift" selectionMode={SelectionMode.Partial}
+        zoomOnDoubleClick={false} panOnDrag zoomOnScroll selectionKeyCode="Shift" selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode={["Shift", "Meta", "Control"]}
       >
         <Background />
