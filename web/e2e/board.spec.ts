@@ -243,7 +243,8 @@ test('New note and a slot\'s question each open a note ready for typing', async 
     data: { tags: [], name: 'Main point', prompt: 'What is the one thing?' } };
   const id = await seedBoard(page, { nodes: [slot] });
   await page.getByRole('button', {name: 'Board', exact: true}).click();
-  await page.getByRole('button', {name: 'New note'}).click();
+  await page.getByRole('button', {name: 'Commands (⌘K)'}).click();
+  await page.getByRole('option', {name: 'New note'}).click();
   await expect(page.locator('textarea.note-text')).toBeFocused();
   await page.keyboard.type('In my own words');
   await page.locator('.react-flow__pane').click({ position: { x: 1200, y: 900 } });
@@ -282,17 +283,19 @@ test('a note made while a tag filter is on stays in sight, ready for typing', as
   await seedBoard(page, { nodes: [{ ...base, data: { ...base.data, tags: ['t-shown'] } }], activeTags: ['t-shown'] });
   await page.getByRole('button', {name: 'Board', exact: true}).click();
   await expect(page.locator('.react-flow__node[data-id="n-tagged"]')).toBeVisible();
-  await page.getByRole('button', {name: 'New note'}).click();
+  await page.getByRole('button', {name: 'Commands (⌘K)'}).click();
+  await page.getByRole('option', {name: 'New note'}).click();
   await expect(page.locator('textarea.note-text')).toBeFocused();
 });
 
-test('the top bar keeps six controls; New group is on the empty board\'s right-click; the filter shows once a tag is used', async ({page}) => {
+test('the top bar keeps the paper, the switch, the goal and ⌘K; New group is on the empty board\'s right-click; the filter shows once a tag is used', async ({page}) => {
   await seedBoard(page, { nodes: [] });
   const bar = page.locator('.topbar');
   await expect(bar.getByRole('combobox', {name: 'Paper', exact: true})).toBeVisible();
-  for (const name of ['Paper', 'Both', 'Board', 'Questions', 'New note', 'More']) await expect(bar.getByRole('button', {name, exact: true})).toBeVisible();
+  for (const name of ['Paper', 'Both', 'Board', 'Commands (⌘K)']) await expect(bar.getByRole('button', {name, exact: true})).toBeVisible();
   await expect(bar.getByRole('textbox', {name: 'Reading goal'})).toBeVisible();
-  for (const name of ['Glossary', 'Export', 'Tags', 'Template', 'Split', 'New group']) await expect(page.getByRole('button', {name, exact: true})).toHaveCount(0);
+  // nothing to list yet: no Questions, no Glossary; More and New note are gone (spec A1, A5)
+  for (const name of ['Questions', 'Glossary', 'More', 'New note', 'Export', 'Tags', 'Template', 'Split', 'New group']) await expect(page.getByRole('button', {name, exact: true})).toHaveCount(0);
   await expect(page.locator('.filter-bar')).toHaveCount(0);
 
   await page.getByRole('button', {name: 'Board', exact: true}).click();

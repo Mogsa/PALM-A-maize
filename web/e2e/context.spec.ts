@@ -135,8 +135,7 @@ test("hovering a term shows the reader's definition first, on a card and on the 
   await page.mouse.move(5, 500);
   await expect(card).toHaveCount(0);
 
-  await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Glossary" }).click();
+  await page.locator(".topbar").getByRole("button", { name: "Glossary", exact: true }).click();
   const glossary = page.getByRole("region", { name: "Glossary" });
   await expect(glossary.getByRole("listitem")).toHaveCount(1);
   await expect(glossary.getByRole("listitem")).toContainText("The mapping we want the layers to fit.");

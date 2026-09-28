@@ -149,7 +149,7 @@ test("Cut out makes three pieces whose text is the chunk's in paper order, and e
   await save(page.request, { nodes: [chunk(CHUNK, data)], highlights: [{ id: MARK, tags: [], anchor }] });
   await open(page);
   await selectOnCard(page, CHUNK, "As we discussed", "shallower counterpart.");
-  await expect(page.getByRole("button", { name: "Cut out", exact: true })).toHaveCount(0);   // on the right-click only
+  await expect(page.getByRole("button", { name: "Cut out", exact: true })).toBeVisible();   // ✂ is in the bar (spec A2)
   await rightClickSelection(page);
   await page.getByRole("button", { name: "Cut out", exact: true }).click();
   await expect(page.locator(".node.chunk")).toHaveCount(3);
@@ -206,14 +206,14 @@ test("Split here on the chunk's first line changes nothing and says so; lower do
   const opening = data.blocks.find((b: Json) => b.kind === "text").text.split(/\s+/).slice(0, 3).join(" ");
   await selectOnCard(page, CHUNK, opening, opening);
   await rightClickSelection(page);
-  await page.getByRole("button", { name: "Split here", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Split here", exact: true }).click();
   await expect(page.locator(".text-popover .popover-note")).toHaveText("This is already where the piece starts.");   // Review Focus 4
   await expect(page.locator(".node.chunk")).toHaveCount(1);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Words on the card" })).toHaveCount(0);
   await selectOnCard(page, CHUNK, "As we discussed", "shallower counterpart.");
   await rightClickSelection(page);
-  await page.getByRole("button", { name: "Split here", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Split here", exact: true }).click();
   await expect(page.locator(".node.chunk")).toHaveCount(2);
   await page.waitForTimeout(SAVED_MS);
   const pieces = chunksOf(await boardOf(page.request)).sort((a: Json, b: Json) => a.position.x - b.position.x);

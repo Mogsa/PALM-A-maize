@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MenuItem } from "../commands/registry";
 import { useDismiss } from "./useDismiss";
 
@@ -8,6 +8,9 @@ export function ActionMenu({ items, initiallyOpen = false }: { items: MenuItem[]
   const box = useRef<HTMLSpanElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(box, close);
+  // A right-click on words already selected (the popover already mounted) asks for the menu open again: `initiallyOpen`
+  // seeds the state only on mount, so a later true needs its own effect to actually reopen it.
+  useEffect(() => { if (initiallyOpen) setOpen(true); }, [initiallyOpen]);
   if (!items.length) return null;
   const pick = (item: MenuItem) => { setOpen(false); item.run(); };
   return (

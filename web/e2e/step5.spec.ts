@@ -126,10 +126,10 @@ async function clickMark(page: Page, id: string, button: "left" | "right" = "lef
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button });
 }
 
-/** Opens one of the panels kept in the More menu. */
+/** Opens one of the panels from ⌘K. */
 async function openPanel(page: Page, name: string) {
-  await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name, exact: true }).click();
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.getByRole("dialog", { name: "Commands" }).getByRole("option", { name, exact: true }).click();
 }
 
 /** Writes the export (always in the paper's order) and returns the Markdown the dialog shows: what the server wrote
@@ -370,8 +370,9 @@ test("a question with only an AI note stays on the list, and a note of your own 
   const id = await highlight(page, 3, 20, 22);
   await clickMark(page, id);
   const popover = page.locator(".mark-popover");
-  await popover.getByLabel("question", { exact: true }).check();
+  await popover.getByRole("button", { name: "question", exact: true }).click();
   const questions = page.getByRole("button", { name: "Questions", exact: true });
+  await expect(questions).toBeVisible({ timeout: 10_000 });
   await questions.click();
   await expect(page.locator(".question-list li")).toHaveCount(1);
 
