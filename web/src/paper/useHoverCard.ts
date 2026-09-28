@@ -10,7 +10,8 @@ export const CARD_CLOSE_DELAY_MS = 250;
  *  a term's definitions, drawn from its mark (D27). `text` is null while the words are read. */
 export type CardContent =
   | { kind: "words"; text: string | null; clip: PageRect | null; failed: boolean; go: PageRect }
-  | { kind: "term"; highlightId: string };
+  | { kind: "term"; highlightId: string }
+  | { kind: "aiTerm"; term: string; at: PageRect | null };
 /** `key` is the thing hovered: a link element, a reference element, a mark's id. */
 export type OpenCard = { key: unknown; at: DOMRect; content: CardContent };
 

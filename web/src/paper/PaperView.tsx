@@ -3,8 +3,11 @@ import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 import { api } from "../api/client";
+import { useAi } from "../ai/AiProvider";
+import { aiUnderlines } from "../ai/terms";
 import type { XY } from "../model/reparent";
 import type { Board, Highlight, PageRect, PaperScroll, SelectionMode, Source } from "../model/types";
+import { useTags } from "../state/TagsProvider";
 import { ContextCard } from "./ContextCard";
 import type { LinkDocument } from "./citation";
 import type { PaperHit } from "./hit";
@@ -14,6 +17,7 @@ import type { JumpTarget } from "./margin";
 import { PageOverlay } from "./PageOverlay";
 import { bandBox } from "./rectangleDrag";
 import { usePaperScroll } from "./scroll";
+import { isTerm, termTagIds } from "./term";
 import { useCitationCard } from "./useCitationCard";
 import { useHoverCard } from "./useHoverCard";
 import { useTermHover } from "./useTermHover";
@@ -72,8 +76,10 @@ export function PaperView(props: Props) {
   const pageWidth = usePageWidth(container, fit);
   const pdf = useRef<LinkDocument | null>(null);
   const hover = useHoverCard();
+  const { ai } = useAi();
+  const { tags } = useTags();
   const citation = useCitationCard(pdf, source, paperId, hover);
-  const termHover = useTermHover(container, source, board, hover);
+  const termHover = useTermHover(container, source, board, hover, ai);
   const mouse = usePaperMouse(container, source, board, props);
   const findProps = useFindMark(container, findMark);
   const { flash, show: showFlash } = useFlash();
@@ -110,6 +116,7 @@ export function PaperView(props: Props) {
             <div key={p.index} className="page-wrap" style={{ height: p.height * (pageWidth / p.width) }}>
               <Page pageIndex={p.index} width={pageWidth} renderAnnotationLayer renderTextLayer {...findProps(p.index)} />
               <PageOverlay page={p.index} scale={pageWidth / p.width} board={board} source={source}
+                           aiLines={aiUnderlines(ai, board.highlights.filter((h) => isTerm(h, termTagIds(tags))), p.index)}
                            onOutlineClick={onOutlineClick} onJump={onJump} onOpenNote={onOpenNote} />
               {flash?.page === p.index && <div className="focus-flash" style={flashStyle(flash, pageWidth / p.width)} />}
             </div>

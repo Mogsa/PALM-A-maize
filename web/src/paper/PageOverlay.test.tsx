@@ -70,3 +70,14 @@ describe("PageOverlay marks (spec A2)", () => {
     expect((chips[0] as HTMLElement).title).toBe("supports");
   });
 });
+
+describe("PageOverlay AI underlines", () => {
+  const renderOverlay = (aiLines: { term: string; at: { page: number; rect: [number, number, number, number] } }[]) =>
+    render(<PageOverlay page={0} scale={1} board={emptyBoard("p")} source={source} aiLines={aiLines}
+      onOutlineClick={() => undefined} onJump={() => undefined} onOpenNote={() => undefined} />);
+  it("draws a dotted AI underline except where the reader's term mark is", () => {
+    const { container } = renderOverlay([{ term: "residual", at: { page: 0, rect: [300, 10, 340, 20] } }]);
+    expect(container.querySelectorAll(".ai-term")).toHaveLength(1);
+    expect(renderOverlay([]).container.querySelectorAll(".ai-term")).toHaveLength(0);
+  });
+});

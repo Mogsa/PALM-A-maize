@@ -10,6 +10,7 @@ const notes: Record<string, string> = { "n-mine": "Nets that learn **what to add
 const source = { sections: [], figures: [], pages: [], regions: [], page_text: [{ page: 4, text: "We evaluate 18-layer residual nets (ResNets). Then more." }] };
 vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ state: { board }, dispatch: vi.fn(), source }), useNote: (id: string) => ({ text: notes[id] }) }));
 vi.mock("../state/TagsProvider", () => ({ useTags: () => ({ tags: [{ id: "t-term", name: "term", colour: "#0F766E" }] }) }));
+vi.mock("../ai/AiProvider", () => ({ useAi: () => ({ ai: null }) }));
 import { TermBody } from "./TermBody";
 
 afterEach(cleanup);

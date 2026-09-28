@@ -10,6 +10,7 @@
 .overlay .mark { position: absolute; background: var(--hl); mix-blend-mode: multiply; border-radius: 2px; }
 .overlay .mark.relocated { outline: 1px dashed var(--moved); outline-offset: 1px; }
 .overlay .mark.orphaned { background: var(--lost); opacity: 0.22; }
+.overlay .ai-term { position: absolute; border-bottom: 1.5px dotted var(--ink-faint); pointer-events: none; }
 
 /* where the paper has been cut: one thin line in the left margin, faint along a piece still in the tray, solid in the
    accent along one out of it, a short tick at every start and end. A solid stretch is drawn after, so over a faint one. */
@@ -89,6 +90,9 @@
 .term-part .note-markdown { margin: 0 4px; font-size: var(--text-ui); max-height: 9em; overflow: auto; }
 .term-part > .quiet { align-self: flex-start; font-size: var(--text-ui-small); }
 .citation-label .where { font-weight: 400; margin-left: 6px; }
+/* the AI part of a term card (spec B4): badged AI, its explanation a touch softer than the paper's own words */
+.ai-badge { font-size: 10px; letter-spacing: .04em; padding: 0 4px; border-radius: 3px; border: 1px solid var(--ink-faint); color: var(--ink-faint); }
+.term-part.ai .citation-text, .streaming { color: var(--ink-soft, inherit); }
 /* what a link or reference points at, when it is a figure, table or formula (D26): the paper as printed */
 .citation-clip { display: block; max-width: 100%; max-height: 200px; object-fit: contain; margin: 0 auto; background: #fff; }
 

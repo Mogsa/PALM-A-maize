@@ -1,3 +1,4 @@
+import type { AiUnderline } from "../ai/terms";
 import type { Board, Rect, Source, Tag } from "../model/types";
 import { useTags } from "../state/TagsProvider";
 import { mainTagColour } from "../tags/mainTag";
@@ -7,6 +8,7 @@ import type { JumpTarget } from "./margin";
 
 type Props = {
   page: number; scale: number; board: Board; source: Source;
+  aiLines?: AiUnderline[];
   onOutlineClick: (nodeId: string) => void; onJump: (target: JumpTarget) => void; onOpenNote: (noteId: string) => void;
 };
 
@@ -29,7 +31,7 @@ function MarkExtras({ ids }: { ids: string[] }) {
 
 /** Marks and the cut ruler for one page. The overlay is pointer-events: none, so a drag anywhere over a page still
  *  selects the text underneath (fix round 1, finding 2); the ruler sits in the margin, off the text. */
-export function PageOverlay({ page, scale, board, source, onOutlineClick, onJump, onOpenNote }: Props) {
+export function PageOverlay({ page, scale, board, source, aiLines = [], onOutlineClick, onJump, onOpenNote }: Props) {
   const { byId } = useTags();
   return (
     <div className="overlay">
@@ -42,6 +44,7 @@ export function PageOverlay({ page, scale, board, source, onOutlineClick, onJump
           {i === 0 && h.tags.length > 1 && <MarkExtras ids={h.tags.slice(1)} />}
         </div>
       )))}
+      {aiLines.map((l, i) => <div key={`ai-${i}`} className="ai-term" style={px(l.at.rect, scale)} title="AI term" />)}
       <Margin page={page} scale={scale} board={board} source={source} onJump={onJump} onOpenNote={onOpenNote} />
     </div>
   );
