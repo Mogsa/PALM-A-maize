@@ -95,7 +95,7 @@
 .citation-label .where { font-weight: 400; margin-left: 6px; }
 /* the AI part of a term card (spec B4): badged AI, its explanation a touch softer than the paper's own words */
 .ai-badge { font-size: 10px; letter-spacing: .04em; padding: 0 4px; border-radius: 3px; border: 1px solid var(--ink-faint); color: var(--ink-faint); }
-.term-part.ai .citation-text, .streaming { color: var(--ink-soft, inherit); }
+.term-part.ai .citation-text, .term-part .streaming { color: var(--ink-muted); }
 /* what a link or reference points at, when it is a figure, table or formula (D26): the paper as printed */
 .citation-clip { display: block; max-width: 100%; max-height: 200px; object-fit: contain; margin: 0 auto; background: #fff; }
 

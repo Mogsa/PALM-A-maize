@@ -1,6 +1,5 @@
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AiFile } from "../ai/types";
 import { emptyBoard, type Board, type Highlight } from "../model/types";
 
 const mark = (id: string, exact: string, tags = ["t-term"]): Highlight => ({
@@ -19,10 +18,9 @@ import { Glossary } from "./Glossary";
 
 afterEach(cleanup);
 
-// Task 9's AiProvider (useAi) is not built yet: the Glossary takes the AI file as a prop instead
-// (`ai?: AiFile | null`), which the future AiProvider consumer will pass in as `useAi().ai`.
-const renderGlossary = (ai?: AiFile | null) =>
-  render(<Glossary onJump={vi.fn()} onOpenNote={vi.fn()} ai={ai} />);
+// The AI rows come in as a list (App computes it once, for the count as well).
+const renderGlossary = (aiTerms: { term: string; explanation: string | null }[]) =>
+  render(<Glossary onJump={vi.fn()} onOpenNote={vi.fn()} aiTerms={aiTerms} />);
 
 describe("Glossary (D27)", () => {
   it("lists every term mark alphabetically, with the first line of the reader's definition rendered", () => {
@@ -45,25 +43,14 @@ describe("Glossary (D27)", () => {
     expect(container.querySelector("textarea, input")).toBeNull();
   });
   it("lists AI terms the reader has not kept after theirs, badged AI", () => {
-    const ai: AiFile = {
-      schema: 1,
-      extracted_at: "t",
-      defined: {},
-      reader: {
-        model: "m",
-        made_at: "t",
-        terms: [{ term: "gradient", explanation: "Skips layers.", defined_in: [], grounds: [], occurrences: [] }],
-        where_to_look: [],
-      },
-    };
-    const { getAllByRole } = renderGlossary(ai);
+    const { getAllByRole } = renderGlossary([{ term: "gradient", explanation: "Skips layers." }]);
     const rows = getAllByRole("listitem");
     expect(rows.at(-1)!.className).toContain("ai");
     expect(rows.at(-1)!.textContent).toContain("gradient");
     expect(rows.at(-1)!.textContent).toContain("AI");
   });
   it("shows no AI rows when AI is off", () => {
-    const { container } = renderGlossary(null);
+    const { container } = renderGlossary([]);
     expect(container.querySelectorAll("li.ai")).toHaveLength(0);
   });
 });
