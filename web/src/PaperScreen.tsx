@@ -11,6 +11,7 @@ import { sectionLabel } from "./model/sections";
 import type { Highlight, PageRect, PaperScroll, Section, SelectionMode } from "./model/types";
 import { makeCut } from "./paper/cut";
 import { FindPanel, useFind } from "./paper/FindPanel";
+import { Hint } from "./hints/Hint";
 import type { PaperHit } from "./paper/hit";
 import type { JumpTarget } from "./paper/margin";
 import { MarkMenu } from "./paper/MarkMenu";
@@ -165,6 +166,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
                  paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} fit={view.view === "both"} />
       {pending && selectionPopover(pending)}
       {find.query !== null && <FindPanel query={find.query} onQuery={find.edit} onPick={find.pick} onClose={find.close} />}
+      <Hint id="drag-cut" when={Boolean(pending && !pending.section && pending.mode === "text") && view.view === "both"} />
       {markOpen && openMark && (
         <MarkPopover highlight={markOpen} at={openMark.at} addTag={openMark.addTag} onClose={() => setOpenMark(null)}
                      onConnect={() => { connect.start(openMark.id); setOpenMark(null); }} />
