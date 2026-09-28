@@ -119,3 +119,11 @@ button { cursor: pointer; }
 .template-editor textarea { min-height: 44px; resize: vertical; font-family: var(--font-read); }
 .template-editor .row-tools { display: flex; gap: 4px; }
 .template-editor .row-tools button { padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); }
+
+/* the › list in a bar */
+.action-menu { position: relative; display: inline-flex; }
+.action-more { padding: 2px 8px; font-size: 16px; color: var(--ink-muted); }
+.action-list { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; min-width: 160px; display: flex; flex-direction: column; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-raised); }
+.action-list button { padding: 6px 10px; border: 0; border-radius: var(--radius-small); background: none; text-align: left; white-space: nowrap; }
+.action-list button:hover, .action-list button:focus-visible { background: var(--surface-muted); }
+.bar-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
