@@ -223,6 +223,8 @@ class ViewState(BaseModel):
     viewport: Viewport | None = None
     # Fraction of the width the paper gets when both are shown.
     split: float = Field(default=SPLIT_DEFAULT, ge=SPLIT_MIN, le=SPLIT_MAX)
+    # AI help (spec B2): off unless the reader turns it on, per paper.
+    ai: bool = False
 
 
 VIEW_KEYS = ("view", "paper_scroll", "active_tags", "viewport")
