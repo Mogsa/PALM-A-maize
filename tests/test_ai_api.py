@@ -180,3 +180,21 @@ def test_an_unexpected_error_clears_running_instead_of_sticking(store_root, pape
     second = client.post(f"/api/papers/{pid}/ai")
     assert second.json().get("error", {}).get("code") != "ai_running"
     assert second.json()["status"] == "done"
+
+
+def test_ai_output_is_never_exported(store_root, paper):
+    _, pid, spans = paper
+    client = _client(store_root, FakeClaude(paper=_answer(spans[0])))
+    _turn_on(client, pid)
+    client.post(f"/api/papers/{pid}/ai")
+    markdown = client.post(f"/api/papers/{pid}/export", json={"tags": []}).json()["markdown"]
+    assert "Plain words." not in markdown
+
+
+def test_an_ai_pass_never_clears_a_question(store_root, paper):
+    _, pid, spans = paper
+    client = _client(store_root, FakeClaude(paper=_answer(spans[0])))
+    before = client.get(f"/api/papers/{pid}/questions").json()
+    _turn_on(client, pid)
+    client.post(f"/api/papers/{pid}/ai")
+    assert client.get(f"/api/papers/{pid}/questions").json() == before
