@@ -168,8 +168,10 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     ai_passes: dict[str, str] = {}          # paper id -> "running" or "failed"; in memory only
     ai_messages: dict[str, str] = {}
     ai_lock = threading.Lock()
-    view_lock = threading.Lock()   # guards the read-modify-write of view.json's `ai` flag
+    view_lock = threading.Lock()   # guards every read-modify-write of view.json: a client's
+                                    # PUT and an AI failure's _turn_ai_off both read then write
     app = FastAPI(title="paperboard", docs_url=None, redoc_url=None)
+    app.state.view_lock = view_lock   # exposed only so a test can assert the routes share it
     # Bound to 127.0.0.1, but a page elsewhere can rebind its own name to that
     # address; it still sends its own name as Host, so refuse any other.
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=LOCAL_HOSTS)
@@ -337,7 +339,10 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
 
     @app.put("/api/papers/{paper_id}/view", status_code=204)
     def put_view(paper_id: str, view: ViewState):
-        store.write_view(paper_id, view)
+        # Under view_lock: a client's PUT and an AI failure's _turn_ai_off race on the
+        # same file otherwise, since both are read-then-write (_turn_ai_off reads first).
+        with view_lock:
+            store.write_view(paper_id, view)
         return Response(status_code=204)
 
     # -- notes --------------------------------------------------------------

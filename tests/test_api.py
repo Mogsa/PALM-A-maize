@@ -485,6 +485,36 @@ def test_a_view_of_an_unknown_paper_is_404(client):
     assert client.put("/api/papers/no-such-paper/view", json=VIEW).status_code == 404
 
 
+def test_put_view_is_serialised_against_a_concurrent_ai_off(client, resnet_id):
+    """PUT /view and the AI layer's own read-modify-write of view.json (turning
+    `ai` off on a failed pass) share one lock, so they can never race each other
+    into a lost update. A held lock must block a PUT until it is released."""
+    import threading
+
+    view_lock = client.app.state.view_lock
+    started, release = threading.Event(), threading.Event()
+
+    def hold_the_lock():
+        with view_lock:
+            started.set()
+            release.wait(5)
+
+    holder = threading.Thread(target=hold_the_lock)
+    holder.start()
+    started.wait(5)
+
+    put_returned = threading.Event()
+    putter = threading.Thread(target=lambda: (client.put(f"/api/papers/{resnet_id}/view", json=VIEW), put_returned.set()))
+    putter.start()
+    assert not put_returned.wait(0.2), "put_view must block while view_lock is held elsewhere"
+
+    release.set()
+    holder.join()
+    putter.join()
+    assert put_returned.is_set()
+    assert client.get(f"/api/papers/{resnet_id}/view").json() == VIEW
+
+
 def test_a_board_put_with_old_view_keys_drops_them(client, resnet_id, store_root):
     board = client.get(f"/api/papers/{resnet_id}/board").json()
     old_client_board = {**board, "view": "board", "paper_scroll": None, "active_tags": [],
