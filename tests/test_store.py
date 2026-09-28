@@ -339,3 +339,18 @@ def test_template_defaults_to_the_nine_slots_and_persists(store_root):
     store.write_template(template)
     assert [s.name for s in store.read_template().slots] == ["Background", "Problem"]
     assert json.loads((store_root / "template.json").read_text())["schema"] == 1
+
+
+def test_view_ai_is_off_by_default_and_round_trips(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    assert store.read_view(paper_id).ai is False
+    store.write_view(paper_id, ViewState(ai=True))
+    assert store.read_view(paper_id).ai is True
+
+
+def test_a_view_json_written_before_ai_reads_as_off(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    (store.paper_dir(paper_id) / "view.json").write_text('{"view": "both"}')
+    assert store.read_view(paper_id).ai is False

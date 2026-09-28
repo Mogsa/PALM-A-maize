@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from datetime import UTC, datetime
 
 from conftest import FIXTURES, local_client
@@ -9,6 +10,15 @@ from paperboard.cli import app, build_app
 from paperboard.source_model import SourceDocument
 
 runner = CliRunner()
+
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(output: str) -> str:
+    """Strip ANSI colour codes: typer/rich style each option's leading dash
+    separately (e.g. `--port` -> `-<code>-port`), which breaks a plain
+    substring check even though the help text is correct."""
+    return _ANSI.sub("", output)
 
 
 def test_extract_writes_a_board_folder(tmp_path):
@@ -93,4 +103,4 @@ def test_build_app_serves_the_frontend_when_built(tmp_path):
 
 def test_serve_command_exists():
     result = runner.invoke(app, ["serve", "--help"])
-    assert result.exit_code == 0 and "--port" in result.output
+    assert result.exit_code == 0 and "--port" in _plain(result.output)
