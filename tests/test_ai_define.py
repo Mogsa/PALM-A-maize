@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 import pymupdf
 import pytest
@@ -6,6 +7,7 @@ from conftest import local_client
 from fake_claude import FakeClaude
 
 from paperboard.ai_client import AiError
+from paperboard.ai_model import AiFile, ReaderPass
 from paperboard.api import create_app
 from paperboard.spans import paper_spans
 from paperboard.store import Store
@@ -139,3 +141,33 @@ def test_an_answer_with_no_explanation_after_a_full_stream_is_an_error_line(stor
     _on(client, pid)
     lines = _lines(_post(client, pid, word))
     assert lines[-1] == {"error": "AI help could not find this in the paper."}
+
+
+def test_saving_a_definition_starts_fresh_when_ai_json_is_stale(store_root, setup):
+    """A definition must never be merged into a stale ai.json: doing so would
+    keep the old `extracted_at`, so the cache would never hit again and the
+    saved entry would carry offsets from the wrong extraction. `reader` stays
+    (it is simply reported stale by ai_is_stale), but `defined` must not."""
+    store, pid, span, word = setup
+    doc = store.read_source(pid)
+    old_reader = ReaderPass(model="claude-opus-5-5", made_at=datetime.now(UTC), terms=[], where_to_look=[])
+    stale_at = doc.extracted_at - timedelta(days=1)
+    store.update_ai(pid, lambda _: AiFile(extracted_at=stale_at, reader=old_reader,
+                                          defined={"stale-word": _stub_definition(span)}))
+
+    fake = FakeClaude(deltas=[_answer(span)])
+    client = local_client(create_app(store_root, claude=fake))
+    _on(client, pid)
+    _post(client, pid, word)
+
+    saved = store.read_ai(pid)
+    assert saved.extracted_at == doc.extracted_at
+    assert saved.reader == old_reader
+    assert "stale-word" not in saved.defined
+    assert word[4].lower() in saved.defined
+
+
+def _stub_definition(span):
+    from paperboard.ai_model import Definition, Ground
+    return Definition(model="claude-sonnet-5", explanation="Old.",
+                       grounds=[Ground(span=span.id, quote=span.text.split()[0])])

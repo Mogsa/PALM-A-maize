@@ -2,6 +2,7 @@
 file turns HTTP into calls and exceptions into the one error shape."""
 
 import json
+import logging
 import threading
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -50,6 +51,8 @@ from paperboard.store import (
     VersionConflict,
     atomic_write,
 )
+
+logger = logging.getLogger(__name__)
 
 LOCAL_HOSTS = ["127.0.0.1", "localhost"]
 # Every write to the API carries this header with the value "1" (addendum section 6).
@@ -165,6 +168,7 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     ai_passes: dict[str, str] = {}          # paper id -> "running" or "failed"; in memory only
     ai_messages: dict[str, str] = {}
     ai_lock = threading.Lock()
+    view_lock = threading.Lock()   # guards the read-modify-write of view.json's `ai` flag
     app = FastAPI(title="paperboard", docs_url=None, redoc_url=None)
     # Bound to 127.0.0.1, but a page elsewhere can rebind its own name to that
     # address; it still sends its own name as Host, so refuse any other.
@@ -506,6 +510,13 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
             return _error(404, "ai_not_found", f"no AI pass for {paper_id}")
         return ai_status(paper_id, status, ai)
 
+    def _turn_ai_off(paper_id: str) -> None:
+        """Read-modify-write of view.json's `ai` flag, kept as short as possible
+        and serialised against concurrent writers (Store has no dedicated view
+        lock of its own to reuse)."""
+        with view_lock:
+            store.write_view(paper_id, store.read_view(paper_id).model_copy(update={"ai": False}))
+
     @app.post("/api/papers/{paper_id}/ai")
     def post_ai(paper_id: str):
         if (refused := ai_off(paper_id)) is not None:
@@ -515,24 +526,33 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
                 return _error(409, "ai_running", "an AI pass is already running for this paper")
             ai_passes[paper_id] = "running"
             ai_messages.pop(paper_id, None)
-        doc = store.read_source(paper_id)
-        slots = [s.name for s in store.read_template().slots]
+        # Everything from here on runs while the paper is marked "running": any exception,
+        # known or not, must clear that back to "failed" so a pass can never get stuck running.
         try:
+            doc = store.read_source(paper_id)
+            slots = [s.name for s in store.read_template().slots]
             with opened(paper_id) as pdf:
                 reader = run_pass(doc, pdf, slots, claude)
+
+            def with_reader(current: AiFile | None) -> AiFile:
+                keep = current.defined if current and current.extracted_at == doc.extracted_at else {}
+                return AiFile(extracted_at=doc.extracted_at, reader=reader, defined=keep)
+
+            ai = store.update_ai(paper_id, with_reader)
         except (AiError, ValueError) as exc:
             message = f"AI help could not run: {exc}"
             ai_passes[paper_id], ai_messages[paper_id] = "failed", message
-            store.write_view(paper_id, store.read_view(paper_id).model_copy(update={"ai": False}))
+            _turn_ai_off(paper_id)
             return _error(502, "ai_failed", message)
-
-        def with_reader(current: AiFile | None) -> AiFile:
-            keep = current.defined if current and current.extracted_at == doc.extracted_at else {}
-            return AiFile(extracted_at=doc.extracted_at, reader=reader, defined=keep)
-
-        ai = store.update_ai(paper_id, with_reader)
-        ai_passes.pop(paper_id, None)
-        return ai_status(paper_id, "done", ai)
+        except Exception as exc:
+            message = f"AI help could not run: {type(exc).__name__}: {exc}"
+            ai_passes[paper_id], ai_messages[paper_id] = "failed", message
+            _turn_ai_off(paper_id)
+            logger.exception("unexpected error running the AI pass for %s", paper_id)
+            raise
+        else:
+            ai_passes.pop(paper_id, None)
+            return ai_status(paper_id, "done", ai)
 
     def ndjson(line: dict) -> bytes:
         return (json.dumps(line) + "\n").encode()
@@ -551,6 +571,15 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
             context = define_context(doc, pdf, body.word, body.page, body.rect,
                                      body.definition.model_dump() if body.definition else None)
 
+        def save(current: AiFile | None, value=None) -> AiFile:
+            # A definition is only ever merged into an ai.json made from the *current*
+            # extraction: an older one is replaced fresh, keeping `reader` (it stays
+            # marked stale by ai_is_stale) but dropping `defined`, which pointed at spans
+            # from the old extraction and would otherwise wrongly answer this word from
+            # the cache next time.
+            base = current if current and current.extracted_at == doc.extracted_at else AiFile(extracted_at=doc.extracted_at, reader=current.reader if current else None)
+            return base.model_copy(update={"defined": {**base.defined, key: value}})
+
         def lines():
             try:
                 for kind, value in define_stream(claude, body.word, context):
@@ -559,11 +588,13 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
                     elif value is None:
                         yield ndjson({"error": "AI help could not find this in the paper."})
                     else:
-                        store.update_ai(paper_id, lambda cur, value=value: (cur or AiFile(extracted_at=doc.extracted_at)).model_copy(
-                            update={"defined": {**(cur.defined if cur else {}), key: value}}))
+                        store.update_ai(paper_id, lambda cur, value=value: save(cur, value))
                         yield ndjson({"done": value.model_dump(mode="json")})
             except AiError as exc:
                 yield ndjson({"error": f"AI help could not run: {exc}"})
+            except Exception as exc:
+                logger.exception("unexpected error while defining %r for %s", body.word, paper_id)
+                yield ndjson({"error": f"AI help could not run: {type(exc).__name__}: {exc}"})
 
         return StreamingResponse(lines(), media_type="application/x-ndjson")
 

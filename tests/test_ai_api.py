@@ -147,3 +147,36 @@ def test_update_ai_never_runs_claude_while_holding_the_lock(store_root, paper):
     _turn_on(client, pid)
     client.post(f"/api/papers/{pid}/ai")
     assert calls == [True]
+
+
+def test_an_unexpected_error_clears_running_instead_of_sticking(store_root, paper, monkeypatch):
+    """An exception the handler never anticipated (not AiError, not ValueError) must
+    still clear the in-memory "running" state to "failed", not leave it stuck: a
+    second POST right after must be allowed to try again, not refused as ai_running."""
+    _, pid, spans = paper
+    client = local_client(create_app(store_root, claude=FakeClaude(paper=_answer(spans[0]))), raise_server_exceptions=False)
+    _turn_on(client, pid)
+
+    real_read_source = Store.read_source
+    calls = {"n": 0}
+
+    def boom(self, paper_id):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("disk exploded")
+        return real_read_source(self, paper_id)
+
+    monkeypatch.setattr(Store, "read_source", boom)
+
+    first = client.post(f"/api/papers/{pid}/ai")
+    assert first.status_code == 500
+
+    status = client.get(f"/api/papers/{pid}/ai").json()
+    assert status["status"] == "failed"
+
+    # The failure also turned view.ai off (as any AI failure does); turn it back on,
+    # as the reader would, and confirm the retry is not refused as still "running".
+    _turn_on(client, pid)
+    second = client.post(f"/api/papers/{pid}/ai")
+    assert second.json().get("error", {}).get("code") != "ai_running"
+    assert second.json()["status"] == "done"
