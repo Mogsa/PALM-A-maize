@@ -9,6 +9,11 @@ export function onEmptyBoard(element: Element | null): boolean {
   return Boolean(element?.closest(".react-flow")) && !element?.closest(".react-flow__node");
 }
 
+/** True on the empty board: the pane, and on no card and no line. What a double-click or a drop there acts on (spec A3). */
+export function emptyPaneAt(element: Element | null): boolean {
+  return Boolean(element?.closest(".react-flow__pane")) && !element?.closest(".react-flow__node, .react-flow__edge");
+}
+
 /** A reader's note at `at`, the top-left corner, and the line from what the drag began on: a mark's handle is the
  *  highlight, a card's own handle the card (addendum 4.10). Added together, as one undo step. */
 export function noteAtDrop(fromNode: string, fromHandle: string | null | undefined, at: XY): { note: NoteNode; edge: BoardEdge } {

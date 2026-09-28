@@ -49,6 +49,7 @@ type Props = {
   onSelect: (rects: PageRect[], anchorEl: DOMRect, exact: boolean, mode: SelectionMode, lines?: PageRect[]) => void;
   onClickPaper: (hit: PaperHit) => void;
   onMarkMenu: (mark: Highlight, at: DOMRect) => void;   // a right-click on a mark
+  onDragSelection?: (event: React.DragEvent, rects: PageRect[], lines?: PageRect[]) => void;
   onOutlineClick: (nodeId: string) => void;
   connecting: boolean;                          // choosing the other end of a connection
   onJump: (target: JumpTarget) => void;
@@ -101,7 +102,7 @@ export function PaperView(props: Props) {
   return (
     <>
       <div ref={container} className={connecting ? "paper connecting" : "paper"} style={{ "--page-width": `${pageWidth}px` } as React.CSSProperties} onMouseUp={mouse.onMouseUp} onContextMenu={mouse.onContextMenu}
-           onMouseDown={(e) => { hover.close(); mouse.onMouseDown(e); }} onScroll={onScroll} {...citation} {...termHover}>
+           onMouseDown={(e) => { hover.close(); mouse.onMouseDown(e); }} onDragStart={mouse.onDragStart} onScroll={onScroll} {...citation} {...termHover}>
         <Document file={api.pdfUrl(paperId)} onLoadSuccess={(doc) => { pdf.current = doc; setReady(true); }}
                   loading={<div className="loading">Loading the paper</div>}
                   onItemClick={followLink} externalLinkTarget="_blank" externalLinkRel="noopener noreferrer">

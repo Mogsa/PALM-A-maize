@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client";
+import { CUT_DRAG_TYPE, offerCut, withdrawCut } from "./board/cutDrag";
 import { extraSelectionItems, type MenuItem } from "./commands/registry";
 import { newId } from "./model/ids";
 import { newEdge } from "./model/links";
 import { newNote } from "./model/notes";
 import { spotForNoteOn } from "./model/placement";
+import type { XY } from "./model/reparent";
 import { sectionLabel } from "./model/sections";
 import type { Highlight, PageRect, PaperScroll, Section, SelectionMode } from "./model/types";
 import { makeCut } from "./paper/cut";
@@ -65,7 +67,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
   }, [active, cancelConnect]);
 
   /** Highlight (with a main tag, or plain) or cut the selection `p`. Resolves to the highlight made, if one was. */
-  const chooseFor = async (p: Pending, kind: "highlight" | "cut", tagId: string | null = null): Promise<Highlight | null> => {
+  const chooseFor = async (p: Pending, kind: "highlight" | "cut", tagId: string | null = null, at?: XY): Promise<Highlight | null> => {
     setBusy(true);
     setError(null);
     let made: Highlight | null = null;
@@ -74,7 +76,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
       if (kind === "highlight") {
         made = { id: newId("h"), tags: tagId ? [tagId] : [], anchor: selection.highlight };
         dispatch({ type: "addHighlight", highlight: made });
-      } else dispatch({ type: "addNode", node: await makeCut(paperId, source, state.board, selection, { mode: p.mode, sectionId: p.section?.id }) });
+      } else dispatch({ type: "addNode", node: await makeCut(paperId, source, state.board, selection, { mode: p.mode, sectionId: p.section?.id, at }) });
     } catch (failure) {
       console.error(SELECTION_FAILED_MESSAGE, failure);
       setError(SELECTION_FAILED_MESSAGE);
@@ -102,6 +104,19 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
     const text = window.getSelection()?.toString() ?? "";
     setPending({ rects, lines, at, exact, mode, text, preview: previewText(text) });
   };
+  /** Selected words dragged onto the board are cut there (spec A2). The popover goes; the drop does the rest. */
+  const onDragSelection = (event: React.DragEvent, rects: PageRect[], lines?: PageRect[]) => {
+    event.dataTransfer.setData(CUT_DRAG_TYPE, "paper");
+    event.dataTransfer.effectAllowed = "copy";
+    const p: Pending = { rects, lines, at: new DOMRect(), exact: false, mode: "text", text: "", preview: "" };
+    setPending(null);
+    offerCut(async (at) => { await chooseFor(p, "cut", null, at); });
+  };
+  useEffect(() => {
+    const end = () => withdrawCut();
+    window.addEventListener("dragend", end);
+    return () => window.removeEventListener("dragend", end);
+  }, []);
   const onJump = (target: JumpTarget) => ("paper" in target ? setJump({ ...target.paper }) : onOpenOnBoard(target.board));
   const onScrollSettled = (scroll: PaperScroll | null) => {
     setView({ paper_scroll: scroll });   // an unchanged scroll saves nothing (withView)
@@ -145,7 +160,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
   return (
     <>
       <PaperView paperId={paperId} source={source} board={state.board} focus={jump ?? focus} onFocusHandled={onJumpHandled}
-                 onSelect={onSelect} onClickPaper={onClickPaper} onMarkMenu={onMarkMenu} onOutlineClick={onOpenOnBoard}
+                 onSelect={onSelect} onClickPaper={onClickPaper} onMarkMenu={onMarkMenu} onDragSelection={onDragSelection} onOutlineClick={onOpenOnBoard}
                  connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark}
                  paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} fit={view.view === "both"} />
       {pending && selectionPopover(pending)}

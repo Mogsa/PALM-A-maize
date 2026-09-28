@@ -32,4 +32,8 @@ describe("makeCut", () => {
     const loose = { ...selection, rects: [{ page: 7, rect: [0, 0, 50, 50] as Rect }] };
     expect(await makeCut("p", source, emptyBoard("p"), loose, { mode: "area" })).toMatchObject({ data: { caption: "", source_id: null } });
   });
+  it("a cut dropped on the board is placed where it was dropped", async () => {
+    const node = await makeCut("p", source, emptyBoard("p"), selection, { mode: "text", at: { x: 700, y: 20 } });
+    expect(node.position).toEqual({ x: 700, y: 20 });
+  });
 });

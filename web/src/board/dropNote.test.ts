@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { noteAtDrop, onEmptyBoard } from "./dropNote";
+import { emptyPaneAt, noteAtDrop, onEmptyBoard } from "./dropNote";
 
 describe("a note from a line let go on empty board (addendum 4.10)", () => {
   afterEach(() => { document.body.innerHTML = ""; });
@@ -19,5 +19,21 @@ describe("a note from a line let go on empty board (addendum 4.10)", () => {
     expect(onEmptyBoard(document.getElementById("in-group"))).toBe(false);
     expect(onEmptyBoard(document.getElementById("outside"))).toBe(false);
     expect(onEmptyBoard(null)).toBe(false);
+  });
+});
+
+describe("emptyPaneAt (double-click and drop, spec A3)", () => {
+  const inPane = (className: string) => {
+    const pane = document.createElement("div"); pane.className = "react-flow__pane";
+    const child = document.createElement("div"); child.className = className;
+    pane.appendChild(child);
+    return child;
+  };
+  it("is the empty board, not a card, an edge or anything outside the board", () => {
+    expect(emptyPaneAt(inPane("react-flow__viewport"))).toBe(true);
+    expect(emptyPaneAt(inPane("react-flow__node"))).toBe(false);
+    expect(emptyPaneAt(inPane("react-flow__edge"))).toBe(false);
+    expect(emptyPaneAt(document.createElement("div"))).toBe(false);
+    expect(emptyPaneAt(null)).toBe(false);
   });
 });

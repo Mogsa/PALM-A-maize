@@ -1,6 +1,7 @@
 import type { Reshape } from "../model/boardReducer";
 import { newId } from "../model/ids";
-import type { ChunkNode, JoinResult, Piece } from "../model/types";
+import type { XY } from "../model/reparent";
+import type { ChunkNode, JoinResult, Piece, QuoteSelector } from "../model/types";
 import { CHUNK_WIDTH, GAP } from "./layout";
 
 /** A piece takes over a chunk's text: its own region and blocks, sized to its text again (addendum 4.10). */
@@ -30,4 +31,27 @@ export function joinPlan(chunks: ChunkNode[], { node, order }: JoinResult): Resh
   const tags = [...new Set(inOrder.flatMap((c) => c.data.tags))];
   const sourceId = inOrder.map((c) => c.data.source_id).find(Boolean) ?? null;
   return { keep: refilled(inOrder[0], node, tags, sourceId), removeIds: inOrder.slice(1).map((c) => c.id) };
+}
+
+const squeeze = (text: string) => text.replace(/\s+/g, " ").trim();
+/** How much of the selection is matched against a piece's text: enough to tell pieces apart. */
+const MATCH_CHARS = 40;
+
+/** Which of Cut out's pieces holds the selected words: the one whose text holds them, else the middle of three
+ *  (before, selection, after), else the first (a selection at the chunk's start or end). */
+export function pieceIndexOf(pieces: Piece[], quote: QuoteSelector): number {
+  const needle = squeeze(quote.exact).slice(0, MATCH_CHARS);
+  const found = pieces.findIndex((p) => squeeze(p.data.blocks.map((b) => (b.kind === "text" ? b.text : "")).join(" ")).includes(needle));
+  if (found >= 0) return found;
+  return pieces.length === 3 ? 1 : 0;
+}
+
+/** The plan with piece `index` moved to `at` (board coordinates), out of any group: a drop lands where it is let go. */
+export function placePiece(plan: Reshape, index: number, at: XY): Reshape {
+  const moved = (node: ChunkNode): ChunkNode => {
+    const { parentId: _parent, ...rest } = node;   // eslint-disable-line @typescript-eslint/no-unused-vars
+    return { ...rest, position: at };
+  };
+  if (index === 0) return { ...plan, keep: moved(plan.keep) };
+  return { ...plan, add: (plan.add ?? []).map((n, i) => (i === index - 1 ? moved(n) : n)) };
 }

@@ -1,23 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, useReactFlow, useNodesInitialized,
+  Background, ConnectionMode, Controls, ReactFlow, ReactFlowProvider, SelectionMode, useReactFlow, useNodesInitialized,
   type EdgeChange, type Node, type OnBeforeDelete, type OnConnect, type OnConnectEnd, type OnNodeDrag,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { api } from "../api/client";
 import { hiddenNodeIds } from "../model/filter";
 import { newId } from "../model/ids";
 import { newEdge } from "../model/links";
 import { newNote } from "../model/notes";
 import { fitsInside, isDescendant, reparent, type Box } from "../model/reparent";
 import { parentsFirst } from "../model/serialize";
-import type { BoardNode, GroupNode as GroupNodeType, PageRect } from "../model/types";
+import type { BoardNode, ChunkNode as ChunkNodeType, GroupNode as GroupNodeType, PageRect } from "../model/types";
 import { ContextCard } from "../paper/ContextCard";
 import { useHoverCard } from "../paper/useHoverCard";
 import { useBoard } from "../state/BoardProvider";
 import { paperHoldsDelete } from "../state/keys";
 import { useTags } from "../state/TagsProvider";
 import { BoardActionsProvider } from "./BoardActions";
-import { noteAtDrop, onEmptyBoard } from "./dropNote";
+import { CUT_DRAG_TYPE, isCutDrag, offerCut, takeCut } from "./cutDrag";
+import { emptyPaneAt, noteAtDrop, onEmptyBoard } from "./dropNote";
 import { clearCardSelection, readCardSelection, textMenuAfterMouseUp, type CardSelection } from "./cardSelection";
 import { EdgePopover } from "./EdgePopover";
 import { groupAround } from "./grouping";
@@ -26,6 +28,7 @@ import { ChunkNode } from "./nodes/ChunkNode";
 import { FigureNode } from "./nodes/FigureNode";
 import { GroupNode } from "./nodes/GroupNode";
 import { NoteNode } from "./nodes/NoteNode";
+import { pieceIndexOf, placePiece, recutPlan } from "./recut";
 import { SelectionBar } from "./SelectionBar";
 import { TextPopover } from "./TextPopover";
 import { ContextMenu } from "../ui/ContextMenu";
@@ -164,6 +167,41 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
     setTextMenu(null);
   }, []);
 
+  const [dropError, setDropError] = useState<string | null>(null);
+  /** Lines selected on a card and dragged onto empty board are cut out there (spec A2): the piece holding them lands at the drop. */
+  const onDragStart = (event: React.DragEvent) => {
+    const words = readCardSelection(boardRef.current!);
+    const chunk = words && state.board.nodes.find((n): n is ChunkNodeType => n.id === words.nodeId && n.type === "chunk");
+    if (!words || !chunk) return;
+    event.dataTransfer.setData(CUT_DRAG_TYPE, "card");
+    event.dataTransfer.effectAllowed = "move";
+    offerCut(async (at) => {
+      const pieces = await api.recut(paperId, chunk.data.region, words.quote, "cut");
+      const plan = recutPlan(chunk, pieces);
+      if (plan) dispatch({ type: "reshape", ...placePiece(plan, pieceIndexOf(pieces, words.quote), at) });
+    });
+  };
+  const onDragOver = (event: React.DragEvent) => { if (isCutDrag(event.dataTransfer.types)) event.preventDefault(); };
+  /** A cut carried from the paper or a card, let go of on empty board. Anywhere else nothing happens (Review Focus 4). */
+  const onDrop = (event: React.DragEvent) => {
+    if (!isCutDrag(event.dataTransfer.types)) return;
+    event.preventDefault();
+    const drop = takeCut();
+    if (!drop || !emptyPaneAt(event.target as Element)) return;
+    setDropError(null);
+    drop(screenToFlowPosition({ x: event.clientX, y: event.clientY })).catch((failure: unknown) => {
+      console.error("drop to cut failed", failure);
+      setDropError("That could not be cut. Nothing was added.");
+    });
+  };
+  /** A double-click on empty board makes a note there, ready for typing (spec A3). */
+  const onDoubleClick = (event: React.MouseEvent) => {
+    if (!emptyPaneAt(event.target as Element)) return;
+    const note = newNote({ position: screenToFlowPosition({ x: event.clientX, y: event.clientY }), origin: "reader" });
+    dispatch({ type: "add", nodes: [note] });
+    setEditing(note.id);
+  };
+
   /** Group, one gesture (addendum 4.10): a new group just around the selected pieces, one undo step. */
   const group = (ids: string[]) => {
     const nodes = groupAround(state.board.nodes, ids, box);
@@ -224,7 +262,8 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
 
   return (
     <BoardActionsProvider value={actions}>
-    <div className="board" ref={boardRef} tabIndex={0} aria-label="Board" onMouseUp={onBoardMouseUp} onContextMenu={onContextMenu} onKeyDown={onKeyDown} {...cards}>
+    <div className="board" ref={boardRef} tabIndex={0} aria-label="Board" onMouseUp={onBoardMouseUp} onContextMenu={onContextMenu} onKeyDown={onKeyDown}
+         onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} onDoubleClick={onDoubleClick} {...cards}>
       <SelectionBar selected={selectedNodes} onGroup={group} />
       {/* Loose, so a highlight's handle (a source handle) can also be an edge's target: highlight to highlight. */}
       <ReactFlow<BoardNode, FlowEdge>
@@ -237,6 +276,8 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
         defaultViewport={view.viewport ?? ORIGIN}
         onMoveStart={() => hover.hide()} onMoveEnd={(_, viewport) => setView({ viewport })}
         minZoom={0.2} fitView={false} deleteKeyCode={active ? DELETE_KEYS : null}
+        zoomOnDoubleClick={false} selectionOnDrag panOnDrag={[1]} panOnScroll selectionMode={SelectionMode.Partial}
+        multiSelectionKeyCode={["Shift", "Meta", "Control"]}
       >
         <Background />
         <Controls />
@@ -251,6 +292,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
         </ContextMenu>
       )}
       {hover.card && <ContextCard card={hover.card} hover={hover} onGo={onOpenInPaper} onOpenNote={focusOn} />}
+      {dropError && <p className="selection-error" role="alert" onClick={() => setDropError(null)}>{dropError}</p>}
     </div>
     </BoardActionsProvider>
   );
