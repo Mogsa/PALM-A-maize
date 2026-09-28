@@ -1,19 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api/client";
 import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
+import { CommandPalette } from "./commands/CommandPalette";
+import { extraCommands } from "./commands/registry";
+import { shellCommands, type Panel } from "./commands/shellCommands";
+import { ShortcutsSheet } from "./commands/ShortcutsSheet";
+import { useCommandKeys } from "./commands/useCommandKeys";
+import { useSplit } from "./commands/useSplit";
 import { ExportDialog } from "./panels/ExportDialog";
 import { Glossary } from "./panels/Glossary";
 import { QuestionList } from "./panels/QuestionList";
+import { useQuestions } from "./panels/useQuestions";
 import { TemplateEditor } from "./panels/TemplateEditor";
 import { useUndoKeys } from "./panels/undoKeys";
 import { anyTagged } from "./model/filter";
-import { MoreMenu, type Panel } from "./MoreMenu";
 import { clampSplit } from "./model/paperView";
+import { glossary, termTagIds } from "./paper/term";
 import { PaperPicker } from "./PaperPicker";
 import { PaperScreen } from "./PaperScreen";
 import { bothColumns, SplitDivider } from "./SplitDivider";
 import { BoardProvider, useBoard } from "./state/BoardProvider";
+import { useTags } from "./state/TagsProvider";
 import { FilterBar } from "./tags/FilterBar";
 import { TagManager } from "./tags/TagManager";
 import "./styles.css";
@@ -25,8 +33,14 @@ function Notice() {
   return <span className={`notice ${tone}`}>{notice ?? (state.dirty ? "Unsaved" : `Saved v${state.board.version}`)}</span>;
 }
 
-function PanelButton({ panel, open, label, onToggle }: { panel: Panel; open: Panel | null; label: string; onToggle: (p: Panel) => void }) {
-  return <button type="button" className="panel-button" aria-pressed={open === panel} onClick={() => onToggle(panel)}>{label}</button>;
+/** A panel button that shows only when it has something to list, with the count (spec A1). */
+function CountedButton({ panel, open, label, count, onToggle }: { panel: Panel; open: Panel | null; label: string; count: number; onToggle: (p: Panel) => void }) {
+  if (count < 1) return null;
+  return (
+    <button type="button" className="panel-button" aria-pressed={open === panel} title={`${count} to look at`} onClick={() => onToggle(panel)}>
+      <span className="count" aria-hidden="true">{count}</span>{label}
+    </button>
+  );
 }
 
 type SidePanelProps = { panel: Panel; onQuestion: (question: Question) => void; onJump: (at: PageRect) => void; onOpenNote: (noteId: string) => void };
@@ -58,6 +72,16 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
   const requestFind = useCallback((text: string) => { setFindRequest({ text }); if (view === "board") show("paper"); }, [view]);   // eslint-disable-line react-hooks/exhaustive-deps -- show only calls setView
   const findHandled = useCallback(() => setFindRequest(null), []);
   useUndoKeys(dispatch);
+  const board = useBoard();
+  const { tags } = useTags();
+  const { questions } = useQuestions();
+  const terms = useMemo(() => glossary(state.board, termTagIds(tags)).length, [state.board, tags]);
+  const [palette, setPalette] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
+  const splitAction = useSplit();
+  const openPalette = useCallback(() => setPalette(true), []);
+  const openShortcuts = useCallback(() => setShortcuts(true), []);
+  useCommandKeys({ onPalette: openPalette, onShortcuts: openShortcuts });
   const show = (next: View) => setView({ view: next });
   // In the both view each side is already in sight: going to the other only scrolls it there.
   const openOnBoard = (id: string) => { setFocusNode(id); if (view !== "both") show("board"); };
@@ -72,6 +96,10 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
   const toggle = (p: Panel) => setPanel((current) => (current === p ? null : p));
   /** A new note is made on the board: from the paper alone, the board is shown first. */
   const newNote = () => { if (view === "paper") show("board"); setNoteRequests((n) => n + 1); };
+  const commands = [
+    ...shellCommands({ openPanel: (p) => setPanel(p), newNote, find: () => requestFind(""), split: () => void splitAction.run(), shortcuts: openShortcuts }),
+    ...extraCommands(board),
+  ];
   return (
     <>
       <div className="topbar">
@@ -85,9 +113,10 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
         <input className="goal" aria-label="Reading goal" placeholder="Why am I reading this?" value={state.board.goal}
                onChange={(e) => dispatch({ type: "setGoal", goal: e.target.value })} />
         <div className="panel-buttons">
-          <PanelButton panel="questions" open={panel} label="Questions" onToggle={toggle} />
-          <button type="button" className="panel-button" onClick={newNote} title="A note in your own words">New note</button>
-          <MoreMenu onPanel={toggle} />
+          <CountedButton panel="questions" open={panel} label="Questions" count={questions?.length ?? 0} onToggle={toggle} />
+          <CountedButton panel="glossary" open={panel} label="Glossary" count={terms} onToggle={toggle} />
+          <button type="button" className="panel-button kbd" aria-label="Commands (⌘K)" title="All commands" onClick={openPalette}>⌘K</button>
+          {splitAction.said && <span className="tool-note" role="status">{splitAction.said}</span>}
         </div>
         <Notice />
       </div>
@@ -108,6 +137,8 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
         </div>
         {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} onJump={openInPaper} onOpenNote={openOnBoard} /></aside>}
       </div>
+      {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
+      {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
     </>
   );
 }
