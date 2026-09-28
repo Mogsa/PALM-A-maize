@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChunkAnchor, ChunkNode, Piece, Rect } from "../model/types";
 import { GAP } from "./layout";
-import { joinPlan, recutPlan } from "./recut";
+import { joinPlan, pieceIndexOf, placePiece, recutPlan } from "./recut";
 
 const q = (exact: string) => ({ exact, prefix: "", suffix: "" });
 const region = (y: number): ChunkAnchor => ({ rects: [{ page: 2, rect: [50, y, 286, y + 50] as Rect }], start: q(`at ${y}`), end: q("end"), position: y, state: "anchored" });
@@ -43,5 +43,26 @@ describe("joinPlan (addendum 4.10)", () => {
   it("carries the first source_id in paper order when the kept chunk has none", () => {
     const plan = joinPlan([chunk("n-a", {}, { source_id: null }), chunk("n-b", {}, { source_id: "sec-7" })], { node: piece(0), order: [0, 1] });
     expect(plan.keep.data.source_id).toBe("sec-7");
+  });
+});
+
+const pieceWith = (text: string): Piece => ({ type: "chunk", data: { ...chunk("n-a").data, blocks: [{ kind: "text", page: 0, rect: [0, 0, 1, 1], text }] } });
+
+describe("a piece cut out by a drag lands where it is dropped (spec A2)", () => {
+  const pieces = [pieceWith("Before it."), pieceWith("The chosen\nwords here."), pieceWith("After it.")];
+  it("finds the piece holding the selected words, whitespace aside", () => {
+    expect(pieceIndexOf(pieces, { exact: "chosen words", prefix: "", suffix: "" })).toBe(1);
+  });
+  it("falls back to the middle of three, else the first", () => {
+    expect(pieceIndexOf(pieces, { exact: "not there", prefix: "", suffix: "" })).toBe(1);
+    expect(pieceIndexOf(pieces.slice(0, 2), { exact: "not there", prefix: "", suffix: "" })).toBe(0);
+  });
+  it("moves only that piece, out of any group, to the drop point", () => {
+    const plan = recutPlan({ ...chunk("n-a"), parentId: "n-g" }, pieces)!;
+    const placed = placePiece(plan, 1, { x: 900, y: 40 });
+    expect(placed.add![0].position).toEqual({ x: 900, y: 40 });
+    expect(placed.add![0].parentId).toBeUndefined();
+    expect(placed.keep).toEqual(plan.keep);
+    expect(placePiece(plan, 0, { x: 5, y: 6 }).keep.position).toEqual({ x: 5, y: 6 });
   });
 });

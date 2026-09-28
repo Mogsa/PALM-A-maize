@@ -13,6 +13,7 @@ type Handlers = {
   onClickPaper: (hit: PaperHit) => void;
   /** A right-click on a mark: its menu (Ask elsewhere). */
   onMarkMenu: (mark: Highlight, at: DOMRect) => void;
+  onDragSelection?: (event: React.DragEvent, rects: PageRect[], lines?: PageRect[]) => void;
 };
 
 /** The selection's anchor: its last rect with real extent. The spike measured zero-width `<br>` rects at the end
@@ -27,7 +28,7 @@ function selectionAnchor(): DOMRect | undefined {
 
 /** What the mouse does on the paper: a text drag selects, a Shift-drag draws a rectangle, and a click with no
  *  selection is hit-tested against marks and headings (they take no pointer events themselves). */
-export function usePaperMouse(container: RefObject<HTMLElement | null>, source: Source, board: Board, { onSelect, onClickPaper, onMarkMenu }: Handlers) {
+export function usePaperMouse(container: RefObject<HTMLElement | null>, source: Source, board: Board, { onSelect, onClickPaper, onMarkMenu, onDragSelection }: Handlers) {
   const down = useRef<XY | null>(null);
   const onRect = useCallback((rect: PageRect, at: DOMRect, exact: boolean) => onSelect([rect], at, exact, "area"), [onSelect]);
   const rectangle = useRectangleDrag(container, source, onRect);
@@ -63,5 +64,11 @@ export function usePaperMouse(container: RefObject<HTMLElement | null>, source: 
     event.preventDefault();
     onMarkMenu(mark, new DOMRect(event.clientX, event.clientY, 0, 0));
   };
-  return { onMouseDown, onMouseUp, onContextMenu, band: rectangle.band };
+  /** Dragging selected words starts the browser's own drag; the words go with it as a cut (spec A2). */
+  const onDragStart = (event: React.DragEvent) => {
+    if (!container.current || !onDragSelection) return;
+    const selection = readSelection(container.current, source);
+    if (selection) onDragSelection(event, selection.rects, selection.lines);
+  };
+  return { onMouseDown, onMouseUp, onContextMenu, onDragStart, band: rectangle.band };
 }
