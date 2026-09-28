@@ -134,7 +134,11 @@ The model ids are held in two constants.
   - A slot keeps at most three spans.
   - The AI cannot point at text the paper does not have.
 - **Saved** to `papers/<id>/ai.json`: generated, never hand-edited, holding the model id, the time, the extraction time, and the validated output. Hovering reads this file and needs no network.
-- **Key:** from the SDK's usual credential chain (`ANTHROPIC_API_KEY` or an `ant auth login` profile). It is never written to a board folder.
+- **Key:** there are two ways to reach Claude, and `serve` says in one line which one it uses.
+  - **An API key**, from `ANTHROPIC_API_KEY` or the file `~/.config/paperboard/anthropic_key`. This goes through the API.
+  - **Your Claude Code login**, when there is no key and `claude` is installed. The server runs `claude -p` itself, so no key is needed. It runs in an empty temporary folder, with no tools, no settings files and the API key variables removed, so it uses your plan and nothing from any project.
+  - With neither, AI help says so plainly: log in to Claude Code, or save an API key.
+  - The key is never logged, and never written to a board folder.
 - **Errors:** no key, a network error, a refusal after the fallback, or invalid output each give one plain line ("AI help could not run: …") and leave AI off for that paper. The tool works exactly as without AI.
 
 ### B3b. The quick definition
