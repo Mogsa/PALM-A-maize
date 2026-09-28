@@ -88,14 +88,29 @@ Principle 5 becomes: "Plain local files, no account. Nothing leaves the machine 
 - **Off:** the tool is exactly what it was without B. Nothing is sent, and no AI mark, badge or button is shown.
 - **On:** if the paper has no `ai.json`, the server makes one pass (B3). The switch's state never changes the board.
 
-### B3. One pass per paper
+### B3. Two tiers: a whole-paper read, and quick definitions
 
-- **When:** the first time AI help is turned on for a paper, and again only when the reader asks (⌘K: "Redo AI pass"). Never on its own.
+Two kinds of call, both from the server, both grounded by the same rule:
+
+| | Reader (the big pass) | Quick definition (the small call) |
+|---|---|---|
+| Model | `claude-opus-5-5`, effort `high` set explicitly | `claude-sonnet-5`, effort `low` |
+| Reads | the whole paper, as spans | one word, its sentence, its section's text, and the paper's likely definition (D25) |
+| When | once, in the background, when AI is turned on | when the reader hovers or selects a word the big pass did not cover and chooses **Define** |
+| Gives | terms with definitions and explanations, and where to look for every slot | 1–2 plain sentences, with the quote from the given text it rests on |
+| Speed | about a minute; nothing waits on it | starts streaming within a second or two |
+
+The model ids are held in two constants.
+
+**Why two tiers.** The reader's pass sees the whole argument, so it finds the jargon that matters and knows where each slot is answered. The quick call covers what it missed, at hover speed, looking only at the lines around the word. The reader keeps reading throughout: nothing blocks on either.
+
+### B3a. The big pass
+
+- **When:** the first time AI help is turned on for a paper, in the background, and again only when the reader asks (⌘K: "Redo AI pass"). Never on its own. While it runs, a small "AI reading…" note shows in the top bar. The quick call works meanwhile.
 - **Input:** the paper's text as **spans**. A span is one non-furniture layout region, in reading order, with the id `p{page}-r{n}` (n counts regions on that page in reading order) and its text. Span ids are computed from `source.json` by one function; re-extraction may change them, which is why `ai.json` records the extraction time it was built from and is marked stale if `source.json` is newer.
 - **Call:** one Claude Messages API call from the server.
-  - Model `claude-opus-5`, held in one constant.
-  - Adaptive thinking, streamed, with structured output (`output_config.format`) against the schema below.
-  - Server-side refusal fallback on (`fallbacks: "default"`).
+  - Model `claude-opus-5-5`, with effort set explicitly (its default is `medium`).
+  - Streamed, with structured output (`output_config.format`) against the schema below.
   - A 15-page paper is about 15–25k input tokens, well inside the context window. There is no caching, because there is one call per paper.
 - **Output schema:**
   ```json
@@ -121,6 +136,14 @@ Principle 5 becomes: "Plain local files, no account. Nothing leaves the machine 
 - **Saved** to `papers/<id>/ai.json`: generated, never hand-edited, holding the model id, the time, the extraction time, and the validated output. Hovering reads this file and needs no network.
 - **Key:** from the SDK's usual credential chain (`ANTHROPIC_API_KEY` or an `ant auth login` profile). It is never written to a board folder.
 - **Errors:** no key, a network error, a refusal after the fallback, or invalid output each give one plain line ("AI help could not run: …") and leave AI off for that paper. The tool works exactly as without AI.
+
+### B3b. The quick definition
+
+- **Trigger:** "Define" in the selection bar's › (and on the context card of an underlined word whose AI part is empty).
+- **Server route:** `POST /api/papers/{id}/ai/define` with `{word, page, rect}`. The server gathers the context itself: the sentence, the section's text, and D25's likely definition. The client never sends free text to the model.
+- **Result:** `{explanation, grounds: [{span, quote}]}`, checked by the same grounding rule. It is streamed to the card, then appended to `ai.json` under `defined`, keyed by the normalised word. The next hover of that word anywhere is instant and makes no call.
+- **Not a mark:** a quick definition is not a mark, is never exported, and needs Keep to become a `term` mark, as in B4.
+- **Errors:** errors give one plain line on the card. There are no retries beyond the SDK's own.
 
 ### B4. Jargon on the paper (Semantic Reader style)
 
@@ -153,7 +176,8 @@ Principle 5 becomes: "Plain local files, no account. Nothing leaves the machine 
 | AI output | `papers/<id>/ai.json` | new file, generated |
 | span ids | computed from `source.json` regions | new function, not stored in `source.json` |
 | `POST /api/papers/{id}/ai` | runs the pass, returns the validated `ai.json` | new route |
-| `GET /api/papers/{id}/ai` | returns `ai.json`, or 404 if there is none | new route |
+| `GET /api/papers/{id}/ai` | returns `ai.json` with the pass's status (`none`, `running`, `done`, `failed`), or 404 if there is none | new route |
+| `POST /api/papers/{id}/ai/define` | one quick definition, streamed; saved under `defined` in `ai.json` | new route |
 
 ## Testing
 
@@ -181,6 +205,7 @@ Principle 5 becomes: "Plain local files, no account. Nothing leaves the machine 
 
 - The study (the event log, participant roots, where objects came from).
 - A local model, and a pluggable model interface.
+- Quick definitions for anything but a word or short phrase: no "explain this paragraph".
 - Suggested connections or placement.
 - Explaining a selection on demand (Ask elsewhere stays for that).
 - Any AI text inside a note.
