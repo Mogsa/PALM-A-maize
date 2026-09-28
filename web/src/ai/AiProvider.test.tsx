@@ -2,12 +2,13 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import { NO_AI, type AiStatus } from "./types";
-import { AiProvider, useAi } from "./AiProvider";
+import { AI_POLL_MS, AiProvider, useAi } from "./AiProvider";
 import { AiStatus as AiStatusNote } from "./AiStatus";
 
 const view = { ai: false };
 const setView = vi.fn((patch: { ai?: boolean }) => Object.assign(view, patch));
-vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ paperId: "p", view, setView }) }));
+const flushView = vi.fn(() => Promise.resolve());
+vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ paperId: "p", view, setView, flushView }) }));
 
 const done: AiStatus = { status: "done", stale: false, message: null,
   ai: { schema: 1, extracted_at: "t", defined: {}, reader: { model: "m", made_at: "t", terms: [], where_to_look: [] } } };
@@ -18,7 +19,10 @@ function Probe() {
 }
 const mount = () => render(<AiProvider goTo={() => {}}><Probe /></AiProvider>);
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); view.ai = false; setView.mockClear(); });
+afterEach(() => {
+  cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); view.ai = false; setView.mockClear();
+  flushView.mockReset(); flushView.mockImplementation(() => Promise.resolve());
+});
 
 describe("AiProvider", () => {
   it("AI off shows nothing AI and makes no request", async () => {
@@ -57,5 +61,43 @@ describe("AiProvider", () => {
     mount();
     await waitFor(() => expect(screen.getByText(/older reading/)).toBeTruthy());
     expect(screen.getByTestId("has").textContent).toBe("no");
+  });
+
+  it("turning it on saves the view before it asks the server, which refuses a pass while the view says off", async () => {
+    let saved: () => void = () => {};
+    flushView.mockImplementation(() => new Promise<void>((r) => { saved = r; }));
+    const get = vi.spyOn(api, "getAi").mockResolvedValue(NO_AI);
+    const run = vi.spyOn(api, "runAi").mockResolvedValue(done);
+    const { rerender } = mount();
+    await act(async () => { screen.getByText("on").click(); });
+    rerender(<AiProvider goTo={() => {}}><Probe /></AiProvider>);
+    await act(async () => {});
+    expect(flushView).toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled(); expect(run).not.toHaveBeenCalled();
+    await act(async () => saved());
+    await waitFor(() => expect(run).toHaveBeenCalled());
+  });
+
+  it("a status that cannot be read says so and turns AI off", async () => {
+    view.ai = true;
+    vi.spyOn(api, "getAi").mockRejectedValue(new Error("AI help could not run: server down"));
+    mount();
+    await waitFor(() => expect(screen.getByText("AI help could not run: server down")).toBeTruthy());
+    expect(setView).toHaveBeenCalledWith({ ai: false });
+  });
+
+  it("a poll that fails stops polling, says so and turns AI off", async () => {
+    vi.useFakeTimers();
+    view.ai = true;
+    const get = vi.spyOn(api, "getAi").mockResolvedValueOnce({ ...NO_AI, status: "running" })
+      .mockRejectedValue(new Error("AI help could not run: server down"));
+    mount();
+    await act(async () => {});
+    await act(async () => { await vi.advanceTimersByTimeAsync(AI_POLL_MS); });
+    expect(screen.getByText("AI help could not run: server down")).toBeTruthy();
+    expect(setView).toHaveBeenCalledWith({ ai: false });
+    const calls = get.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(AI_POLL_MS * 3); });
+    expect(get.mock.calls.length).toBe(calls);
   });
 });

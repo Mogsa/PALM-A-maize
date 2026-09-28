@@ -24,11 +24,17 @@ const failure = (error: unknown) => (error instanceof Error ? error.message : "A
 /** AI help for one paper (spec B2): off, nothing is read or sent. On, it reads ai.json, runs the pass when there is
  *  none, and on a failure says so in one line and turns itself off. It never touches the board. */
 export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at: PageRect) => void }) {
-  const { paperId, view, setView } = useBoard();
+  const { paperId, view, setView, flushView } = useBoard();
   const on = view.ai;
   const [status, setStatus] = useState<AiStatus>(NO_AI);
   const [outlined, setOutlined] = useState<SlotSpans | null>(null);
   const running = useRef(false);
+
+  /** Spec B3: any error is one plain line and leaves AI help off. */
+  const fail = useCallback((error: unknown) => {
+    setStatus({ ...NO_AI, status: "failed", message: failure(error) });
+    setView({ ai: false });
+  }, [setView]);
 
   const run = useCallback(async () => {
     if (running.current) return;
@@ -37,29 +43,32 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
     try {
       setStatus(await api.runAi(paperId));
     } catch (error) {
-      setStatus({ ...NO_AI, status: "failed", message: failure(error) });
-      setView({ ai: false });
+      fail(error);
     } finally {
       running.current = false;
     }
-  }, [paperId, setView]);
+  }, [paperId, fail]);
 
   useEffect(() => {
     if (!on) return;
     let live = true;
-    api.getAi(paperId).then((s) => {
+    // The server refuses a pass while view.json says off, and turning on only schedules that write: save it first.
+    flushView().then(() => api.getAi(paperId)).then((s) => {
       if (!live) return;
       setStatus(s);
       if (s.status === "none") void run();
-    }).catch((error: unknown) => live && setStatus({ ...NO_AI, status: "failed", message: failure(error) }));
+    }).catch((error: unknown) => { if (live) fail(error); });
     return () => { live = false; };
-  }, [on, paperId, run]);
+  }, [on, paperId, run, fail, flushView]);
 
   useEffect(() => {   // a pass this tab did not start: wait for it
     if (!on || status.status !== "running" || running.current) return;
-    const timer = setInterval(() => void api.getAi(paperId).then(setStatus).catch(() => {}), AI_POLL_MS);
+    const timer = setInterval(() => void api.getAi(paperId).then(setStatus).catch((error: unknown) => {
+      clearInterval(timer);
+      fail(error);
+    }), AI_POLL_MS);
     return () => clearInterval(timer);
-  }, [on, status.status, paperId]);
+  }, [on, status.status, paperId, fail]);
 
   const addDefinition = useCallback((key: string, d: Definition) => setStatus((s) => (s.ai
     ? { ...s, ai: { ...s.ai, defined: { ...s.ai.defined, [key]: d } } }
