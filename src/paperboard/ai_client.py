@@ -23,6 +23,14 @@ class AiError(Exception):
 
 
 class ClaudeClient(Protocol):
+    # Which route answered, for the AI log (spec B3): "api", "claude-code" or "canned".
+    route: str
+    # The model's raw answer text (or JSON) for the last read_paper call, exactly
+    # as received, or None if none has completed. The AI log reads this right
+    # after read_paper returns or raises. Define needs no such attribute: its
+    # caller already assembles the raw text from the deltas it streams.
+    last_raw: str | None
+
     def read_paper(self, system: str, prompt: str, schema: dict) -> dict: ...
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]: ...
@@ -30,6 +38,9 @@ class ClaudeClient(Protocol):
 
 class NoClaude:
     """What serve uses when there is neither an API key nor Claude Code: every call fails plainly."""
+
+    route = "api"
+    last_raw: str | None = None
 
     def _fail(self):
         raise AiError("no_claude", "no Claude available: log in to Claude Code, or save an API key")
@@ -81,8 +92,11 @@ def _json(text: str) -> dict:
 
 
 class AnthropicClaude:
+    route = "api"
+
     def __init__(self, sdk: anthropic.Anthropic | None = None):
         self._sdk = sdk
+        self.last_raw: str | None = None
 
     def _client(self) -> anthropic.Anthropic:
         if self._sdk is None:
@@ -97,10 +111,13 @@ class AnthropicClaude:
         )
 
     def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
+        self.last_raw = None
         with _plain_errors():  # noqa: SIM117 -- kept separate: one guards SDK errors, the other is the stream
             with self._stream(READER_MODEL, READER_MAX_TOKENS, READER_EFFORT, system, prompt, schema) as stream:
                 message = stream.get_final_message()
-        return _json(_final_text(message))
+        text = _final_text(message)
+        self.last_raw = text
+        return _json(text)
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
         with _plain_errors():  # noqa: SIM117 -- kept separate: one guards SDK errors, the other is the stream

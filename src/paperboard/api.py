@@ -16,9 +16,18 @@ from fastapi.responses import FileResponse, JSONResponse, Response, StreamingRes
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from paperboard.ai import WordNotHere, define_context, define_stream, run_pass, word_key
-from paperboard.ai_client import AiError, AnthropicClaude, ClaudeClient
-from paperboard.ai_model import AiFile
+from paperboard.ai import (
+    DEFINER_SYSTEM,
+    WordNotHere,
+    define_context,
+    define_prompt,
+    define_stream,
+    log_entry,
+    run_pass,
+    word_key,
+)
+from paperboard.ai_client import DEFINER_MODEL, AiError, AnthropicClaude, ClaudeClient
+from paperboard.ai_model import AiFile, AiLogEntry
 from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
 from paperboard.blocks import chunk_blocks
 from paperboard.board_model import (
@@ -533,11 +542,12 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
             ai_running.add(paper_id)
         # Everything from here on runs while the paper is marked "running": any exception,
         # known or not, must clear it so a pass can never get stuck running.
+        logged: list[AiLogEntry] = []
         try:
             doc = store.read_source(paper_id)
             slots = [s.name for s in store.read_template().slots]
             with opened(paper_id) as pdf:
-                reader = run_pass(doc, pdf, slots, claude)
+                reader = run_pass(doc, pdf, slots, claude, on_log=logged.append)
 
             def with_reader(current: AiFile | None) -> AiFile:
                 keep = current.defined if current and current.extracted_at == doc.extracted_at else {}
@@ -555,6 +565,8 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
         else:
             return ai_status(paper_id, "done", ai)
         finally:
+            for entry in logged:
+                store.append_ai_log(paper_id, entry)
             ai_running.discard(paper_id)
 
     def ndjson(line: dict) -> bytes:
@@ -573,6 +585,7 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
         with opened(paper_id) as pdf:
             context = define_context(doc, pdf, body.word, body.page, body.rect,
                                      body.definition.model_dump() if body.definition else None)
+        prompt = define_prompt(body.word, context)
 
         def save(current: AiFile | None, value=None) -> AiFile:
             # A definition is only ever merged into an ai.json made from the *current*
@@ -584,20 +597,41 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
             return base.model_copy(update={"defined": {**base.defined, key: value}})
 
         def lines():
+            parts: list[str] = []
+            entry: AiLogEntry | None = None
+            stream = define_stream(claude, body.word, context)
             try:
-                for kind, value in define_stream(claude, body.word, context):
+                for kind, value in stream:
                     if kind == "delta":
+                        parts.append(value)
                         yield ndjson({"delta": value})
                     elif value is None:
+                        entry = log_entry("define", claude, DEFINER_MODEL, DEFINER_SYSTEM, prompt,
+                                          "".join(parts), None, None, doc.extracted_at)
                         yield ndjson({"error": "AI help could not find this in the paper."})
                     else:
                         store.update_ai(paper_id, lambda cur, value=value: save(cur, value))
+                        entry = log_entry("define", claude, DEFINER_MODEL, DEFINER_SYSTEM, prompt,
+                                          "".join(parts), value.model_dump(mode="json"), None, doc.extracted_at)
                         yield ndjson({"done": value.model_dump(mode="json")})
             except AiError as exc:
+                entry = log_entry("define", claude, DEFINER_MODEL, DEFINER_SYSTEM, prompt,
+                                  "".join(parts), None, exc, doc.extracted_at)
                 yield ndjson({"error": f"AI help could not run: {exc}"})
             except Exception as exc:
                 logger.exception("unexpected error while defining %r for %s", body.word, paper_id)
+                entry = log_entry("define", claude, DEFINER_MODEL, DEFINER_SYSTEM, prompt, "".join(parts), None,
+                                  AiError(type(exc).__name__, str(exc)), doc.extracted_at)
                 yield ndjson({"error": f"AI help could not run: {type(exc).__name__}: {exc}"})
+            finally:
+                # Closing the inner generator here, deterministically, is what actually kills
+                # and reaps a Claude Code child on a client disconnect: Starlette throws
+                # GeneratorExit into this generator at its current yield, and without this
+                # the generator define_stream wraps (claude.define, which owns the subprocess)
+                # would only be closed whenever Python happens to garbage-collect it.
+                stream.close()
+                if entry is not None:
+                    store.append_ai_log(paper_id, entry)
 
         return StreamingResponse(lines(), media_type="application/x-ndjson")
 

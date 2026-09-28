@@ -29,11 +29,15 @@ CLAUDE_EXE = "claude"
 READ_TIMEOUT = 600      # seconds: the whole-paper read
 DEFINE_TIMEOUT = 60     # seconds: one quick definition
 STRUCTURED_TOOL = "StructuredOutput"
-STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL")
 # Without this, Claude Code tends to write prose first and only then call the tool.
 ANSWER_NUDGE = f"\n\nGive your answer only by calling the {STRUCTURED_TOOL} tool, with no text before it."
 DETAIL_CHARS = 200
 NOT_LOGGED_IN = "Log in to Claude Code first (run `claude` once)"
+
+
+def _default_stderr_file():
+    return tempfile.TemporaryFile(mode="w+", prefix="paperboard-claude-stderr-")
 
 
 def _argv(model: str, effort: str, system: str, schema: dict, stream: bool) -> list[str]:
@@ -54,15 +58,25 @@ def _argv(model: str, effort: str, system: str, schema: dict, stream: bool) -> l
     return [*argv, "--output-format", "json"]
 
 
+_LIMIT_PHRASES = ("usage limit", "rate limit", "limit reached")
+
+
 def _failure(text: str, subtype: str = "") -> AiError:
-    """One plain AiError for whatever Claude Code said when it failed."""
+    """One plain AiError for whatever Claude Code said when it failed.
+
+    The result subtype is checked first: it is Claude Code's own classification
+    and is exact, where the text below is prose meant for a person and can say
+    almost anything. Only once the subtype gives no answer do we fall back to
+    matching narrow phrases in it, never a bare "limit" (which also appears in,
+    say, "the answer did not fit the expected shape" style messages that are
+    not about rate limiting at all)."""
+    if subtype == "error_max_structured_output_retries":
+        return AiError("invalid_output", "the answer did not fit the expected shape")
     lowered = text.lower()
     if "not logged in" in lowered or "/login" in lowered:
         return AiError("not_logged_in", NOT_LOGGED_IN)
-    if "limit" in lowered:
+    if any(phrase in lowered for phrase in _LIMIT_PHRASES):
         return AiError("rate_limited", "your Claude plan's usage limit is reached; try again later")
-    if subtype == "error_max_structured_output_retries":
-        return AiError("invalid_output", "the answer did not fit the expected shape")
     detail = " ".join(text.split())[:DETAIL_CHARS] or "no details"
     return AiError("api_error", f"Claude Code failed: {detail}")
 
@@ -90,13 +104,16 @@ def _structured_delta(message: dict, tool_blocks: set[int]) -> str | None:
     """The StructuredOutput JSON fragment in one stream-json line, if it holds one.
 
     Only the top-level turn counts (no parent tool use); `tool_blocks` remembers which content
-    block indexes are StructuredOutput calls."""
+    block index is the StructuredOutput call. Only ever the first one: on a retry (a first
+    StructuredOutput call whose output Claude Code itself rejects, followed by a second), a
+    second block's fragments are never tracked, so they are never forwarded and never get
+    concatenated onto the first attempt's, which would otherwise build invalid JSON."""
     if message.get("type") != "stream_event" or message.get("parent_tool_use_id") is not None:
         return None
     event = message.get("event", {})
     if event.get("type") == "content_block_start":
         block = event.get("content_block", {})
-        if block.get("type") == "tool_use" and block.get("name") == STRUCTURED_TOOL:
+        if block.get("type") == "tool_use" and block.get("name") == STRUCTURED_TOOL and not tool_blocks:
             tool_blocks.add(event.get("index"))
         return None
     delta = event.get("delta", {})
@@ -107,18 +124,24 @@ def _structured_delta(message: dict, tool_blocks: set[int]) -> str | None:
 
 
 class ClaudeCodeClaude:
+    route = "claude-code"
+
     def __init__(self, run: Callable = subprocess.run, popen: Callable = subprocess.Popen,
-                 env: Mapping[str, str] | None = None, define_timeout: float = DEFINE_TIMEOUT):
+                 env: Mapping[str, str] | None = None, define_timeout: float = DEFINE_TIMEOUT,
+                 stderr_factory: Callable = _default_stderr_file):
         self._run = run            # seams: tests pass fakes, so no test starts a real process
         self._popen = popen
         self._env = env
         self._define_timeout = define_timeout
+        self._stderr_factory = stderr_factory   # a real file, never a pipe: see define()
+        self.last_raw: str | None = None
 
     def _child_env(self) -> dict[str, str]:
         env = os.environ if self._env is None else self._env
         return {k: v for k, v in env.items() if k not in STRIPPED_ENV}
 
     def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
+        self.last_raw = None
         argv = _argv(READER_MODEL, READER_EFFORT, system, schema, stream=False)
         with tempfile.TemporaryDirectory(prefix="paperboard-claude-") as cwd:
             try:
@@ -128,6 +151,7 @@ class ClaudeCodeClaude:
                 raise AiError("timeout", "Claude Code took longer than 10 minutes") from exc
             except FileNotFoundError as exc:
                 raise AiError("no_claude", "the `claude` command was not found") from exc
+        self.last_raw = done.stdout
         try:
             result = json.loads(done.stdout)
         except json.JSONDecodeError as exc:
@@ -138,10 +162,13 @@ class ClaudeCodeClaude:
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
         argv = _argv(DEFINER_MODEL, DEFINER_EFFORT, system, schema, stream=True)
-        with tempfile.TemporaryDirectory(prefix="paperboard-claude-") as cwd:
+        # stderr goes to a real file, never a pipe: a pipe nobody reads fills up and blocks
+        # the child once it writes enough to it, and we do want the child's stderr for the
+        # failure message below, just not by continuously reading a pipe while streaming.
+        with tempfile.TemporaryDirectory(prefix="paperboard-claude-") as cwd, self._stderr_factory() as stderr_file:
             try:
                 proc = self._popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, text=True, cwd=cwd, env=self._child_env())
+                                   stderr=stderr_file, text=True, cwd=cwd, env=self._child_env())
             except FileNotFoundError as exc:
                 raise AiError("no_claude", "the `claude` command was not found") from exc
             expired = threading.Event()
@@ -153,10 +180,12 @@ class ClaudeCodeClaude:
                 timer.cancel()
                 proc.kill()
                 proc.wait()
+            stderr_file.seek(0)
+            stderr_text = stderr_file.read(DETAIL_CHARS)
         if expired.is_set():
             raise AiError("timeout", "Claude Code took longer than a minute")
         if result is None:
-            raise _failure(proc.stderr.read() if proc.stderr else "")
+            raise _failure(stderr_text)
         _structured(result)
 
     def _stream(self, proc, prompt: str):

@@ -11,12 +11,16 @@ from pathlib import Path
 
 
 class CannedClaude:
+    route = "canned"
+
     def __init__(self, answer_file: Path):
         answer = json.loads(answer_file.read_text(encoding="utf-8"))
         self.paper: dict = answer.get("read_paper", {"terms": [], "where_to_look": []})
         self.deltas: list[str] = answer.get("define", [])
+        self.last_raw: str | None = None
 
     def read_paper(self, system: str, prompt: str, schema: dict) -> dict:
+        self.last_raw = json.dumps(self.paper)
         return self.paper
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
