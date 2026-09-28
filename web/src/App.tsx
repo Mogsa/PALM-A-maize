@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api/client";
 import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
@@ -53,6 +53,10 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
   const [focusRect, setFocusRect] = useState<PageRect | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [noteRequests, setNoteRequests] = useState(0);
+  const [findRequest, setFindRequest] = useState<{ text: string } | null>(null);
+  /** Find in paper from anywhere: the paper is shown first when the board alone is. */
+  const requestFind = useCallback((text: string) => { setFindRequest({ text }); if (view === "board") show("paper"); }, [view]);   // eslint-disable-line react-hooks/exhaustive-deps -- show only calls setView
+  const findHandled = useCallback(() => setFindRequest(null), []);
   useUndoKeys(dispatch);
   const show = (next: View) => setView({ view: next });
   // In the both view each side is already in sight: going to the other only scrolls it there.
@@ -93,10 +97,12 @@ function Shell({ papers, paperId, onChoose, onAdded }: ShellProps) {
         {/* Both views stay mounted and the inactive one is only hidden: switching never moves anything (SPEC 4). */}
         <div ref={views} className={`views ${view === "both" ? "both" : ""}`} style={view === "both" ? { gridTemplateColumns: bothColumns(split) } : undefined}>
           <div className={`view paper-pane ${view === "board" ? "inactive" : ""}`}>
-            <PaperScreen focus={focusRect} onFocusHandled={() => setFocusRect(null)} onOpenOnBoard={openOnBoard} />
+            <PaperScreen focus={focusRect} onFocusHandled={() => setFocusRect(null)} onOpenOnBoard={openOnBoard}
+                         findRequest={findRequest} onFindHandled={findHandled} />
           </div>
           <div className={`view board-pane ${view === "paper" ? "inactive" : ""}`}>
-            <BoardView active={view !== "paper"} noteRequests={noteRequests} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)} onOpenInPaper={openInPaper} />
+            <BoardView active={view !== "paper"} noteRequests={noteRequests} focusNode={focusNode} onFocusHandled={() => setFocusNode(null)}
+                       onOpenInPaper={openInPaper} onFind={requestFind} />
           </div>
           {view === "both" && <SplitDivider views={views} split={split} onCommit={(next) => setView({ split: next })} />}
         </div>

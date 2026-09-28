@@ -19,7 +19,10 @@ import { PaperScreen } from "./PaperScreen";
 
 const mark: Highlight = { id: "h-1", tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 10, 10] }], quote: { exact: "x", prefix: "", suffix: "" }, position: 0, state: "anchored" } };
 const withView = (view: View): Board => { currentView = view; return { ...emptyBoard("p"), highlights: [mark] }; };
-const screen = () => <PaperScreen focus={null} onFocusHandled={() => undefined} onOpenOnBoard={() => undefined} />;
+const screen = () => (
+  <PaperScreen focus={null} onFocusHandled={() => undefined} onOpenOnBoard={() => undefined}
+               findRequest={null} onFindHandled={() => undefined} />
+);
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 

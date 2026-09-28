@@ -7,6 +7,7 @@ export type BoardActions = {
   openInPaper: (rect: PageRect) => void;
   editing: string | null;
   setEditing: (id: string | null) => void;
+  find: (text: string) => void;
 };
 
 const BoardActionsContext = createContext<BoardActions | null>(null);
