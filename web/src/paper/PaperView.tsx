@@ -19,7 +19,7 @@ import { bandBox } from "./rectangleDrag";
 import { usePaperScroll } from "./scroll";
 import { isTerm, termTagIds } from "./term";
 import { useCitationCard } from "./useCitationCard";
-import { useHoverCard } from "./useHoverCard";
+import type { HoverCard } from "./useHoverCard";
 import { useTermHover } from "./useTermHover";
 import { useFindMark, type FindMark } from "./useFindMark";
 import { usePaperMouse } from "./usePaperMouse";
@@ -63,6 +63,8 @@ type Props = {
   onScrollSettled: (scroll: PaperScroll | null) => void;
   /** Fit the page to the pane's width (the both view) rather than show it at full width. */
   fit: boolean;
+  /** Lifted to the parent (spec, Task 12): Define, from the selection bar's ›, opens the same term card. */
+  hover: HoverCard;
 };
 
 const flashStyle = ({ rect }: PageRect, scale: number) =>
@@ -70,12 +72,11 @@ const flashStyle = ({ rect }: PageRect, scale: number) =>
 const bandStyle = (a: XY, b: XY) => { const r = bandBox(a, b); return { left: r.left, top: r.top, width: r.width, height: r.height }; };
 
 export function PaperView(props: Props) {
-  const { paperId, source, board, focus, onFocusHandled, onOutlineClick, connecting, onJump, onOpenNote, findMark, paperScroll, onScrollSettled, fit } = props;
+  const { paperId, source, board, focus, onFocusHandled, onOutlineClick, connecting, onJump, onOpenNote, findMark, paperScroll, onScrollSettled, fit, hover } = props;
   const container = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const pageWidth = usePageWidth(container, fit);
   const pdf = useRef<LinkDocument | null>(null);
-  const hover = useHoverCard();
   const { ai } = useAi();
   const { tags } = useTags();
   const citation = useCitationCard(pdf, source, paperId, hover);
