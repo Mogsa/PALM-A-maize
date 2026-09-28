@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
+import { SlotPin } from "../../ai/SlotPin";
 import { newNote } from "../../model/notes";
 import type { GroupNode as GroupNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
@@ -44,8 +45,13 @@ export function GroupNode({ id, data, selected }: NodeProps<GroupNodeType>) {
       <CardBar id={id} tags={data.tags} />
       <NodeResizer isVisible={selected} minWidth={160} minHeight={120} />
       <div className="group-head"><GroupName id={id} name={data.name} /><NodeTags id={id} tags={data.tags} /></div>
-      {data.prompt && !hasNote(state.board.nodes, id) && (
-        <button type="button" className="slot-prompt nodrag" onClick={answer} title="Answer it in a note of your own">{data.prompt}</button>
+      {data.prompt && (
+        <div className="slot-row">
+          {!hasNote(state.board.nodes, id) && (
+            <button type="button" className="slot-prompt nodrag" onClick={answer} title="Answer it in a note of your own">{data.prompt}</button>
+          )}
+          <SlotPin slot={data.name ?? ""} />
+        </div>
       )}
       {data.tray && <TrayRows trayId={id} />}
       <Handle id={inHandle(id)} type="target" position={Position.Left} />
