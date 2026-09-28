@@ -39,13 +39,14 @@ type Props = {
   onOpenInPaper: (rect: PageRect) => void; active?: boolean; focusNode?: string | null; onFocusHandled?: () => void;
   /** Counts the New note presses in the top bar: each new count makes a note in the middle of the board. */
   noteRequests?: number;
+  onFind?: (text: string) => void;
 };
 
 const DELETE_KEYS = ["Backspace", "Delete"];
 /** Where a board never moved opens. */
 const ORIGIN = { x: 0, y: 0, zoom: 1 };
 
-function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRequests = 0 }: Props) {
+function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRequests = 0, onFind }: Props) {
   const { state, dispatch, source, paperId, view, setView } = useBoard();
   const { byId } = useTags();
   const hover = useHoverCard();
@@ -103,7 +104,8 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
     const others = getNodes().filter((n) => n.selected && n.id !== id).map((n) => ({ type: "select" as const, id: n.id, selected: false }));
     dispatch({ type: "nodes", changes: [...others, { type: "select", id, selected: true }] });
   }, [fitView, getZoom, getNodes, dispatch]);
-  const actions = useMemo(() => ({ focusNode: focusOn, openInPaper: onOpenInPaper, editing, setEditing }), [focusOn, onOpenInPaper, editing]);
+  const find = useCallback((text: string) => onFind?.(text), [onFind]);
+  const actions = useMemo(() => ({ focusNode: focusOn, openInPaper: onOpenInPaper, editing, setEditing, find }), [focusOn, onOpenInPaper, editing, find]);
 
   const handledNotes = useRef(noteRequests);
   useEffect(() => {

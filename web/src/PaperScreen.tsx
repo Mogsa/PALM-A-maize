@@ -25,9 +25,12 @@ type OpenMark = { id: string; at: DOMRect };
 
 export const SELECTION_FAILED_MESSAGE = "Could not read that selection from the paper. Nothing was added.";
 
-type Props = { focus: PageRect | null; onFocusHandled: () => void; onOpenOnBoard: (nodeId: string) => void };
+type Props = {
+  focus: PageRect | null; onFocusHandled: () => void; onOpenOnBoard: (nodeId: string) => void;
+  findRequest: { text: string } | null; onFindHandled: () => void;
+};
 
-export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
+export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest, onFindHandled }: Props) {
   const { state, dispatch, source, paperId, view, setView } = useBoard();
   const [pending, setPending] = useState<Pending | null>(null);
   const [openMark, setOpenMark] = useState<OpenMark | null>(null);
@@ -37,6 +40,13 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
   const [jump, setJump] = useState<PageRect | null>(null);
   const connect = useConnect(setError);
   const find = useFind(setJump);
+  // Find in paper asked for from ⌘K or a card: a fresh object each time, consumed once.
+  const openFind = find.open;
+  useEffect(() => {
+    if (!findRequest) return;
+    openFind(findRequest.text);
+    onFindHandled();
+  }, [findRequest, openFind, onFindHandled]);
   // The shell keeps the paper mounted, only hidden, while the board is shown: nothing of the paper's may stay open
   // there, or its keys (Delete, Escape) would act on the paper behind the board.
   const active = view.view !== "board";
@@ -110,7 +120,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard }: Props) {
                  connecting={connect.connectingFrom !== null} onJump={onJump} onOpenNote={onOpenOnBoard} findMark={find.findMark}
                  paperScroll={view.paper_scroll} onScrollSettled={onScrollSettled} fit={view.view === "both"} />
       {pending && selectionPopover(pending)}
-      {find.query && <FindPanel query={find.query} onPick={find.pick} onClose={find.close} />}
+      {find.query !== null && <FindPanel query={find.query} onQuery={find.edit} onPick={find.pick} onClose={find.close} />}
       {markOpen && openMark && (
         <MarkPopover highlight={markOpen} at={openMark.at} onClose={() => setOpenMark(null)}
                      onConnect={() => { connect.start(openMark.id); setOpenMark(null); }} />

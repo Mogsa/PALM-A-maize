@@ -8,7 +8,7 @@ const note = {
   edit: vi.fn(), commit: vi.fn(async () => undefined), retry: vi.fn(), hasSketch: false, sketchVersion: 0, sketchSaved: vi.fn(),
 };
 vi.mock("../../state/BoardProvider", () => ({ useBoard: () => ({ state: { board: emptyBoard("p") }, paperId: "p" }), useNote: () => note }));
-const actions = { editing: "n-1" as string | null, setEditing: vi.fn() };
+const actions = { editing: "n-1" as string | null, setEditing: vi.fn(), find: vi.fn() };
 vi.mock("../BoardActions", () => ({ useBoardActions: () => actions }));
 vi.mock("@xyflow/react", () => ({ Handle: () => null, NodeResizer: () => null, Position: { Left: "left", Right: "right" } }));
 vi.mock("./NodeTags", () => ({ NodeTags: () => null }));
