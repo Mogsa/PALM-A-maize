@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from paperboard.extract import extract
 
@@ -11,7 +12,21 @@ PAPER_DIR = FIXTURE_DIR / "papers"
 GOLDEN_DIR = FIXTURE_DIR / "golden"
 MANIFEST = json.loads((PAPER_DIR / "MANIFEST.json").read_text())
 
-FIXTURES = {name: PAPER_DIR / f"{name}.pdf" for name in MANIFEST}
+# A paper marked with a "suite" serves only that suite's tests; the rest run
+# over every paper in the shared set, each with a golden file.
+FIXTURES = {name: PAPER_DIR / f"{name}.pdf" for name, entry in MANIFEST.items() if "suite" not in entry}
+SECTION_FIXTURES = {name: PAPER_DIR / f"{name}.pdf" for name, entry in MANIFEST.items()
+                    if entry.get("suite") == "sections"}
+
+# The server only answers requests addressed to localhost; test clients say so.
+LOCAL = "http://127.0.0.1"
+# And refuses a write without this header (addendum section 6); the web client sends it on every request.
+APP_HEADERS = {"X-Paperboard": "1"}
+
+
+def local_client(app, **kwargs) -> TestClient:
+    """A test client as the web client is: addressed to localhost, sending the app's header."""
+    return TestClient(app, base_url=LOCAL, headers=APP_HEADERS, **kwargs)
 
 MISSING_FIXTURE = (
     "fixture paper {path} is not present. The PDFs are not committed (see "

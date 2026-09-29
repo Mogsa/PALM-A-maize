@@ -1,32 +1,60 @@
-import type { Board, ChunkNode, FigureNode, Rect } from "../model/types";
+import type { AiUnderline } from "../ai/terms";
+import type { Ground } from "../ai/types";
+import type { Board, PageRect, Rect, Source, Tag } from "../model/types";
+import { useTags } from "../state/TagsProvider";
+import { mainTagColour } from "../tags/mainTag";
+import { CutRuler } from "./CutRuler";
+import { Margin } from "./PageMargin";
+import type { JumpTarget } from "./margin";
 
-type Props = { page: number; scale: number; board: Board; onOutlineClick: (nodeId: string) => void };
+type Props = {
+  page: number; scale: number; board: Board; source: Source;
+  aiLines?: AiUnderline[];
+  /** Where to look (spec B5): the outlined slot's spans, dashed on their own page only. */
+  outlines?: Ground[];
+  onOutlineClick: (nodeId: string) => void; onJump: (target: JumpTarget) => void; onOpenNote: (noteId: string) => void;
+  onOutlineGo?: (at: PageRect) => void;
+};
 
 const px = (rect: Rect, scale: number) => ({
   left: rect[0] * scale, top: rect[1] * scale, width: (rect[2] - rect[0]) * scale, height: (rect[3] - rect[1]) * scale,
 });
 
-/** Marks and outlines for one page, drawn over the text layer. The overlay and each outline's
- *  box are pointer-events: none, so a drag anywhere over a page -- including inside a cut
- *  region -- still selects the text underneath (fix round 1, finding 2: an outline's whole box
- *  used to capture pointer events, so text inside a cut could never be selected). Only the
- *  small tab at an outline's top-left corner takes clicks, to open it. */
-export function PageOverlay({ page, scale, board, onOutlineClick }: Props) {
-  const chunks = board.nodes.filter((n): n is ChunkNode | FigureNode => n.type === "chunk" || n.type === "figure");
+/** The inline colour of a mark with a main tag; none leaves the stylesheet's plain yellow. */
+export const markColour = (tags: string[], byId: ReadonlyMap<string, Tag>): React.CSSProperties => {
+  const colour = mainTagColour(tags, byId);
+  return colour ? ({ "--mark-colour": colour } as React.CSSProperties) : {};
+};
+
+/** A mark's extra tags: one small dot each, named on hover. A deleted tag is skipped. */
+function MarkExtras({ ids }: { ids: string[] }) {
+  const { byId } = useTags();
+  const known = ids.flatMap((id) => byId.get(id) ?? []);
+  return <span className="mark-extras">{known.map((t) => <span key={t.id} className="mark-extra" title={t.name} style={{ background: t.colour }} />)}</span>;
+}
+
+/** Marks and the cut ruler for one page. The overlay is pointer-events: none, so a drag anywhere over a page still
+ *  selects the text underneath (fix round 1, finding 2); the ruler sits in the margin, off the text. */
+export function PageOverlay({ page, scale, board, source, aiLines = [], outlines = [], onOutlineClick, onJump, onOpenNote, onOutlineGo }: Props) {
+  const { byId } = useTags();
   return (
     <div className="overlay">
-      {chunks.flatMap((node) => node.data.region.rects.filter((r) => r.page === page).map((r, i) => (
-        <div key={`${node.id}-${i}`} className={`outline ${node.data.region.state}`} style={px(r.rect, scale)} data-node-id={node.id}>
-          {/* The title sits on the tab: the outline's box takes no pointer events, so a tooltip there never shows. */}
-          <button type="button" className="outline-tab" onClick={() => onOutlineClick(node.id)}
-                  title={`Open on the board: ${node.data.region.start.exact.slice(0, 60)}`} aria-label="Open this piece">
-            <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 8l6-6M4 2h4v4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
+      <CutRuler page={page} scale={scale} board={board} source={source} onOpen={onOutlineClick} />
+      {/* A highlight is painted line by line, each of its rects on this page (addendum 5.1), in its main tag's colour;
+          its extra tags are small chips after its first line (spec A2). */}
+      {board.highlights.flatMap((h) => h.anchor.rects.filter((r) => r.page === page).map((r, i) => (
+        <div key={`${h.id}-${i}`} className={`mark ${h.anchor.state}`} data-highlight-id={h.id} title={h.anchor.quote.exact.slice(0, 80)}
+             style={{ ...px(r.rect, scale), ...markColour(h.tags, byId) }}>
+          {i === 0 && h.tags.length > 1 && <MarkExtras ids={h.tags.slice(1)} />}
         </div>
       )))}
-      {board.highlights.filter((h) => h.anchor.page === page).map((h) => (
-        <div key={h.id} className={`mark ${h.anchor.state}`} style={px(h.anchor.rect, scale)} title={h.anchor.quote.exact.slice(0, 80)} />
+      {aiLines.map((l, i) => <div key={`ai-${i}`} className="ai-term" style={px(l.at.rect, scale)} title="AI term" />)}
+      {outlines.filter((g) => g.at?.page === page).map((g, i) => (
+        <div key={`out-${i}`} className="ai-outline" style={px(g.at!.rect, scale)}>
+          <button type="button" className="ai-badge" onClick={() => onOutlineGo?.(g.at!)} title={g.quote}>AI</button>
+        </div>
       ))}
+      <Margin page={page} scale={scale} board={board} source={source} onJump={onJump} onOpenNote={onOpenNote} />
     </div>
   );
 }

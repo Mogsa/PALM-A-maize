@@ -20,10 +20,15 @@
   --cut: #2f6fed;                        /* a cut region and its card */
   --cut-tint: rgba(47, 111, 237, 0.07);
   --cut-edge: rgba(47, 111, 237, 0.6);
+  --ruler-gutter: 24px;                  /* room left of a page for the cut ruler */
   --moved: #b7791f;                      /* a piece the paper's text moved under */
   --lost: #c53030;                       /* a piece whose text is gone */
   --ok: #2f855a;
   --focus: rgba(47, 111, 237, 0.35);
+  --ai: #7c3aed;                         /* a note pasted from an AI (D14) */
+  --ai-tint: rgba(124, 58, 237, 0.08);
+  --dim: 0.3;                            /* opacity of what the tag filter dims */
+  --ghost: 0.55;                         /* opacity of a tray ghost row */
 
   /* type */
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

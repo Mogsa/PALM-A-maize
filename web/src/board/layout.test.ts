@@ -5,7 +5,7 @@ import type { BoardNode } from "../model/types";
 const q = { exact: "x", prefix: "", suffix: "" };
 const chunk = (id: string, y: number, height?: number): BoardNode => ({
   id, type: "chunk", position: { x: 40, y }, width: 320, ...(height === undefined ? {} : { height }),
-  data: { tags: [], collapsed: false, region: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], start: q, end: q, position: 0, state: "anchored" }, text: "", user_sized: false, source_id: null },
+  data: { tags: [], collapsed: false, region: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], start: q, end: q, position: 0, state: "anchored" }, blocks: [], user_sized: false, source_id: null },
 });
 
 describe("nextChunkPosition", () => {

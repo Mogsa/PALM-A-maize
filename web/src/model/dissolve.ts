@@ -5,10 +5,13 @@ export type DeletePlan = { nodes: BoardNode[]; edges: BoardEdge[]; lifted: Board
 
 /** What a delete really removes. React Flow hands over the chosen nodes plus all their descendants and
  *  every edge touching any of them; dissolving a group must leave its pieces (addendum 4.2).
+ *  `edgesToDelete` are the stored edges for those React Flow offered.
  *  Removed: the nodes the reader chose (selected, or not inside another node being deleted) and edges
- *  that were selected or touch a removed node. Every other descendant survives as it is, except the direct
- *  children of a removed node: they move to their nearest surviving ancestor (or the root) without moving
- *  on screen. `absolute` gives a node's absolute position as currently drawn. */
+ *  that were selected or have a stored end (`from`/`to`) on a removed node. An edge drawn from a removed
+ *  chunk only because the chunk holds one end's highlight survives (addendum 4.0). Every other
+ *  descendant survives as it is, except the direct children of a removed node: they move to their
+ *  nearest surviving ancestor (or the root) without moving on screen. `absolute` gives a node's
+ *  absolute position as currently drawn. */
 export function planDelete(nodes: BoardNode[], toDelete: BoardNode[], edgesToDelete: BoardEdge[], absolute: (id: string) => XY): DeletePlan {
   const offered = new Set(toDelete.map((n) => n.id));
   const removed = toDelete.filter((n) => n.selected || !n.parentId || !offered.has(n.parentId));
@@ -27,6 +30,6 @@ export function planDelete(nodes: BoardNode[], toDelete: BoardNode[], edgesToDel
       return reparent(n, parent, absolute(n.id), parent ? absolute(parent) : null);
     });
 
-  const edges = edgesToDelete.filter((e) => e.selected || removedIds.has(e.source) || removedIds.has(e.target));
+  const edges = edgesToDelete.filter((e) => e.selected || removedIds.has(e.from) || removedIds.has(e.to));
   return { nodes: removed, edges, lifted };
 }

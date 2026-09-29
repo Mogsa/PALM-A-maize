@@ -1,0 +1,21 @@
+/* tags: chips on things, and the picker every popover and card uses */
+.chips { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.chip { font-size: var(--text-ui-small); line-height: 18px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); background: var(--surface); white-space: nowrap; }
+.tag-picker { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; font-size: var(--text-ui); background: var(--surface); }
+.tag-picker label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.tag-picker .new-tag { display: flex; gap: 6px; margin-top: 4px; }
+.tag-picker input[type="text"] { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--border); border-radius: var(--radius-small); }
+.tag-picker button { padding: 3px 10px; border: 1px solid var(--border); border-radius: var(--radius-small); background: var(--surface); }
+.tag-error { margin: 4px 0 0; color: var(--lost); font-size: var(--text-ui-small); }
+
+/* the colour row: plain yellow, then each tag's own colour (spec A2) */
+.tag-dots { display: inline-flex; align-items: center; gap: 6px; }
+.tag-dot { width: 16px; height: 16px; padding: 0; border-radius: var(--radius-pill); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border-strong); cursor: pointer; }
+.tag-dot.plain { background: var(--hl-solid); }
+.tag-dot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
+.tag-dot:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* a mark in its main tag's colour (spec A2): the tag's colour as a light wash, plain yellow with no tag */
+.overlay .mark[style*="--mark-colour"], .node mark[style*="--mark-colour"] { background: color-mix(in srgb, var(--mark-colour) 28%, transparent); }
+.overlay .mark .mark-extras { position: absolute; top: -5px; right: -4px; display: inline-flex; gap: 2px; }
+.overlay .mark .mark-extra { width: 7px; height: 7px; border-radius: var(--radius-pill); border: 1px solid var(--surface); }

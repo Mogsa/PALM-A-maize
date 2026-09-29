@@ -22,6 +22,14 @@ def test_renders_a_figure_to_png_at_the_expected_size(resnet):
     assert height == pytest.approx((y1 - y0 + 8) * DEFAULT_DPI / 72, abs=3)
 
 
+def test_clips_render_at_216_dpi_by_default(resnet):
+    """Three times the page's native 72, so an equation stays sharp (D3)."""
+    doc, pdf = resnet
+    figure = doc.figures[0]
+    assert DEFAULT_DPI == 216
+    assert render_clip(pdf, figure.rect)[1:] == render_clip(pdf, figure.rect, dpi=216)[1:]
+
+
 def test_dpi_is_clamped(resnet):
     doc, pdf = resnet
     figure = doc.figures[0]

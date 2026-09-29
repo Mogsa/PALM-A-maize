@@ -1,11 +1,6 @@
 /* the board: pieces of the paper laid out on a table */
 .board { height: 100%; position: relative; background: var(--bg-board); }
 .board .react-flow__background { color: var(--bg-board-dot); }
-.board-tools { position: absolute; z-index: 5; top: 12px; left: 12px; display: flex; gap: 6px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); }
-.board-tools button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 0; border-radius: var(--radius-small); background: transparent; font-weight: 500; }
-.board-tools button:hover { background: var(--surface-muted); }
-.empty-hint { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; pointer-events: none; color: var(--ink-muted); }
-.empty-hint p { max-width: 36ch; margin: 0; font-size: 14px; line-height: 1.5; }
 
 /* cards */
 .node { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); font-size: var(--text-ui); min-width: 200px; transition: box-shadow 120ms ease, border-color 120ms ease; }
@@ -23,8 +18,11 @@
 .node-head .note-badge { text-transform: uppercase; letter-spacing: 0.04em; font-family: var(--font-ui); }
 .node-head .count { flex: none; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--hl); color: var(--ink); font-size: 10.5px; font-weight: 600; }
 .node-head .toggle { width: 18px; color: var(--ink-muted); }
-.node-head .open-source { color: var(--ink-faint); opacity: 0; transition: opacity 120ms ease; }
-.node:hover .node-head .open-source, .react-flow__node.selected .open-source { opacity: 1; }
+.node-head .open-source { color: var(--ink-faint); }
+/* a card's buttons (open, tags, collapse, sketch) show only on hover or keyboard focus, so a card at rest is its words */
+.node-head .open-source, .node-head .tags-toggle, .node-head .toggle, .node-head .sketch-action { opacity: 0; transition: opacity 120ms ease; }
+.react-flow__node:hover .node-head :is(.open-source, .tags-toggle, .toggle, .sketch-action),
+.react-flow__node:focus-within .node-head :is(.open-source, .tags-toggle, .toggle, .sketch-action) { opacity: 1; }
 .node-head .open-source:hover { color: var(--cut); }
 
 .node-body { position: relative; padding: 8px 10px 10px; font-family: var(--font-read); font-size: var(--text-read); line-height: var(--leading-read); white-space: pre-line; max-height: 320px; overflow: auto; user-select: none; }
@@ -56,3 +54,62 @@
 .react-flow__attribution { display: none; }
 
 button.quiet { border: 0; background: none; cursor: pointer; font: inherit; }
+
+/* a chunk's blocks: text as text, formulas, figures and tables as images of the page (D2) */
+.node-body .block-text { margin: 0 0 8px; }
+.node-body .block-text:last-child { margin-bottom: 0; }
+.node-body .block-clip { display: block; max-width: 100%; height: auto; margin: 6px auto 10px; }
+.node-body mark.dim { background: var(--hl); opacity: var(--dim); }
+.node-head .note-count { flex: none; padding: 1px 6px; border-radius: var(--radius-pill); background: var(--surface-muted); color: var(--ink-muted); font-size: 10.5px; font-weight: 600; }
+.node .react-flow__handle-top { top: -5px; }
+
+/* connections */
+.board .react-flow__edge-path { stroke: var(--border-strong); stroke-width: 1.5; }
+.board .react-flow__edge.selected .react-flow__edge-path { stroke-width: 2.5; }
+.edge-popover { width: 300px; display: flex; flex-direction: column; gap: 6px; }
+
+/* tags on a card */
+.node-head { position: relative; }
+.node-head .tags-toggle { color: var(--ink-faint); }
+.node-tags-picker { position: absolute; top: 100%; right: 0; z-index: 5; width: 220px; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-raised); background: var(--surface); }
+
+/* notes: the reader's, and an AI's answer, marked (D14) */
+.node.note.ai { border-left-color: var(--ai); background: var(--ai-tint); }
+.node-head .note-badge.ai { background: var(--ai); color: var(--surface); }
+.node.note .note-text { display: block; width: 100%; min-height: 110px; padding: 8px 10px; border: 0; resize: vertical; background: transparent; font-family: var(--font-read); font-size: var(--text-read); line-height: var(--leading-read); }
+.node.note .note-body { user-select: text; cursor: text; }
+.node .hint { color: var(--ink-faint); font-style: italic; }
+.node .note-error { margin: 0; padding: 4px 10px; color: var(--lost); font-size: var(--text-ui-small); }
+
+/* groups, slots */
+.group-head { display: flex; align-items: center; gap: 6px; padding-right: 8px; }
+input.group-name { font: inherit; font-weight: 600; font-size: 12px; outline: none; }
+.slot-prompt { position: absolute; top: 48px; left: 16px; right: 16px; padding: 0; border: 0; background: none; text-align: left; font-family: var(--font-read); font-size: 14px; line-height: 1.4; color: var(--ink-faint); font-style: italic; cursor: text; }
+.slot-prompt:hover { color: var(--ink-muted); }
+.slot-row { position: relative; }
+.slot-pin { background: none; border: 0; cursor: pointer; opacity: .6; }
+.slot-pin.on { opacity: 1; }
+
+/* the tray: the group named Paper, and the rows of sections that moved out of it (D18) */
+.node.group.tray { background: var(--bg-paper); }
+.ghost-row { position: absolute; height: 32px; padding: 0 10px; border: 1px dashed var(--border-strong); border-radius: var(--radius); background: transparent; opacity: var(--ghost); text-align: left; font-size: var(--text-ui-small); color: var(--ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.ghost-row:hover { opacity: 1; border-color: var(--cut-edge); }
+
+/* live text on the board (addendum 4.10): a chunk's text is selectable, and a drag on it selects rather than moves */
+.node-body .block-text { user-select: text; cursor: text; }
+.text-popover { width: 320px; }
+/* a reference the paper can show (D26): a quiet underline; hovering or focusing it opens the context card */
+.node-body .ref { text-decoration: underline dotted var(--ink-faint); text-underline-offset: 2px; }
+.node-body .ref:hover, .node-body .ref:focus-visible { text-decoration-color: var(--cut); outline: none; }
+.node-body .ai-term { text-decoration: underline dotted var(--ink-faint); text-underline-offset: 2px; }
+.popover-note { margin: 8px 4px 0; font-size: var(--text-ui-small); color: var(--ink-muted); }
+.selection-bar { position: absolute; z-index: 5; top: 12px; left: 12px; display: flex; gap: 6px; padding: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-card); }
+.selection-bar button { padding: 5px 10px; border: 0; border-radius: var(--radius-small); background: transparent; font-weight: 500; }
+.selection-bar button:hover { background: var(--surface-muted); }
+.selection-bar .tool-note { align-self: center; padding: 0 8px; font-size: var(--text-ui-small); color: var(--ink-muted); }
+
+/* a card's main tag: a thin coloured edge (spec A3) */
+.node.tagged { box-shadow: inset 3px 0 0 var(--main-tag), var(--shadow-card); }
+/* the bar over one selected card */
+.card-bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-raised); }
+.card-bar button.quiet { padding: 2px 6px; font-size: 14px; }

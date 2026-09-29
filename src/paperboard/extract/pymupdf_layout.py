@@ -8,8 +8,15 @@ from pathlib import Path
 import pymupdf
 from pymupdf4llm.helpers.document_layout import OCRMode, parse_document
 
-from paperboard.geometry import Rect, area, column_runs, normalise, pad
+from paperboard.extract.inline_headings import (
+    accepted_headings,
+    body_size,
+    read_lines,
+    split_region,
+)
+from paperboard.geometry import Rect, area, column_runs, intersection, normalise, pad
 from paperboard.source_model import (
+    FURNITURE,
     Figure,
     LayoutRegion,
     PageInfo,
@@ -71,8 +78,60 @@ def read_regions(pdf_path: Path) -> tuple[list[PageInfo], list[Region]]:
                         text=page.get_textbox(pymupdf.Rect(*rect)).strip(),
                     )
                 )
+        regions = _split_buried_headings(doc, regions)
 
     return pages, regions
+
+
+_REFERENCES = re.compile(r"^(references|bibliography)\b", re.IGNORECASE)
+
+
+def _split_buried_headings(doc: pymupdf.Document, regions: list[Region]) -> list[Region]:
+    """Cut every region that hides a numbered heading mid-way (inline_headings).
+
+    Walks regions in reading order to know the last heading number, since a buried
+    heading must continue the sequence the other headings set.
+    """
+    out: list[Region] = []
+    last: str | None = None
+    after_references = False
+    body_sizes: dict[int, float] = {}
+    for region in regions:
+        if _is_heading(region):
+            title = _clean_title(region.text)
+            last = parse_number(title)[0] or last
+            after_references = after_references or bool(_REFERENCES.match(title))
+            out.append(region)
+            continue
+        if region.label in FURNITURE or after_references:
+            out.append(region)
+            continue
+        page = doc[region.page]
+        if region.page not in body_sizes:
+            body_sizes[region.page] = body_size(page)
+        lines = read_lines(page, region.rect)
+        found = accepted_headings(lines, body_sizes[region.page], last)
+        if not found:
+            out.append(region)
+            continue
+        last = _HEADING_NUMBER.match(lines[found[-1]].text).group(1)
+        for rect, label in split_region(region.rect, lines, found, lambda r, p=page: _has_art(p, r)):
+            out.append(Region(page=region.page, rect=rect, label=label or region.label,
+                              header_level=None, text=page.get_textbox(pymupdf.Rect(*rect)).strip()))
+    return out
+
+
+_HEADING_NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)*)")
+
+
+def _has_art(page: pymupdf.Page, rect: Rect) -> bool:
+    """An image or a cluster of vector drawings of figure size lies in `rect`."""
+    arts = [i["bbox"] for i in page.get_image_info()] + list(page.cluster_drawings())
+    for art in arts:
+        overlap = intersection(rect, normalise(tuple(art)))
+        if overlap is not None and area(overlap) >= MIN_FIGURE_AREA:
+            return True
+    return False
 
 
 # A heading number: "3", "3.1", "3.1.4" (separator optional), or a single appendix
@@ -80,9 +139,6 @@ def read_regions(pdf_path: Path) -> tuple[list[PageInfo], list[Region]]:
 # appendix "A"). Anchored, so a sentence that merely contains a number is not a
 # heading.
 _NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)*[.)]?|[A-Z][.)])\s+\S")
-
-# Layout labels that can never be a section heading, whatever the model says.
-_FURNITURE = {"page-header", "page-footer", "footnote", "caption"}
 
 MIN_HEADING_CHARS = 2
 MAX_HEADING_CHARS = 120
@@ -135,9 +191,22 @@ def _is_heading(region: Region) -> bool:
         return False
     if text.isdigit():
         return False  # a bare page number the model promoted
-    if text[0].islower() or text.endswith("."):
-        return False  # a body sentence the model promoted; no real heading looks like this
-    return True
+    if text[0].islower():
+        return False  # a body sentence the model promoted
+    # A trailing period marks a promoted sentence, except on a short numbered
+    # heading ending in a capitalised abbreviation: ross11a's "5.2 Super Mario Bros."
+    return not text.endswith(".") or _ends_in_capitalised_abbreviation(text)
+
+
+SHORT_HEADING_CHARS = 80
+
+
+def _ends_in_capitalised_abbreviation(text: str) -> bool:
+    """Numbered, short, and its last word capitalised: a sentence such as
+    "3 layers are used." ends in a lower-case word, a heading title does not."""
+    words = text.split()
+    return (parse_number(text)[0] is not None and len(text) <= SHORT_HEADING_CHARS
+            and len(words) > 1 and words[-1][0].isupper())
 
 
 def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section]:
@@ -147,7 +216,7 @@ def build_sections(pages: list[PageInfo], regions: list[Region]) -> list[Section
     the body text and stop before the following heading. Furniture regions are
     excluded from extents so a running head never lands inside a section.
     """
-    body = [r for r in regions if r.label not in _FURNITURE]
+    body = [r for r in regions if r.label not in FURNITURE]
     headings = [(i, r) for i, r in enumerate(body) if _is_heading(r)]
     page_widths = {p.index: p.width for p in pages}
 

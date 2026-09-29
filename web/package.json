@@ -16,9 +16,14 @@
   "type": "module",
   "dependencies": {
     "@xyflow/react": "^12.11.6",
+    "katex": "^0.18.9",
+    "perfect-freehand": "^1.2.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
     "react-pdf": "^11.0.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
     "ulid": "^3.0.2"
   },
   "devDependencies": {

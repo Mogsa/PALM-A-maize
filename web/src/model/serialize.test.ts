@@ -8,7 +8,7 @@ const region = { rects: [{ page: 0, rect: [0, 0, 1, 1] as [number, number, numbe
 
 const group: BoardNode = { id: "n-g", type: "group", position: { x: 0, y: 0 }, width: 500, height: 400, data: { tags: [], name: null } };
 const child: BoardNode = { id: "n-c", type: "chunk", position: { x: 10, y: 10 }, parentId: "n-g", extent: "parent", width: 300,
-  data: { tags: [], collapsed: false, region, text: "t", user_sized: false, source_id: null } };
+  data: { tags: [], collapsed: false, region, blocks: [{ kind: "text", page: 0, rect: [0, 0, 1, 1], text: "t" }], user_sized: false, source_id: null } };
 const note: BoardNode = { id: "n-n", type: "note", position: { x: 700, y: 0 }, initialWidth: 280, data: { tags: [], collapsed: false, note: "notes/n-n.md" } };
 
 describe("toBoardJson", () => {
@@ -37,9 +37,23 @@ describe("toBoardJson", () => {
     expect(a).not.toContain("undefined");
   });
 
+  it("keeps an edge's stored ends and data and strips its runtime selection", () => {
+    const edges = [{ id: "e-1", from: "h-1", to: "n-n", data: { tags: ["t-supports"] }, selected: true }];
+    expect(toBoardJson({ ...emptyBoard("p"), edges }).edges).toEqual([{ id: "e-1", from: "h-1", to: "n-n", data: { tags: ["t-supports"] } }]);
+  });
+
   it("round-trips through JSON to the same object", () => {
     const board = { ...emptyBoard("p"), nodes: [group, child, note] };
     const out = toBoardJson(board);
     expect(JSON.parse(JSON.stringify(out))).toEqual(out);
+  });
+});
+
+describe("toBoardJson and view state", () => {
+  it("never sends view, paper_scroll, active_tags or viewport", () => {
+    const stale = { ...emptyBoard("p"), view: "board", paper_scroll: { page: 1, y: 2 }, active_tags: ["t"], viewport: { x: 0, y: 0, zoom: 1 } };
+    const out = toBoardJson(stale as never) as unknown as Record<string, unknown>;
+    for (const key of ["view", "paper_scroll", "active_tags", "viewport"]) expect(out).not.toHaveProperty(key);
+    expect(emptyBoard("p")).not.toHaveProperty("view");
   });
 });

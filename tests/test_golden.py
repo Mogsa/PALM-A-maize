@@ -4,9 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
-from regenerate_goldens import summarise  # noqa: E402
-
-from conftest import GOLDEN_DIR  # noqa: E402
+from conftest import GOLDEN_DIR
+from regenerate_goldens import summarise
 
 from paperboard.extract import extract
 

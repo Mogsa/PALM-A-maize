@@ -21,3 +21,4 @@ CC-BY paper could be committed outright; these three cannot.
 | attention.pdf | 1706.03762v7 | Attention Is All You Need | Has a PDF outline. Single column. Heavy tables. |
 | resnet.pdf | 1512.03385v1 | Deep Residual Learning for Image Recognition | No PDF outline. Two columns, figure- and table-dense. Figure 2's caption is merged into its picture region by the layout model, the one documented figure miss. |
 | adam.pdf | 1412.6980v9 | Adam: A Method for Stochastic Optimization | No outline, small-caps headings smaller than body text, display equations. The hard case. |
+| ross11a.pdf | PMLR v15 (AISTATS 2011) | Ross, Gordon & Bagnell, A Reduction of Imitation Learning and Structured Prediction to No-Regret Online Learning | Sections suite only (`"suite": "sections"` in the manifest): no outline, and the layout model misses numbered headings on page 6. Fetched from proceedings.mlr.press, not committed. |

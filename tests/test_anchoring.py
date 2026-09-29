@@ -14,7 +14,9 @@ from paperboard.anchoring import (
     strip_whitespace,
 )
 from paperboard.board_model import ChunkAnchor, HighlightAnchor, QuoteSelector
-from paperboard.geometry import overlap_ratio
+from paperboard.geometry import contains_point, midpoint, overlap_ratio
+from paperboard.snap import select
+from paperboard.source_model import FURNITURE, PageRect
 
 
 def test_strip_whitespace_maps_offsets_back():
@@ -147,15 +149,15 @@ def test_resolve_highlight_states(resnet):
     quote, at = _selector(text, "Let us consider H(x) as an underlying mapping")
     true_rect = rects_for_text(pdf[2], quote.exact)
 
-    anchored = resolve_highlight(HighlightAnchor(page=2, rect=true_rect, quote=quote, position=global_position(index, 2, at)), index, pdf)
-    assert anchored.state == "anchored" and anchored.rect == true_rect
+    anchored = resolve_highlight(HighlightAnchor(rects=[PageRect(page=2, rect=true_rect)], quote=quote, position=global_position(index, 2, at)), index, pdf)
+    assert anchored.state == "anchored" and anchored.rects == [PageRect(page=2, rect=true_rect)]
 
-    moved = resolve_highlight(HighlightAnchor(page=2, rect=(50.0, 700.0, 286.0, 720.0), quote=quote, position=0), index, pdf)
+    moved = resolve_highlight(HighlightAnchor(rects=[PageRect(page=2, rect=(50.0, 700.0, 286.0, 720.0))], quote=quote, position=0), index, pdf)
     assert moved.state == "relocated"
-    assert overlap_ratio(moved.rect, true_rect) > 0.9
+    assert all(r.page == 2 and overlap_ratio(r.rect, true_rect) > 0.9 for r in moved.rects)
 
-    gone = resolve_highlight(HighlightAnchor(page=2, rect=true_rect, quote=QuoteSelector(exact="never in the paper, not once, not ever"), position=0), index, pdf)
-    assert gone.state == "orphaned" and gone.rect == true_rect
+    gone = resolve_highlight(HighlightAnchor(rects=[PageRect(page=2, rect=true_rect)], quote=QuoteSelector(exact="never in the paper, not once, not ever"), position=0), index, pdf)
+    assert gone.state == "orphaned" and gone.rects == [PageRect(page=2, rect=true_rect)]
 
 
 def test_fuzzy_match_edges_cover_only_the_matched_text(resnet):
@@ -192,11 +194,11 @@ def test_repeated_phrase_on_an_unchanged_page_stays_anchored(resnet):
     true_rect = rect_for_offsets(pdf[1], index[1], match.start, match.end)
     assert true_rect is not None
 
-    anchor = HighlightAnchor(page=1, rect=true_rect, quote=quote, position=position)
+    anchor = HighlightAnchor(rects=[PageRect(page=1, rect=true_rect)], quote=quote, position=position)
     resolved = resolve_highlight(anchor, index, pdf)
     assert resolved.state == "anchored"
-    assert resolved.rect == true_rect
-    x0, _y0, x1, _y1 = resolved.rect
+    assert resolved.rects == [PageRect(page=1, rect=true_rect)]
+    x0, _y0, x1, _y1 = resolved.rects[0].rect
     assert (x1 - x0) < 300
 
 
@@ -244,3 +246,96 @@ def test_anchor_basis_ignores_the_timestamp_and_follows_page_text_and_regions(ex
 
     regions = list(doc.regions[1:])
     assert anchor_basis(doc.model_copy(update={"regions": regions})) != anchor_basis(doc)
+
+
+def test_a_chunk_with_an_empty_end_quote_anchors_on_its_start_and_geometry(resnet):
+    """A split section that ends on a picture has no end quote. An empty quote is
+    no evidence either way, not a miss: the start holding inside the stored rects
+    is enough to stay anchored (it used to come back relocated)."""
+    doc, index, pdf = resnet
+    section = next(s for s in doc.sections if s.number == "3.1")
+    text = doc.page_text[section.heading_rect.page].text
+    start, s_at = _selector(text, section.title)
+    anchor = ChunkAnchor(rects=section.extent, start=start, end=QuoteSelector(exact=""),
+                         position=global_position(index, section.heading_rect.page, s_at))
+    resolved = resolve_chunk(anchor, index, pdf, doc)
+    assert resolved.state == "anchored"
+    assert resolved.rects == section.extent
+
+    end, _ = _selector(doc.page_text[section.extent[-1].page].text, _end_quote(doc, section))
+    no_start = anchor.model_copy(update={"start": QuoteSelector(exact=" "), "end": end})
+    assert resolve_chunk(no_start, index, pdf, doc).state == "anchored"
+
+
+def test_a_relocated_chunk_across_a_page_break_leaves_out_page_furniture(resnet):
+    """Rebuilding a moved chunk from the regions between its ends must skip the
+    running heads, page numbers, footnotes and captions extraction leaves out of
+    section extents; ResNet page 2 ends on a page-number footer."""
+    doc, index, pdf = resnet
+    last = [r for r in doc.regions if r.page == 2 and r.label == "text"][-1]
+    first = next(r for r in doc.regions if r.page == 3 and r.label == "text")
+    between = doc.regions[doc.regions.index(last):doc.regions.index(first) + 1]
+    furniture = [r for r in between if r.label in FURNITURE]
+    assert furniture, "the fixture must have furniture between the two ends"
+
+    chunk = select(doc, pdf, [PageRect(page=2, rect=last.rect), PageRect(page=3, rect=first.rect)], snap=False).chunk
+    stale = chunk.model_copy(update={"rects": [PageRect(page=2, rect=(50.0, 700.0, 286.0, 720.0))]})
+    resolved = resolve_chunk(stale, index, pdf, doc)
+    assert resolved.state == "relocated"
+    for region in furniture:
+        assert not any(r.page == region.page and contains_point(r.rect, *midpoint(region.rect)) for r in resolved.rects)
+
+
+# -- per-line highlights (D1) --------------------------------------------------
+
+
+def _stale(anchor: HighlightAnchor) -> HighlightAnchor:
+    """The same quote with its lines drawn somewhere the text is not, on the same pages."""
+    pages = sorted({r.page for r in anchor.rects})
+    rects = [PageRect(page=p, rect=(300.0, 740.0 - 12 * i, 540.0, 750.0 - 12 * i)) for i, p in enumerate(pages)]
+    return anchor.model_copy(update={"rects": rects})
+
+
+def test_a_highlight_whose_lines_hold_keeps_them_as_drawn(resnet):
+    doc, index, pdf = resnet
+    region = [r for r in doc.regions if r.page == 2 and r.label == "text"][2]
+    anchor = select(doc, pdf, [PageRect(page=2, rect=region.rect)], snap=False).highlight
+    assert len(anchor.rects) > 3
+    resolved = resolve_highlight(anchor, index, pdf)
+    assert resolved.state == "anchored" and resolved.rects == anchor.rects
+
+
+def test_a_relocated_highlight_gets_its_lines_back_from_the_matched_words(resnet):
+    """Re-anchoring recomputes one rect per line from the matched words by the same
+    rule as a fresh selection, never a bounding box and never shifted copies."""
+    doc, index, pdf = resnet
+    region = [r for r in doc.regions if r.page == 2 and r.label == "text"][2]
+    anchor = select(doc, pdf, [PageRect(page=2, rect=region.rect)], snap=False).highlight
+    resolved = resolve_highlight(_stale(anchor), index, pdf)
+    assert resolved.state == "relocated"
+    assert resolved.rects == anchor.rects
+
+
+def test_a_highlight_across_a_page_break_is_matched_on_the_joined_pages(resnet):
+    """One quote across a page break (addendum 5.2 [CHOICE]): matched against the
+    text of the pages it spans, joined, then split back into each page's lines."""
+    doc, index, pdf = resnet
+    last = [r for r in doc.regions if r.page == 2 and r.label == "text"][-1]
+    first = next(r for r in doc.regions if r.page == 3 and r.label == "text")
+    anchor = select(doc, pdf, [PageRect(page=2, rect=last.rect), PageRect(page=3, rect=first.rect)], snap=False).highlight
+    assert {r.page for r in anchor.rects} == {2, 3}
+    assert resolve_highlight(anchor, index, pdf).state == "anchored"
+    resolved = resolve_highlight(_stale(anchor), index, pdf)
+    assert resolved.state == "relocated"
+    assert resolved.rects == anchor.rects
+
+
+def test_a_highlight_on_two_columns_relocates_to_each_columns_lines(resnet):
+    doc, index, pdf = resnet
+    texts = [r for r in doc.regions if r.page == 2 and r.label == "text"]
+    left = next(r for r in reversed(texts) if r.rect[2] < 300)
+    right = next(r for r in texts if r.rect[0] > 300)
+    anchor = select(doc, pdf, [PageRect(page=2, rect=left.rect), PageRect(page=2, rect=right.rect)], snap=False).highlight
+    resolved = resolve_highlight(_stale(anchor), index, pdf)
+    assert resolved.state == "relocated"
+    assert resolved.rects == anchor.rects
