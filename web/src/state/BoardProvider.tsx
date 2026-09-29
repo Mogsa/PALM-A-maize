@@ -8,7 +8,7 @@ import { defaultPaperView, withView, type PaperViewState } from "../model/paperV
 import { createPersistence, createViewPersistence } from "./persistence";
 import { CLIP_FAILED_MESSAGE, planFirstOpen, planSplit, storeFigureClips } from "./split";
 
-export const FIRST_OPEN_FAILED_MESSAGE = "Could not lay out this paper's sections. Use Split on the board to try again.";
+export const FIRST_OPEN_FAILED_MESSAGE = "Could not lay out this paper's template. Reopen the paper to try again.";
 export const NOTE_LOAD_FAILED_MESSAGE = "Could not load this note.";
 export const NOTE_SAVE_FAILED_MESSAGE = "Could not save this note. Your text is kept here; edit it again to retry.";
 /** Export and Split read what the server has saved; when a change could not be saved first, they must not run. */

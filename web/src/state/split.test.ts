@@ -13,11 +13,11 @@ const figure = (id: string, clip: string | null = null): BoardNode => ({ id, typ
 beforeEach(() => { vi.clearAllMocks(); vi.spyOn(console, "error").mockImplementation(() => undefined); });
 
 describe("first open and split", () => {
-  it("planFirstOpen asks for the drafts and the template, and lays them out", async () => {
-    vi.mocked(api.split).mockResolvedValue({ nodes: [{ type: "figure", position: { x: 0, y: 0 }, data: { ...figure("x").data, source_id: "fig-1" } as never }] });
+  it("planFirstOpen lays out only the template's slots: no tray, and split is not asked", async () => {
     vi.mocked(api.getTemplate).mockResolvedValue({ schema: 1, slots: [{ name: "A", prompt: "a?" }, { name: "B", prompt: "b?" }] });
     const nodes = await planFirstOpen("p", source);
-    expect(nodes.map((n) => n.type)).toEqual(["group", "figure", "group", "group"]);
+    expect(nodes.map((n) => n.type === "group" && n.data.prompt)).toEqual(["a?", "b?"]);
+    expect(api.split).not.toHaveBeenCalled();
   });
   it("planSplit saves pending changes before asking the server, and adds nothing when nothing is missing", async () => {
     const order: string[] = [];

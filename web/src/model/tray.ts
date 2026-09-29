@@ -42,6 +42,11 @@ function slotGroups(template: TemplateFile, left: number): GroupNode[] {
     SLOT_WIDTH, SLOT_HEIGHT, { tags: [], name: slot.name, prompt: slot.prompt }));
 }
 
+/** First open with the tray off: the template's slots alone, from the board's origin. */
+export function templateLayout(template: TemplateFile): GroupNode[] {
+  return slotGroups(template, 0);
+}
+
 /** First open (D15): the tray on the left holding every piece, the template's slots in a grid to its right. */
 export function firstLayout(drafts: SplitDraft[], template: TemplateFile, source: Source): BoardNode[] {
   const order = trayOrder(source);

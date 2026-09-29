@@ -108,19 +108,15 @@ const draft = { type: "chunk" as const, position: { x: 0, y: 0 },
 const groups = () => ctx!.state.board.nodes.filter((n) => n.type === "group");
 
 describe("BoardProvider, first open (D15)", () => {
-  it("lays out a new board once under StrictMode, as one undo step, before showing it", async () => {
-    // StrictMode runs the load effect twice, so the board is fetched twice; split must run once.
+  it("lays out a new board once under StrictMode, as one undo step, with the template's slots and no tray", async () => {
+    // StrictMode runs the load effect twice, so the board is fetched twice; the layout must land once.
     vi.mocked(api.getBoard).mockResolvedValueOnce(emptyBoard("p")).mockResolvedValueOnce(emptyBoard("p"));
-    vi.mocked(api.split).mockResolvedValueOnce({ nodes: [draft] });
     render(<StrictMode><BoardProvider paperId="p"><Probe /></BoardProvider></StrictMode>);
     await waitFor(() => expect(ctx).not.toBeNull());
-    expect(groups().map((g) => g.data)).toEqual([
-      { tags: [], name: "Paper", tray: true },
-      { tags: [], name: "Main point", prompt: "What is it?" },
-    ]);
-    expect(ctx!.state.board.nodes.filter((n) => n.type === "chunk")).toHaveLength(1);
+    expect(groups().map((g) => g.data)).toEqual([{ tags: [], name: "Main point", prompt: "What is it?" }]);
+    expect(ctx!.state.board.nodes.filter((n) => n.type === "chunk")).toHaveLength(0);
     expect(ctx!.state.history.past).toHaveLength(1);
-    expect(api.split).toHaveBeenCalledTimes(1);
+    expect(api.split).not.toHaveBeenCalled();
   });
   it("never lays out a saved board, even an empty one", async () => {
     render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
@@ -131,7 +127,7 @@ describe("BoardProvider, first open (D15)", () => {
   it("shows the board with a notice when first open fails", async () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(api.getBoard).mockResolvedValueOnce(emptyBoard("p"));
-    vi.mocked(api.split).mockRejectedValueOnce(new Error("down"));
+    vi.mocked(api.getTemplate).mockRejectedValueOnce(new Error("down"));
     const { findByText } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
     expect(await findByText(FIRST_OPEN_FAILED_MESSAGE)).toBeTruthy();
     expect(ctx!.state.board.nodes).toEqual([]);

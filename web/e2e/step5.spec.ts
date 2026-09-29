@@ -148,38 +148,29 @@ async function writeExport(page: Page): Promise<string> {
 
 // ---- Attention: first open, the template, blocks, links ---------------------------------------------------------
 
-test("first open shows the tray filled by split and nine slots, and one Cmd-Z takes the whole layout back", async ({ page }) => {
+test("first open shows the nine slots and no tray, and one Cmd-Z takes the whole layout back", async ({ page }) => {
   expect((await boardOf(page.request, attention)).version).toBe(0);
-  const drafts = await splitOf(page.request, attention);
   const template: Json = await (await page.request.get("/api/template")).json();
   expect(template.slots).toHaveLength(9);
   await open(page, attention);
   await showBoard(page);
-  const tray = page.locator(".node.group.tray");
-  await expect(tray).toHaveCount(1);
-  await expect(tray.locator(".group-name")).toHaveText("Paper");
   await expect(page.locator(".node.group.slot")).toHaveCount(9);
   await expect(page.locator(".slot-prompt")).toHaveCount(9);
-  expect(drafts.length).toBeGreaterThan(0);
-  await expect(page.locator(".node.chunk")).toHaveCount(drafts.filter((d) => d.type === "chunk").length);
-  await expect(page.locator(".node.figure")).toHaveCount(drafts.filter((d) => d.type === "figure").length);
+  await expect(page.locator(".node.group.tray")).toHaveCount(0);
+  await expect(page.locator(".node.chunk")).toHaveCount(0);
   await expect.poll(async () => (await boardOf(page.request, attention)).version).toBeGreaterThan(0);
-  const saved = await boardOf(page.request, attention);
-  const trayId = saved.nodes.find((n: Json) => n.data.tray).id;
-  expect(saved.nodes.filter((n: Json) => n.parentId === trayId)).toHaveLength(drafts.length);
 
   await page.keyboard.press("ControlOrMeta+z");
   await expect(page.locator(".react-flow__node")).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+Shift+z");
   await expect(page.locator(".node.group.slot")).toHaveCount(9);
-  await expect.poll(async () => (await boardOf(page.request, attention)).nodes.length).toBe(1 + drafts.length + 9);
+  await expect.poll(async () => (await boardOf(page.request, attention)).nodes.length).toBe(9);
 });
 
-test("in the paper view the hidden board's tray and slots neither show nor take the paper's clicks", async ({ page }) => {
+test("in the paper view the hidden board's slots neither show nor take the paper's clicks", async ({ page }) => {
   // The laid-out board of first open, saved in the paper view at zoom 1, so the slots sit over the paper's first page.
   const laidOut = await boardOf(page.request, attention);
   expect(laidOut.nodes.filter((n: Json) => n.type === "group" && n.data.prompt)).toHaveLength(9);
-  expect(laidOut.nodes.some((n: Json) => n.data.tray)).toBe(true);
   const put = await page.request.put(`/api/papers/${attention}/board`, {
     data: laidOut, headers: { "If-Match": String(laidOut.version), ...WRITE },
   });
