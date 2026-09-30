@@ -13,7 +13,8 @@ export type NoteStore = {
   /** A note just made here has no saved text: it is empty at once, so its field takes typing before any load answers.
    *  Text already here (written before the note was put on the board) is kept. */
   created: (nodeId: string) => void;
-  /** Writes this note's pending edit now (the field lost focus). Resolves once written; never rejects. */
+  /** Writes this note's pending edit now (the field lost focus), or tries its failed write again. Resolves once
+   *  written; never rejects. */
   commit: (nodeId: string) => Promise<void>;
   /** Writes every pending edit now, tries failed writes again, and waits for every write. Never rejects: a failure
    *  is kept in `failed`. */
@@ -85,7 +86,7 @@ export function createNoteStore(io: NoteIO, delayMs = SAVE_DELAY_MS): NoteStore 
   /** Writes the note's text as it stands. A failure is kept in `failedIds` for the views to show, so it is logged, not thrown. */
   const write = (id: string): Promise<void> =>
     save(id, texts.get(id) ?? "").catch((error: unknown) => console.error(`Could not save note ${id}`, error));
-  const commit = (id: string): Promise<void> => (pending.has(id) ? write(id) : Promise.resolve());
+  const commit = (id: string): Promise<void> => (pending.has(id) || failedIds.has(id) ? write(id) : Promise.resolve());
   const created = (id: string) => {
     if (texts.has(id)) return;
     texts.set(id, "");

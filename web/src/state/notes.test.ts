@@ -165,6 +165,21 @@ describe("the note store, a note just made", () => {
   });
 });
 
+describe("the note store, a failed write is tried again", () => {
+  it("commit writes a note whose last write failed, even with no new edit", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const put = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue(undefined);
+    const store = createNoteStore({ get: vi.fn(), put });
+    store.edit("n-1", "typed");
+    await store.commit("n-1");
+    expect(store.failed("n-1")).toBe(true);
+    await store.commit("n-1");   // the reader leaves the field again
+    expect(put).toHaveBeenLastCalledWith("n-1", "typed");
+    expect(store.failed("n-1")).toBe(false);
+    expect(store.hasUnsaved()).toBe(false);
+  });
+});
+
 describe("the note store, sketches (D23)", () => {
   it("a loaded note says whether it has a sketch", async () => {
     const store = createNoteStore({ get: vi.fn(async (id: string) => file("", id === "n-drawn")), put: vi.fn() });
