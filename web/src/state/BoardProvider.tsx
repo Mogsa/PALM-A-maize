@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { useActivity, type Activity } from "../activity/useActivity";
 import { api } from "../api/client";
 import { paperWords } from "../board/marks";
 import { boardReducer, initialBoardState, type BoardAction, type BoardState } from "../model/boardReducer";
@@ -27,6 +28,8 @@ type Ctx = {
   flush: () => Promise<void>;
   /** Split (D16): what the board is missing goes into the tray as one undo step. Resolves to the pieces added. */
   split: () => Promise<number>;
+  /** This paper's activity log: what the reader does, recorded while `view.log` is on. */
+  activity: Activity;
 };
 const BoardContext = createContext<Ctx | null>(null);
 
@@ -155,9 +158,11 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
     return nodes.length - 1;   // the first node is the tray
   }, [paperId, source, flush, storeClips]);
 
+  const activity = useActivity(paperId, source !== null, view);
+
   const words = useMemo(() => paperWords(source?.page_text ?? []), [source]);
-  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId, notes, view, setView, flushView, flush, split } : null),
-    [state, source, words, notice, paperId, notes, view, setView, flushView, flush, split]);
+  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId, notes, view, setView, flushView, flush, split, activity } : null),
+    [state, source, words, notice, paperId, notes, view, setView, flushView, flush, split, activity]);
   if (!value && failure) {
     return (
       <div className="loading load-failed" role="alert">
