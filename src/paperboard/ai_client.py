@@ -11,10 +11,13 @@ import anthropic
 
 READER_MODEL = "claude-opus-5-5"
 DEFINER_MODEL = "claude-sonnet-5"
+ASK_MODEL = "claude-sonnet-5"
 READER_EFFORT = "high"     # Opus 5.5's default is medium; the pass reads the whole argument
 DEFINER_EFFORT = "low"     # hover speed
+ASK_EFFORT = "medium"      # a question about the whole paper, answered while the reader waits
 READER_MAX_TOKENS = 64000
 DEFINER_MAX_TOKENS = 1024
+ASK_MAX_TOKENS = 8192
 
 
 class AiError(Exception):
@@ -43,6 +46,8 @@ class ClaudeClient(Protocol):
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]: ...
 
+    def ask(self, system: str, prompt: str, schema: dict) -> Iterator[str]: ...
+
 
 class NoClaude:
     """What serve uses when there is neither an API key nor Claude Code: every call fails plainly."""
@@ -56,6 +61,10 @@ class NoClaude:
         self._fail()
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
+        self._fail()
+        yield ""
+
+    def ask(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
         self._fail()
         yield ""
 
@@ -124,8 +133,16 @@ class AnthropicClaude:
         return ReadResult(_json(text), text)
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
+        yield from self._streamed(DEFINER_MODEL, DEFINER_MAX_TOKENS, DEFINER_EFFORT, system, prompt, schema)
+
+    def ask(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
+        yield from self._streamed(ASK_MODEL, ASK_MAX_TOKENS, ASK_EFFORT, system, prompt, schema)
+
+    def _streamed(self, model: str, max_tokens: int, effort: str, system: str, prompt: str,
+                  schema: dict) -> Iterator[str]:
+        """The model's JSON text as it is written; a refusal or a cut-off answer fails after it."""
         with _plain_errors():  # noqa: SIM117 -- kept separate: one guards SDK errors, the other is the stream
-            with self._stream(DEFINER_MODEL, DEFINER_MAX_TOKENS, DEFINER_EFFORT, system, prompt, schema) as stream:
+            with self._stream(model, max_tokens, effort, system, prompt, schema) as stream:
                 yield from stream.text_stream
                 message = stream.get_final_message()
         _final_text(message)

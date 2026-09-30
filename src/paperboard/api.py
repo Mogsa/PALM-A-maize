@@ -35,9 +35,10 @@ from paperboard.ai import (
     with_lines,
     word_key,
 )
-from paperboard.ai_client import DEFINER_MODEL, AiError, AnthropicClaude, ClaudeClient
+from paperboard.ai_client import ASK_MODEL, DEFINER_MODEL, AiError, AnthropicClaude, ClaudeClient
 from paperboard.ai_model import AiFile, AiLogEntry
 from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
+from paperboard.ask import ASK_SYSTEM, AskRequest, ask_prompt, ask_stream, chat_turn, reader_layer
 from paperboard.blocks import chunk_blocks
 from paperboard.board_model import (
     Board,
@@ -59,6 +60,7 @@ from paperboard.recut import NotContiguous, RecutMode, join, recut
 from paperboard.sketch import SketchBody, SketchFile, sketch_svg
 from paperboard.snap import Selection, select
 from paperboard.source_model import PageRect
+from paperboard.spans import paper_spans
 from paperboard.split import split
 from paperboard.store import (
     NodeNotFound,
@@ -675,6 +677,62 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
                 stream.close()
                 if entry is not None:
                     store.append_ai_log(paper_id, entry)
+
+        return StreamingResponse(lines(), media_type="application/x-ndjson")
+
+    # -- ask (Ask spec, 2026-09-30) -------------------------------------------
+
+    def ask_layer(paper_id: str) -> tuple[str, set[str]]:
+        """The reader's layer as a question sends it, and the ids of the notes it names."""
+        board = store.read_board(paper_id)
+        notes = {n.id: note_markdown(paper_id, n.id) for n in board.nodes
+                 if isinstance(n, NoteNode) and n.data.origin == "reader"}
+        tag_names = {t.id: t.name for t in store.read_tags().tags}
+        return reader_layer(board, notes, tag_names), set(notes)
+
+    @app.get("/api/papers/{paper_id}/ai/ask/context")
+    def get_ask_context(paper_id: str):
+        """Show what's sent: the very block a question would carry. Reads only; sends nothing."""
+        return {"text": ask_layer(paper_id)[0]}
+
+    @app.post("/api/papers/{paper_id}/ai/ask")
+    def post_ask(paper_id: str, body: AskRequest):
+        if (refused := ai_off(paper_id)) is not None:
+            return refused
+        doc = store.read_source(paper_id)
+        with opened(paper_id) as pdf:
+            spans = paper_spans(doc, pdf)
+        layer, note_ids = ask_layer(paper_id) if body.use_marks else (None, set())
+        prompt, trimmed = ask_prompt(spans, layer, body.history, body.question, body.selection)
+
+        def log(raw: str, grounded: object | None, error: AiError | None) -> None:
+            store.append_ai_log(paper_id, log_entry("ask", claude, ASK_MODEL, ASK_SYSTEM, prompt, raw, grounded,
+                                                    error, doc.extracted_at))
+
+        def lines():
+            parts: list[str] = []
+            stream = ask_stream(claude, prompt, spans, note_ids)
+            try:
+                for kind, value in stream:
+                    if kind == "delta":
+                        parts.append(value)
+                        yield ndjson({"delta": value})
+                    elif value is None:
+                        log("".join(parts), None, None)
+                        yield ndjson({"error": "AI help could not answer that."})
+                    else:
+                        log("".join(parts), value.model_dump(mode="json"), None)
+                        store.append_chat(paper_id, chat_turn(body, value))
+                        yield ndjson({"done": {**value.model_dump(mode="json"), "trimmed": trimmed}})
+            except AiError as exc:
+                log("".join(parts), None, exc)
+                yield ndjson({"error": f"AI help could not run: {exc}"})
+            except Exception as exc:
+                logger.exception("unexpected error while asking about %s", paper_id)
+                log("".join(parts), None, AiError(type(exc).__name__, str(exc)))
+                yield ndjson({"error": f"AI help could not run: {type(exc).__name__}: {exc}"})
+            finally:
+                stream.close()   # as Define: kills and reaps a Claude Code child when the client goes away
 
         return StreamingResponse(lines(), media_type="application/x-ndjson")
 

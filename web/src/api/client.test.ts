@@ -211,6 +211,31 @@ describe("api, AI routes", () => {
     await expect(api.define("p", { word: "w", page: 0, rect: [0, 0, 1, 1], definition: null }, () => {}))
       .rejects.toThrow("AI help could not run: x");
   });
+
+  it("ask posts the question and streams deltas, then resolves with the answer", async () => {
+    const body = '{"delta":"{\\"answer\\": \\"x"}\n{"done":{"answer":"x","grounds":[],"notes":[],"trimmed":false}}\n';
+    const fn = vi.fn(async () => new Response(body, { status: 200 }));
+    vi.stubGlobal("fetch", fn);
+    const deltas: string[] = [];
+    const request = { question: "Why?", selection: null, history: [], use_marks: true };
+    const result = await api.ask("p", request, (d) => deltas.push(d));
+    expect(result.answer).toBe("x");
+    expect(deltas).toEqual(['{"answer": "x']);
+    expect(lastCall(fn)).toMatchObject({ url: "/api/papers/p/ai/ask", init: { method: "POST" }, body: request });
+    expect(new Headers(lastCall(fn).init.headers).get("X-Paperboard")).toBe("1");
+  });
+
+  it("ask rejects with the server's plain line", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response('{"error":"AI help could not answer that."}\n', { status: 200 })));
+    await expect(api.ask("p", { question: "Why?", selection: null, history: [], use_marks: true }, () => {}))
+      .rejects.toThrow("AI help could not answer that.");
+  });
+
+  it("askContext reads the block a question sends", async () => {
+    const fn = mockFetch(200, { text: "<reader>\n</reader>" });
+    expect(await api.askContext("p")).toBe("<reader>\n</reader>");
+    expect(lastCall(fn).url).toBe("/api/papers/p/ai/ask/context");
+  });
 });
 
 describe("every request says it comes from Paper Board (contract 2)", () => {

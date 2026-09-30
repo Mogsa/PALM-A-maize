@@ -4,7 +4,14 @@ import anthropic
 import httpx
 import pytest
 
-from paperboard.ai_client import DEFINER_MODEL, READER_MODEL, AiError, AnthropicClaude
+from paperboard.ai_client import (
+    ASK_MODEL,
+    DEFINER_MODEL,
+    READER_MODEL,
+    AiError,
+    AnthropicClaude,
+    NoClaude,
+)
 
 REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 
@@ -103,3 +110,25 @@ def test_define_raises_a_refusal_after_the_stream():
     sdk = _Sdk(_message("", "refusal"), deltas=[])
     with pytest.raises(AiError):
         list(AnthropicClaude(sdk).define("s", "p", {}))
+
+
+def test_ask_streams_sonnet_medium_effort_deltas():
+    text = '{"answer": "x", "grounds": [], "notes": []}'
+    sdk = _Sdk(_message(text), deltas=[text[:9], text[9:]])
+    assert "".join(AnthropicClaude(sdk).ask("s", "p", {"type": "object"})) == text
+    assert sdk.kwargs["model"] == ASK_MODEL == "claude-sonnet-5"
+    assert sdk.kwargs["output_config"]["effort"] == "medium"
+    assert sdk.kwargs["output_config"]["format"]["schema"] == {"type": "object"}
+
+
+def test_ask_raises_a_cut_off_answer_after_the_stream():
+    sdk = _Sdk(_message("{", "max_tokens"), deltas=["{"])
+    with pytest.raises(AiError) as err:
+        list(AnthropicClaude(sdk).ask("s", "p", {}))
+    assert err.value.code == "too_long"
+
+
+def test_no_claude_refuses_to_ask():
+    with pytest.raises(AiError) as err:
+        list(NoClaude().ask("s", "p", {}))
+    assert err.value.code == "no_claude"

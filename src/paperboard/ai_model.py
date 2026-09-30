@@ -71,7 +71,7 @@ class AiLogEntry(BaseModel):
     `grounded` is what survived grounding, or null; `error` is set only on failure."""
 
     time: datetime
-    kind: Literal["read", "define"]
+    kind: Literal["read", "define", "ask"]
     model: str
     route: Literal["api", "claude-code", "canned"]
     prompt: AiLogPrompt

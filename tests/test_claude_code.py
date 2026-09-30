@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from paperboard.ai_client import DEFINER_MODEL, READER_MODEL, AiError
-from paperboard.claude_code import DEFINE_TIMEOUT, READ_TIMEOUT, ClaudeCodeClaude
+from paperboard.ai_client import ASK_MODEL, DEFINER_MODEL, READER_MODEL, AiError
+from paperboard.claude_code import ASK_TIMEOUT, DEFINE_TIMEOUT, READ_TIMEOUT, ClaudeCodeClaude
 
 SCHEMA = {"type": "object", "properties": {"x": {"type": "string"}}}
 ENV = {"PATH": "/bin", "HOME": "/home/me", "ANTHROPIC_API_KEY": "sk-secret", "ANTHROPIC_AUTH_TOKEN": "tok",
@@ -343,3 +343,49 @@ def test_define_missing_claude_is_no_claude():
     with pytest.raises(AiError) as err:
         list(ClaudeCodeClaude(popen=popen, env=ENV).define("S", "w", SCHEMA))
     assert err.value.code == "no_claude"
+
+
+# -- ask -------------------------------------------------------------------------
+
+def test_ask_runs_sonnet_medium_with_no_tools_stream_json_stdin_stripped_env_and_a_fresh_dir():
+    proc = FakeProc(STREAM)
+    popen = FakePopen(proc)
+    deltas = list(ClaudeCodeClaude(popen=popen, env=ENV).ask("SYS", "Question: why?", SCHEMA))
+    assert deltas == ['{"explanation": "a ', 'thing"}']
+    argv = popen.argv
+    assert argv[0] == "claude" and "-p" in argv
+    assert flag(argv, "--model") == ASK_MODEL and flag(argv, "--effort") == "medium"
+    assert flag(argv, "--system-prompt").startswith("SYS")
+    assert json.loads(flag(argv, "--json-schema")) == SCHEMA
+    assert flag(argv, "--tools") == "" and flag(argv, "--setting-sources") == ""
+    assert "--strict-mcp-config" in argv and "--no-session-persistence" in argv and "--disable-slash-commands" in argv
+    assert flag(argv, "--output-format") == "stream-json"
+    assert proc.stdin.text == "Question: why?" and "Question: why?" not in argv and not popen.kwargs.get("shell")
+    assert not {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"} & set(popen.kwargs["env"])
+    assert popen.cwd_existed and not Path(popen.kwargs["cwd"]).exists()
+    assert ASK_TIMEOUT > DEFINE_TIMEOUT
+
+
+def test_ask_error_result_after_the_stream_is_a_plain_error():
+    lines = [envelope(is_error=True, result="Not logged in · Please run /login")]
+    with pytest.raises(AiError) as err:
+        list(ClaudeCodeClaude(popen=FakePopen(FakeProc(lines, returncode=1)), env=ENV).ask("S", "q", SCHEMA))
+    assert err.value.code == "not_logged_in"
+
+
+def test_ask_that_runs_past_its_timeout_is_a_timeout_error():
+    proc = FakeProc([])
+
+    def blocking_lines():
+        import time
+        deadline = time.monotonic() + 2
+        while not proc.killed and time.monotonic() < deadline:
+            time.sleep(0.01)
+        return
+        yield
+
+    proc.stdout = blocking_lines()
+    client = ClaudeCodeClaude(popen=FakePopen(proc), env=ENV, ask_timeout=0.05)
+    with pytest.raises(AiError) as err:
+        list(client.ask("S", "q", SCHEMA))
+    assert err.value.code == "timeout"

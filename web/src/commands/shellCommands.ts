@@ -1,7 +1,7 @@
 import { TRAYS_ENABLED } from "../model/tray";
 import type { Command } from "./registry";
 
-export type Panel = "questions" | "glossary" | "keySentences" | "export" | "tags" | "template" | "activity";
+export type Panel = "questions" | "glossary" | "keySentences" | "export" | "tags" | "template" | "activity" | "ask";
 export type ShellDeps = { openPanel: (panel: Panel) => void; newNote: () => void; find: () => void; split: () => void; shortcuts: () => void };
 
 /** Every command ⌘K lists (spec A1), in this order; features such as AI help add theirs through the registry.

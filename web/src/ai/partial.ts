@@ -1,8 +1,8 @@
-const FIELD = /"explanation"\s*:\s*"((?:[^"\\]|\\.)*)(\\?)/;
+const fieldPattern = (field: string) => new RegExp(`"${field}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)(\\\\?)`);
 
-/** The explanation written so far, read out of the model's unfinished JSON, so the card fills as it streams. */
-export function partialExplanation(buffer: string): string {
-  const match = FIELD.exec(buffer);
+/** A string field written so far, read out of the model's unfinished JSON, so the text fills as it streams. */
+export function partialField(buffer: string, field: string): string {
+  const match = fieldPattern(field).exec(buffer);
   if (!match) return "";
   try {
     return JSON.parse(`"${match[1]}"`);
@@ -10,3 +10,6 @@ export function partialExplanation(buffer: string): string {
     return match[1];
   }
 }
+
+/** The explanation written so far, so the card fills as it streams. */
+export const partialExplanation = (buffer: string): string => partialField(buffer, "explanation");
