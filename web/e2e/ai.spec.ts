@@ -32,3 +32,37 @@ test("turning AI on through ⌘K reads the paper and underlines its terms (B2)",
   await expect(page.getByText("AI reading…")).toHaveCount(0);
   expect((await viewOf(request, paper)).ai).toBe(true);
 });
+
+test("key sentences: highlighted on the paper, listed by slot, a jump each, and Keep makes one of your own", async ({ page, request }) => {
+  const papers = (await (await request.get("/api/papers")).json()) as { paper_id: string }[];
+  paper = papers.find((p) => p.paper_id.includes("residual"))!.paper_id;
+  await putView(request, paper, { view: "paper", ai: true });
+  const before = (await (await request.get(`/api/papers/${paper}/board`)).json()).highlights.length;
+
+  await page.goto("/");
+  await page.getByRole("combobox", { name: "Paper", exact: true }).selectOption(paper);
+  const badge = page.getByRole("button", { name: /Key sentences/ });
+  await expect(badge).toBeVisible({ timeout: 15_000 });
+  await expect(badge.locator(".count")).toHaveText("6");
+  await expect(page.locator(".key-sentence").first()).toBeAttached();
+
+  await badge.click();
+  const panel = page.getByRole("region", { name: "Key sentences" });
+  await expect(panel.locator(".slot-head").first()).toHaveText("Background");
+  const entries = panel.getByRole("listitem");
+  await expect(entries).toHaveCount(6);
+
+  // The last entry is deep in the paper: clicking it scrolls the paper there.
+  const scroller = page.locator(".paper").first();
+  const top = await scroller.evaluate((el) => el.scrollTop);
+  await entries.last().locator("button.sentence").click();
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(top);
+
+  await entries.first().getByRole("button", { name: "Keep" }).click();
+  await expect(entries.first()).toContainText("Kept");
+  await expect.poll(async () => (await (await request.get(`/api/papers/${paper}/board`)).json()).highlights.length)
+    .toBe(before + 1);
+  await page.reload();
+  await expect.poll(async () => (await (await request.get(`/api/papers/${paper}/board`)).json()).highlights.length)
+    .toBe(before + 1);
+});
