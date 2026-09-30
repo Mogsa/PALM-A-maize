@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -77,7 +77,8 @@ export function PaperView(props: Props) {
   const [ready, setReady] = useState(false);
   const pageWidth = usePageWidth(container, fit);
   const pdf = useRef<LinkDocument | null>(null);
-  const { ai } = useAi();
+  const { ai, keySentences } = useAi();
+  const keyLines = useMemo(() => keySentences.flatMap((g) => g.sentences), [keySentences]);
   const { tags } = useTags();
   const citation = useCitationCard(pdf, source, paperId, hover);
   const termHover = useTermHover(container, source, board, hover, ai);
@@ -117,7 +118,7 @@ export function PaperView(props: Props) {
             <div key={p.index} className="page-wrap" style={{ height: p.height * (pageWidth / p.width) }}>
               <Page pageIndex={p.index} width={pageWidth} renderAnnotationLayer renderTextLayer {...findProps(p.index)} />
               <PageOverlay page={p.index} scale={pageWidth / p.width} board={board} source={source}
-                           aiLines={aiUnderlines(ai, board.highlights.filter((h) => isTerm(h, termTagIds(tags))), p.index)}
+                           aiLines={aiUnderlines(ai, board.highlights.filter((h) => isTerm(h, termTagIds(tags))), p.index)} keySentences={keyLines}
                            onOutlineClick={onOutlineClick} onJump={onJump} onOpenNote={onOpenNote} />
               {flash?.page === p.index && <div className="focus-flash" style={flashStyle(flash, pageWidth / p.width)} />}
             </div>

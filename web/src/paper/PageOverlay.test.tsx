@@ -81,3 +81,24 @@ describe("PageOverlay AI underlines", () => {
     expect(renderOverlay([]).container.querySelectorAll(".ai-term")).toHaveLength(0);
   });
 });
+
+describe("PageOverlay key sentences", () => {
+  const line = (page: number, y: number) => ({ page, rect: [50, y, 300, y + 10] as [number, number, number, number] });
+  const sentence = (lines: ReturnType<typeof line>[]) => ({ slot: "Problem", colour: "var(--slot-0)", quote: "q.", page: 0, lines, at: line(0, 0) });
+  const renderKeys = (keySentences: ReturnType<typeof sentence>[]) =>
+    render(<PageOverlay page={0} scale={2} board={emptyBoard("p")} source={source} keySentences={keySentences}
+      onOutlineClick={() => undefined} onJump={() => undefined} onOpenNote={() => undefined} />);
+  it("draws one AI rect per line on this page only, in the slot's colour, named on hover", () => {
+    const { container } = renderKeys([sentence([line(0, 100), line(0, 112), line(1, 10)])]);
+    const rects = [...container.querySelectorAll<HTMLElement>(".key-sentence")];
+    expect(rects).toHaveLength(2);
+    expect(rects[0].title).toBe("AI · Problem");
+    expect(rects[0].style.getPropertyValue("--key-colour")).toBe("var(--slot-0)");
+    expect(rects[1].style.top).toBe("224px");   // 112pt at scale 2
+    expect(container.querySelector(".mark")).toBeNull();   // never drawn as the reader's own
+  });
+  it("draws nothing for a sentence whose lines were not found, or with none given", () => {
+    expect(renderKeys([sentence([])]).container.querySelectorAll(".key-sentence")).toHaveLength(0);
+    expect(draw().container.querySelectorAll(".key-sentence")).toHaveLength(0);
+  });
+});

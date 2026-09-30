@@ -1,5 +1,6 @@
+import type { KeySentence } from "../ai/keySentences";
 import type { AiUnderline } from "../ai/terms";
-import type { Board, PageRect, Rect, Source, Tag } from "../model/types";
+import type { Board, Rect, Source, Tag } from "../model/types";
 import { useTags } from "../state/TagsProvider";
 import { mainTagColour } from "../tags/mainTag";
 import { CutRuler } from "./CutRuler";
@@ -9,6 +10,8 @@ import type { JumpTarget } from "./margin";
 type Props = {
   page: number; scale: number; board: Board; source: Source;
   aiLines?: AiUnderline[];
+  /** With AI help on: the paper's key sentences, drawn line by line on the page each line is on. */
+  keySentences?: KeySentence[];
   onOutlineClick: (nodeId: string) => void; onJump: (target: JumpTarget) => void; onOpenNote: (noteId: string) => void;
 };
 
@@ -31,11 +34,16 @@ function MarkExtras({ ids }: { ids: string[] }) {
 
 /** Marks and the cut ruler for one page. The overlay is pointer-events: none, so a drag anywhere over a page still
  *  selects the text underneath (fix round 1, finding 2); the ruler sits in the margin, off the text. */
-export function PageOverlay({ page, scale, board, source, aiLines = [], onOutlineClick, onJump, onOpenNote }: Props) {
+export function PageOverlay({ page, scale, board, source, aiLines = [], keySentences = [], onOutlineClick, onJump, onOpenNote }: Props) {
   const { byId } = useTags();
   return (
     <div className="overlay">
       <CutRuler page={page} scale={scale} board={board} source={source} onOpen={onOutlineClick} />
+      {/* Key sentences first, so a reader's own mark on the same line is painted over them. */}
+      {keySentences.flatMap((k, n) => k.lines.filter((r) => r.page === page).map((r, i) => (
+        <div key={`key-${n}-${i}`} className="key-sentence" title={`AI · ${k.slot}`}
+             style={{ ...px(r.rect, scale), "--key-colour": k.colour } as React.CSSProperties} />
+      )))}
       {/* A highlight is painted line by line, each of its rects on this page (addendum 5.1), in its main tag's colour;
           its extra tags are small chips after its first line (spec A2). */}
       {board.highlights.flatMap((h) => h.anchor.rects.filter((r) => r.page === page).map((r, i) => (
