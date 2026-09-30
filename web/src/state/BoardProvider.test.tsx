@@ -206,6 +206,22 @@ describe("BoardProvider activity log", () => {
     expect(vi.mocked(api.postActivity).mock.calls[0][0]).toBe("p");
   });
 
+  it("logs a note's text when its editing ends, only if it changed, with what it is connected to", async () => {
+    vi.mocked(api.getNote).mockResolvedValueOnce({ markdown: "as saved", has_sketch: false });
+    let note: ReturnType<typeof useNote> | null = null;
+    function NoteProbe() { note = useNote("n-1"); return null; }
+    const { unmount } = render(<BoardProvider paperId="p"><Probe /><NoteProbe /></BoardProvider>);
+    await waitFor(() => expect(note?.text).toBe("as saved"));
+    act(() => ctx!.dispatch({ type: "add", highlights: [highlight], edges: [{ id: "e-1", from: "h-1", to: "n-1", data: { tags: [] } }] }));
+    await act(async () => { await note!.commit(); });   // a blur with nothing typed
+    act(() => note!.edit("the learner drives"));
+    await act(async () => { await note!.commit(); });
+    unmount();
+    await waitFor(() => expect(api.postActivity).toHaveBeenCalled());
+    const notes = vi.mocked(api.postActivity).mock.calls.flatMap((c) => c[1]).filter((e) => e.action === "note");
+    expect(notes.map((e) => e.detail)).toEqual([{ id: "n-1", text: "the learner drives", on: "h-1" }]);
+  });
+
   it("logs nothing for a paper whose log is off", async () => {
     vi.mocked(api.getView).mockResolvedValueOnce({ ...defaultPaperView, log: false });
     const { unmount } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);

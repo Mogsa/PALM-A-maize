@@ -200,8 +200,9 @@ export type NoteHandle = {
 /** One note's text, shared by every view that shows it. Loads on first use. `edit` is a keystroke: every view shows it
  *  at once and the store writes it after a pause in typing; `commit` writes it now (addendum 4.4, I1). */
 export function useNote(nodeId: string): NoteHandle {
-  const { notes } = useBoard();
+  const { notes, activity, state: { board: { edges } } } = useBoard();
   const text = useSyncExternalStore(notes.subscribe, () => notes.peek(nodeId));
+  useEffect(() => { if (text !== undefined) activity.noteSeen(nodeId, text); }, [activity, nodeId, text]);
   const failed = useSyncExternalStore(notes.subscribe, () => notes.failed(nodeId));
   const [loadFailed, setLoadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -214,7 +215,12 @@ export function useNote(nodeId: string): NoteHandle {
     return () => { live = false; };
   }, [notes, nodeId, attempt]);
   const edit = useCallback((markdown: string) => notes.edit(nodeId, markdown), [notes, nodeId]);
-  const commit = useCallback(() => notes.commit(nodeId), [notes, nodeId]);
+  /** The end of an edit (blur, Escape): the note's text goes to the activity log if it changed (activity log spec). */
+  const commit = useCallback(() => {
+    const link = edges.find((e) => e.from === nodeId || e.to === nodeId);
+    activity.noteEnded(nodeId, notes.peek(nodeId) ?? "", link ? (link.from === nodeId ? link.to : link.from) : null);
+    return notes.commit(nodeId);
+  }, [notes, nodeId, activity, edges]);
   const retry = useCallback(() => { setLoadFailed(false); setAttempt((n) => n + 1); }, []);
   const sketchVersion = useSyncExternalStore(notes.subscribe, () => notes.sketchVersion(nodeId));
   const sketchSaved = useCallback((present: boolean) => notes.sketchSaved(nodeId, present), [notes, nodeId]);
