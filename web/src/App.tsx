@@ -11,8 +11,10 @@ import { shellCommands, type Panel } from "./commands/shellCommands";
 import { ShortcutsSheet } from "./commands/ShortcutsSheet";
 import { useCommandKeys } from "./commands/useCommandKeys";
 import { useSplit } from "./commands/useSplit";
+import { CountedButton, sentenceCount } from "./panels/CountedButton";
 import { ExportDialog } from "./panels/ExportDialog";
 import { Glossary } from "./panels/Glossary";
+import { KeySentences } from "./panels/KeySentences";
 import { QuestionList } from "./panels/QuestionList";
 import { useQuestions } from "./panels/useQuestions";
 import { TemplateEditor } from "./panels/TemplateEditor";
@@ -36,16 +38,6 @@ function Notice() {
   return <span className={`notice ${tone}`}>{notice ?? (state.dirty ? "Unsaved" : `Saved v${state.board.version}`)}</span>;
 }
 
-/** A panel button that shows only when it has something to list, with the count (spec A1). */
-function CountedButton({ panel, open, label, count, onToggle }: { panel: Panel; open: Panel | null; label: string; count: number; onToggle: (p: Panel) => void }) {
-  if (count < 1) return null;
-  return (
-    <button type="button" className="panel-button" aria-pressed={open === panel} title={`${count} to look at`} onClick={() => onToggle(panel)}>
-      <span className="count" aria-hidden="true">{count}</span>{label}
-    </button>
-  );
-}
-
 type SidePanelProps = {
   panel: Panel; onQuestion: (question: Question) => void; onJump: (at: PageRect) => void; onOpenNote: (noteId: string) => void;
   aiTerms: AiGlossaryEntry[];
@@ -56,6 +48,7 @@ function SidePanel({ panel, onQuestion, onJump, onOpenNote, aiTerms }: SidePanel
   switch (panel) {
     case "questions": return <QuestionList onPick={onQuestion} />;
     case "glossary": return <Glossary onJump={onJump} onOpenNote={onOpenNote} aiTerms={aiTerms} />;
+    case "keySentences": return <KeySentences />;
     case "export": return <ExportDialog />;
     case "tags": return <TagManager />;
     case "template": return <TemplateEditor />;
@@ -99,7 +92,7 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
   const board = useBoard();
   const { tags } = useTags();
   const { questions } = useQuestions();
-  const { ai } = useAi();   // null when stale
+  const { ai, keySentences } = useAi();   // null and none when stale
   const readerTerms = useMemo(() => glossary(state.board, termTagIds(tags)), [state.board, tags]);
   const aiTerms = useMemo(() => aiGlossary(ai, readerTerms.map((e) => e.term)), [ai, readerTerms]);
   const terms = readerTerms.length + aiTerms.length;
@@ -141,6 +134,7 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
         <div className="panel-buttons">
           <CountedButton panel="questions" open={panel} label="Questions" count={questions?.length ?? 0} onToggle={toggle} />
           <CountedButton panel="glossary" open={panel} label="Glossary" count={terms} onToggle={toggle} />
+          <CountedButton panel="keySentences" open={panel} label="Key sentences" count={sentenceCount(keySentences)} onToggle={toggle} />
           <button type="button" className="panel-button kbd" aria-label="Commands (⌘K)" title="All commands" onClick={openPalette}>⌘K</button>
           {splitAction.said && <span className="tool-note" role="status">{splitAction.said}</span>}
         </div>

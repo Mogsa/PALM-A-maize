@@ -1,6 +1,6 @@
 import type { Command } from "./registry";
 
-export type Panel = "questions" | "glossary" | "export" | "tags" | "template";
+export type Panel = "questions" | "glossary" | "keySentences" | "export" | "tags" | "template";
 export type ShellDeps = { openPanel: (panel: Panel) => void; newNote: () => void; find: () => void; split: () => void; shortcuts: () => void };
 
 /** Every command ⌘K lists (spec A1), in this order; features such as AI help add theirs through the registry. */
