@@ -5,8 +5,6 @@ cutting a printed paper into pieces, spreading them on a desk and writing notes 
 nothing is destroyed and every piece remembers where it came from. Everything runs on your own machine,
 and your boards are plain files in a folder.
 
-Why it is built the way it is: `docs/SPEC.md` (the design), `docs/RESEARCH.md` (how people read papers)
-and `docs/TOOLS.md` (what other reading tools do well and badly).
 
 ## Set up (once, about 5 minutes)
 
@@ -132,7 +130,7 @@ To run the e2e tests while your own server is using the default ports, set
 `PAPERBOARD_API_PORT=8781 PAPERBOARD_WEB_PORT=4181`.
 
 Backend: `src/paperboard/` (FastAPI and PDF extraction with PyMuPDF). Frontend: `web/src/` (React,
-React Flow and react-pdf). Design notes and plans are in `docs/superpowers/`.
+React Flow and react-pdf).
 
 ## Licence
 

@@ -11,3 +11,6 @@ web/test-results/
 web/playwright-report/
 web/*.tsbuildinfo
 test-results/
+
+# design notes, research and plans stay private
+docs/
