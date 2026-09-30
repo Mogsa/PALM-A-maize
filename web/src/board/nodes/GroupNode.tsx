@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import { newNote } from "../../model/notes";
+import { TRAYS_ENABLED } from "../../model/tray";
 import type { GroupNode as GroupNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
 import { useBoardActions } from "../BoardActions";
@@ -38,7 +39,8 @@ export function GroupNode({ id, data, selected }: NodeProps<GroupNodeType>) {
     dispatch({ type: "add", nodes: [note] });
     setEditing(note.id);
   };
-  const classes = ["node", "group", data.tray ? "tray" : "", data.prompt ? "slot" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
+  const tray = TRAYS_ENABLED && Boolean(data.tray);   // with trays off, the Paper group is an ordinary group
+  const classes = ["node", "group", tray ? "tray" : "", data.prompt ? "slot" : "", selected ? "selected" : ""].filter(Boolean).join(" ");
   return (
     <div className={classes}>
       <CardBar id={id} tags={data.tags} />
@@ -51,7 +53,7 @@ export function GroupNode({ id, data, selected }: NodeProps<GroupNodeType>) {
           )}
         </div>
       )}
-      {data.tray && <TrayRows trayId={id} />}
+      {tray && <TrayRows trayId={id} />}
       <Handle id={inHandle(id)} type="target" position={Position.Left} />
       <Handle id={outHandle(id)} type="source" position={Position.Right} />
     </div>

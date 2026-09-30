@@ -262,7 +262,7 @@ test('New note and a slot\'s question each open a note ready for typing', async 
   expect(texts.sort()).toEqual(['In my own words', 'The answer']);
 });
 
-test('a ghost row or a slot question does not select the group it sits in', async ({page}) => {
+test('with trays off the Paper group is an ordinary group, and a slot question does not select the group it sits in', async ({page}) => {
   const papers = await (await page.request.get('/api/papers')).json();
   const source = await (await page.request.get(`/api/papers/${papers[0].paper_id}/source`)).json();
   const tray = { id: 'n-tray', type: 'group', position: { x: 0, y: 0 }, width: 360, height: 400, data: { tags: [], name: 'Paper', tray: true } };
@@ -271,9 +271,9 @@ test('a ghost row or a slot question does not select the group it sits in', asyn
   const out = { ...base, data: { ...base.data, source_id: source.sections[0].id, collapsed: true } };
   await seedBoard(page, { nodes: [tray, slot, out] });
   await page.getByRole('button', {name: 'Board', exact: true}).click();
-  await page.locator('.ghost-row', { hasText: '→ on the board' }).click();
-  await expect(page.locator('.react-flow__node.selected')).toHaveCount(1);
-  await expect(page.locator('.react-flow__node.selected')).toHaveAttribute('data-id', 'n-out');
+  await expect(page.locator('.react-flow__node[data-id="n-tray"] .group-name')).toHaveText('Paper');
+  await expect(page.locator('.node.group.tray')).toHaveCount(0);
+  await expect(page.locator('.ghost-row')).toHaveCount(0);
   await page.locator('.slot-prompt').click();
   await expect(page.locator('.react-flow__node[data-id="n-slot"].selected')).toHaveCount(0);
 });

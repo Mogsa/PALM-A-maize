@@ -1,5 +1,6 @@
 import type { Edge } from "@xyflow/react";
 import { lineIn } from "./geometry";
+import { isTray, TRAYS_ENABLED } from "./tray";
 import type { Board, BoardEdge, BoardNode, ChunkNode, Highlight } from "./types";
 
 /** A React Flow edge drawn for a stored connection; `id` and `data` are the stored edge's. */
@@ -13,13 +14,13 @@ type Holder = (highlight: Highlight) => ChunkNode | undefined;
 const regionArea = (chunk: ChunkNode) =>
   chunk.data.region.rects.reduce((sum, { rect: [x0, y0, x1, y1] }) => sum + (x1 - x0) * (y1 - y0), 0);
 
-/** True for a node inside the tray group, at any depth. */
-function inTrayOf(nodes: BoardNode[]): (node: BoardNode) => boolean {
+/** True for a node inside the tray group, at any depth. Never, with trays off. */
+function inTrayOf(nodes: BoardNode[], trays: boolean): (node: BoardNode) => boolean {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   return (node) => {
     const seen = new Set<string>();
     for (let parent = byId.get(node.parentId ?? ""); parent && !seen.has(parent.id); parent = byId.get(parent.parentId ?? "")) {
-      if (parent.type === "group" && parent.data.tray) return true;
+      if (isTray(parent, trays)) return true;
       seen.add(parent.id);
     }
     return false;
@@ -29,10 +30,11 @@ function inTrayOf(nodes: BoardNode[]): (node: BoardNode) => boolean {
 /** The chunk that draws a highlight's end (contract 3), among the chunks containing one of its line rects: those
  *  outside the tray if any, else the tray's; of those, the smallest total region area; ties by `nodes` order.
  *  First open puts every line in a tray chunk, so "first in nodes order" alone would always draw from the tray.
- *  The one rule for everything that asks which chunk holds a mark: edges, Tidy, where a note on a mark lands. */
-export function chunkHolder(nodes: BoardNode[]): Holder {
+ *  The one rule for everything that asks which chunk holds a mark: edges, Tidy, where a note on a mark lands.
+ *  With trays off there is no tray: every containing chunk is "outside". */
+export function chunkHolder(nodes: BoardNode[], trays = TRAYS_ENABLED): Holder {
   const chunks = nodes.filter((n): n is ChunkNode => n.type === "chunk");
-  const inTray = inTrayOf(nodes);
+  const inTray = inTrayOf(nodes, trays);
   return (highlight) => {
     const containing = chunks.filter((c) => highlight.anchor.rects.some((line) => lineIn(line, c.data.region)));
     const outside = containing.filter((c) => !inTray(c));

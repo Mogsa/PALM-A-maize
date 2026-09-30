@@ -25,11 +25,11 @@ const draw = (onOpen = vi.fn()) => {
 };
 
 describe("PageOverlay cut ruler", () => {
-  it("draws one stretch per piece, faint in the tray and solid out of it, with ticks and no label or box over the text", () => {
+  it("draws one stretch per piece, solid even in the Paper group while trays are off, with ticks and no label or box over the text", () => {
     const { container } = draw();
     expect(container.querySelectorAll(".cut-ruler")).toHaveLength(1);
     const stretches = [...container.querySelectorAll(".cut-stretch")];
-    expect(stretches.map((el) => [el.getAttribute("data-node-id"), el.classList.contains("tray")])).toEqual([["n-split", true], ["n-cut", false]]);
+    expect(stretches.map((el) => [el.getAttribute("data-node-id"), el.classList.contains("tray")])).toEqual([["n-split", false], ["n-cut", false]]);
     expect((stretches[1] as HTMLElement).style.height).toBe("20px");   // 10pt at scale 2
     expect([...container.querySelectorAll<HTMLElement>(".cut-tick")].map((t) => t.style.top)).toEqual(["0px", "20px"]);
     expect(container.querySelector(".cut-tint")).toBeNull();

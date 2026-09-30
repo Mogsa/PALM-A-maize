@@ -19,8 +19,13 @@ describe("the cut ruler in the paper's margin", () => {
   it("draws every piece: faint while still in the tray, solid once out of it (a reader's cut included)", () => {
     const nodes = [tray, slot, piece("n-in", [at(0, 10, 20)], { parentId: "n-tray" }, "s-3"),
       piece("n-out", [at(0, 100, 120)], { parentId: "n-slot" }, "s-3"), piece("n-cut", [at(0, 200, 220)])];
-    const { stretches } = pageRuler(board(nodes), source, 0);
+    const { stretches } = pageRuler(board(nodes), source, 0, true);
     expect(stretches.map((s) => [s.nodeId, s.tray])).toEqual([["n-in", true], ["n-out", false], ["n-cut", false]]);
+  });
+  it("with trays off, a piece in the Paper group is an ordinary placed piece: solid, drawn in board order", () => {
+    const nodes = [tray, piece("n-placed", [at(0, 100, 300)]), piece("n-in", [at(0, 200, 400)], { parentId: "n-tray" })];
+    expect(pageRuler(board(nodes), source, 0, false).stretches.map((s) => [s.nodeId, s.tray])).toEqual([["n-placed", false], ["n-in", false]]);
+    expect(pageRuler(board(nodes), source, 0).stretches.every((s) => !s.tray)).toBe(true);
   });
   it("spans exactly from the piece's first line to its last on the page, with a tick at each end", () => {
     const ruler = pageRuler(board([piece("n-1", [at(0, 300, 312), at(0, 140, 152), at(0, 200, 212)])]), source, 0);
@@ -43,7 +48,7 @@ describe("the cut ruler in the paper's margin", () => {
   });
   it("draws tray pieces first so a placed piece over them wins, and ticks every boundary of both", () => {
     const nodes = [tray, piece("n-placed", [at(0, 100, 300)]), piece("n-tray", [at(0, 200, 400)], { parentId: "n-tray" }), piece("n-same", [at(0, 300, 350)])];
-    const ruler = pageRuler(board(nodes), source, 0);
+    const ruler = pageRuler(board(nodes), source, 0, true);
     expect(ruler.stretches.map((s) => s.nodeId)).toEqual(["n-tray", "n-placed", "n-same"]);
     expect(ruler.ticks).toEqual([100, 200, 300, 350, 400]);
   });

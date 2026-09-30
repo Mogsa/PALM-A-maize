@@ -7,9 +7,13 @@ afterEach(cleanup);
 const deps = () => ({ openPanel: vi.fn(), newNote: vi.fn(), find: vi.fn(), split: vi.fn(), shortcuts: vi.fn() });
 
 describe("⌘K (spec A1)", () => {
-  it("lists every command", () => {
+  it("lists every command, and no \"Add missing sections\" while trays are off", () => {
     const { getAllByRole } = render(<CommandPalette commands={shellCommands(deps())} onClose={vi.fn()} />);
     expect(getAllByRole("option").map((o) => o.textContent)).toEqual(
+      ["Export", "Tags", "Template", "New note", "Find in paper", "Shortcuts"]);
+  });
+  it("lists \"Add missing sections\" after Template while trays are on", () => {
+    expect(shellCommands(deps(), true).map((c) => c.label)).toEqual(
       ["Export", "Tags", "Template", "Add missing sections", "New note", "Find in paper", "Shortcuts"]);
   });
   it("filters as you type, and Enter runs the first match and closes", () => {
