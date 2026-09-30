@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveEdges } from "./edges";
+import { chunkHolder, resolveEdges } from "./edges";
 import { emptyBoard, type Board, type BoardEdge, type BoardNode, type Highlight, type PageRect, type Rect } from "./types";
 
 const q = { exact: "x", prefix: "", suffix: "" };
@@ -62,7 +62,7 @@ describe("resolveEdges", () => {
     expect(resolveEdges(board(onlyFigure, highlights, [edge("e-1", "h-right", "n-note")]))).toEqual([]);
   });
 
-  describe("which chunk draws a highlight's end (contract 3)", () => {
+  describe("which chunk draws a highlight's end (contract 3), trays on", () => {
     const tray: BoardNode = { id: "n-tray", type: "group", position: { x: 0, y: 0 }, data: { tags: [], name: "Paper", tray: true } };
     const pile: BoardNode = { id: "n-pile", type: "group", position: { x: 0, y: 0 }, parentId: "n-tray", data: { tags: [] } };
     const inside = (node: BoardNode, parentId: string): BoardNode => ({ ...node, parentId });
@@ -82,8 +82,13 @@ describe("resolveEdges", () => {
       ["a chunk in a group that is not the tray is outside the tray",
         [tray, inside(chunk("n-in-tray", SMALL), "n-tray"), { ...pile, parentId: undefined }, inside(chunk("n-in-pile", WIDE), "n-pile")], "n-in-pile"],
     ])("%s", (_, holders, expected) => {
+      expect(chunkHolder(holders, true)(mark("h-left", IN_LEFT))?.id).toBe(expected);
+    });
+    it("with trays off the Paper group is an ordinary group: its smaller, first chunk draws the end", () => {
+      const holders = [tray, inside(chunk("n-in-tray", SMALL), "n-tray"), chunk("n-reader", WIDE)];
+      expect(chunkHolder(holders, false)(mark("h-left", IN_LEFT))?.id).toBe("n-in-tray");
       const b = board([...holders, note("n-note")], [mark("h-left", IN_LEFT)], [edge("e-1", "h-left", "n-note")]);
-      expect(ends(b)[0]).toMatchObject({ source: expected, sourceHandle: "h-left" });
+      expect(ends(b)[0]).toMatchObject({ source: "n-in-tray", sourceHandle: "h-left" });
     });
   });
 
