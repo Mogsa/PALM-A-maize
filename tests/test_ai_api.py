@@ -271,6 +271,11 @@ def test_get_fills_lines_for_a_pass_saved_without_them_and_writes_nothing(store_
     assert fake.calls == [] and store.read_ai(pid).reader.where_to_look[0].spans[0].lines == []
 
 
+def test_the_reader_prompt_asks_for_one_complete_sentence_per_span():
+    from paperboard.ai import READER_SYSTEM
+    assert "the one complete sentence in that span that best answers the slot, copied exactly" in READER_SYSTEM
+
+
 def test_an_ai_pass_never_clears_a_question(store_root, paper):
     _, pid, spans = paper
     client = _client(store_root, FakeClaude(paper=_answer(spans[0])))
