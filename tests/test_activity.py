@@ -81,6 +81,15 @@ def test_reading_gives_the_last_lines(store, pid):
     assert [e["detail"]["id"] for e in store.read_activity(pid, limit=2)] == ["n-3", "n-4"]
 
 
+def test_a_damaged_line_is_skipped_with_a_warning_and_the_rest_read(store, pid, caplog):
+    store.append_activity(pid, [ActivityEvent.model_validate(_event(0))])
+    with (store.paper_dir(pid) / "activity.jsonl").open("a", encoding="utf-8") as f:
+        f.write('{"t": "2026-09-30T10:4\n')   # a torn line, as a crash mid-write could leave
+    store.append_activity(pid, [ActivityEvent.model_validate(_event(1))])
+    assert [e["detail"]["id"] for e in store.read_activity(pid, limit=10)] == ["n-0", "n-1"]
+    assert "activity.jsonl" in caplog.text
+
+
 def test_a_paper_without_a_log_reads_as_empty(store, pid):
     assert store.read_activity(pid, limit=10) == []
 

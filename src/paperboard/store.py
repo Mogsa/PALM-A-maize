@@ -6,6 +6,7 @@ folder you can copy; this module is what keeps that true.
 
 import hashlib
 import json
+import logging
 import os
 import re
 import tempfile
@@ -39,6 +40,7 @@ from paperboard.source_model import SourceDocument
 _FRONT_MATTER = re.compile(r"\A---\nid: (?P<id>[^\n]+)\n---\n", re.DOTALL)
 # A node id as the client mints it: "n-" and a ULID (addendum 4.5). Checked
 # before an id becomes a filename or a front-matter line.
+logger = logging.getLogger(__name__)
 _NODE_ID = re.compile(r"n-[0-9A-HJKMNP-TV-Z]{26}")
 # A paper id as extraction makes it: a lowercase slug, then an arXiv id or a short
 # hash (`paper_id_for`). Checked before an id from a URL becomes a folder, so `..`
@@ -285,8 +287,16 @@ class Store:
         path = self._activity_path(paper_id)
         if not path.exists():
             return []
-        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
-        return [json.loads(line) for line in lines[-limit:]]
+        events = []
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                # The log is a record, not the reader's work: one torn line must not hide the rest.
+                logger.warning("skipped damaged line %d of %s", number, path)
+        return events[-limit:]
 
     # -- notes --------------------------------------------------------------
 
