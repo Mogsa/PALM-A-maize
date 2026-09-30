@@ -84,7 +84,7 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
       const view = api.getView(paperId).catch((error: unknown) => { console.error("Could not read the view state", error); return defaultPaperView; });
       const [s, b, v] = await Promise.all([api.getSource(paperId), api.getBoard(paperId), view]);
       if (!live) return;
-      setViewState(v);
+      setViewState({ ...defaultPaperView, ...v });   // a field an older view.json lacks takes its default
       dispatch({ type: "load", board: b });
       if (b.version === 0) await layOut(s);
       if (live) setSource(s);

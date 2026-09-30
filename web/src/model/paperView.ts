@@ -12,6 +12,8 @@ export type PaperViewState = {
   split: number;
   /** AI help (spec B2): off unless the reader turns it on, per paper. */
   ai: boolean;
+  /** The activity log (activity log spec): on unless the reader turns it off, per paper. Off, nothing is sent. */
+  log: boolean;
 };
 
 export const DEFAULT_SPLIT = 0.4;
@@ -26,7 +28,7 @@ export const clampSplit = (split: number): number =>
 export const splitAt = (clientX: number, box: { left: number; width: number }): number =>
   clampSplit((clientX - box.left) / box.width);
 
-export const defaultPaperView:PaperViewState = { view: "paper", paper_scroll: null, active_tags: [], viewport: null, split: DEFAULT_SPLIT, ai: false };
+export const defaultPaperView:PaperViewState = { view: "paper", paper_scroll: null, active_tags: [], viewport: null, split: DEFAULT_SPLIT, ai: false, log: true };
 
 const sameViewport = (a: Viewport | null, b: Viewport | null) =>
   a === b || (a !== null && b !== null && a.x === b.x && a.y === b.y && a.zoom === b.zoom);
@@ -38,7 +40,8 @@ function unchanged(current: PaperViewState, patch: Partial<PaperViewState>): boo
     && (patch.active_tags === undefined || sameTags(patch.active_tags, current.active_tags))
     && (patch.viewport === undefined || sameViewport(patch.viewport, current.viewport))
     && (patch.paper_scroll === undefined || samePaperScroll(patch.paper_scroll, current.paper_scroll))
-    && (patch.ai === undefined || patch.ai === current.ai);
+    && (patch.ai === undefined || patch.ai === current.ai)
+    && (patch.log === undefined || patch.log === current.log);
 }
 
 /** The view with `patch` applied; the same object when nothing would change, so a restore event saves nothing. */

@@ -171,7 +171,7 @@ describe("api, schema 2 routes", () => {
   });
 
   it("the view is read and put at its own route, with no version", async () => {
-    const view = { view: "both" as const, paper_scroll: null, active_tags: [], viewport: null, split: 0.4, ai: false };
+    const view = { view: "both" as const, paper_scroll: null, active_tags: [], viewport: null, split: 0.4, ai: false, log: true };
     mockFetch(200, view);
     expect(await api.getView("p")).toEqual(view);
     const fn = vi.fn(async () => new Response(null, { status: 204 }));

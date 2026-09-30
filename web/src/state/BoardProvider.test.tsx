@@ -201,6 +201,12 @@ describe("BoardProvider view state", () => {
     expect(api.getView).toHaveBeenCalledWith("p");
   });
 
+  it("fills a field an older view.json lacks from the default: the activity log is on", async () => {
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);   // the mocked view has no `log`
+    await waitFor(() => expect(ctx).not.toBeNull());
+    expect(ctx!.view.log).toBe(true);
+  });
+
   it("still opens the paper, at the default view, when the view cannot be read", async () => {
     vi.mocked(api.getView).mockRejectedValueOnce(new Error("404"));
     const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
