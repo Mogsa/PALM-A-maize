@@ -26,6 +26,7 @@ import { api } from "../api/client";
 import { BoardProvider, FIRST_OPEN_FAILED_MESSAGE, FLUSH_FAILED_MESSAGE, useBoard, useNote } from "./BoardProvider";
 import { SAVE_FAILED_MESSAGE } from "./persistence";
 import { defaultPaperView } from "../model/paperView";
+import { newNote } from "../model/notes";
 
 const q = { exact: "x", prefix: "", suffix: "" };
 const highlight: Highlight = { id: "h-1", tags: [], anchor: { rects: [{ page: 0, rect: [0, 0, 1, 1] }], quote: q, position: 0, state: "anchored" } };
@@ -190,6 +191,33 @@ describe("useNote, sketches (D23)", () => {
     act(() => note!.sketchSaved(false));
     expect(note!.hasSketch).toBe(false);
     expect(ctx!.state.history.past).toHaveLength(0);
+  });
+});
+
+describe("useNote, a note just made", () => {
+  // The bug: a new note's field stayed read-only until the GET of its (missing) file came back, so what the reader
+  // typed straight away was dropped and never saved.
+  it("is ready for typing at once: a note made here has no saved text to wait for", async () => {
+    const texts: Record<string, string | undefined> = {};
+    function NoteProbe({ id }: { id: string }) { texts[id] = useNote(id).text; return null; }
+    /** Like the board: a note's view mounts once the note is on it. */
+    function Notes() {
+      return useBoard().state.board.nodes.filter((n) => n.type === "note").map((n) => <NoteProbe key={n.id} id={n.id} />);
+    }
+    render(<BoardProvider paperId="p"><Probe /><Notes /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    const made = newNote({ position: { x: 0, y: 0 }, origin: "reader" });
+    act(() => ctx!.dispatch({ type: "add", nodes: [made] }));
+    expect(texts[made.id]).toBe("");   // at once, not after a GET of a file that does not exist yet
+    expect(api.getNote).not.toHaveBeenCalled();
+  });
+  it("keeps the text of a note written before it was put on the board (an agent's note)", async () => {
+    render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    const made = newNote({ position: { x: 0, y: 0 }, origin: "ai" });
+    await act(async () => { await ctx!.notes.save(made.id, "written first"); });
+    act(() => ctx!.dispatch({ type: "add", nodes: [made] }));
+    expect(ctx!.notes.peek(made.id)).toBe("written first");
   });
 });
 
