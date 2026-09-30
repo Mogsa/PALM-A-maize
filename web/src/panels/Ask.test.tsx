@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { useCallback, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AskAnswer } from "../ai/ask/types";
-import { useAskPanel } from "../ai/ask/useAskPanel";
+import { MAX_QUESTION_CHARS, MAX_SELECTION_CHARS, useAskPanel } from "../ai/ask/useAskPanel";
 import { api } from "../api/client";
 import { extraCommands, extraSelectionItems } from "../commands/registry";
 
@@ -107,6 +107,22 @@ describe("Ask panel", () => {
     send("What is this?");
     await waitFor(() => expect(ask).toHaveBeenCalled());
     expect(ask.mock.calls[0][1]).toMatchObject({ question: "What is this?", selection: "residual learning" });
+  });
+
+  it("Ask about this clips a selection longer than the server takes, marked with an ellipsis", async () => {
+    const ask = vi.spyOn(api, "ask").mockResolvedValue(grounded);
+    render(<Harness />);
+    const target = { on: "paper" as const, text: "w".repeat(MAX_SELECTION_CHARS + 50), rects: [at], at: new DOMRect() };
+    act(() => extraSelectionItems(target, board).find((i) => i.label === "Ask about this")!.run());
+    send("What is this?");
+    await waitFor(() => expect(ask).toHaveBeenCalled());
+    expect(ask.mock.calls[0][1].selection).toBe("w".repeat(MAX_SELECTION_CHARS - 1) + "…");
+  });
+
+  it("the question box takes no more than the server does", () => {
+    render(<Harness />);
+    openThroughCommand();
+    expect((screen.getByRole("textbox", { name: "Question" }) as HTMLTextAreaElement).maxLength).toBe(MAX_QUESTION_CHARS);
   });
 
   it("the switch off sends use_marks false", async () => {
