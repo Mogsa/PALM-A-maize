@@ -115,6 +115,19 @@ button { cursor: pointer; }
 .key-sentences .keep { padding: 0; font-size: var(--text-ui-small); color: var(--ink-muted); }
 .key-sentences .keep:hover { color: var(--cut); }
 
+/* agent notes (side panel, AI): what an agent wrote into agent/, newest first, each put on the board by the reader */
+.agent-notes ul { list-style: none; margin: 0; padding: 0; }
+.agent-notes li { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 8px 0; border-top: 1px solid var(--border); }
+.agent-notes .agent-note-head { display: flex; align-items: center; gap: 2px; }
+.agent-notes .agent-note-title { font-size: var(--text-ui); }
+.agent-notes .chip { cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.agent-notes .chip:hover { color: var(--cut); }
+.agent-notes .agent-note-text { font-family: var(--font-read); font-size: 13px; line-height: var(--leading-read); }
+.agent-notes .agent-note-text .note-markdown p { margin: 0 0 4px; }
+.agent-notes .agent-note-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; }
+.agent-notes .agent-note-foot .quiet { padding: 0; font-size: var(--text-ui-small); color: var(--ink-muted); }
+.agent-notes .agent-note-foot .quiet:hover { color: var(--cut); }
+
 /* activity (side panel): the log, newest first, a time and a sentence per line */
 .activity .hint button { padding: 0; text-decoration: underline; }
 .activity ol { list-style: none; margin: 0; padding: 0; }

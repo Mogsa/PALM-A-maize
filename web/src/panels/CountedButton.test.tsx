@@ -13,6 +13,10 @@ describe("CountedButton", () => {
     fireEvent.click(button);
     expect(onToggle).toHaveBeenCalledWith("keySentences");
   });
+  it("the agent notes badge counts the notes waiting in agent/", () => {
+    const { getByRole } = render(<CountedButton panel="agentNotes" open={null} label="Agent notes" count={2} onToggle={vi.fn()} />);
+    expect(getByRole("button", { name: /Agent notes/ }).textContent).toBe("2Agent notes");
+  });
   it("hides at zero", () => {
     expect(render(<CountedButton panel="keySentences" open={null} label="Key sentences" count={0} onToggle={vi.fn()} />).container.textContent).toBe("");
   });

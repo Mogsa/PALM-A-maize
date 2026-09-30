@@ -15,6 +15,9 @@ import { useCommandKeys } from "./commands/useCommandKeys";
 import { useSplit } from "./commands/useSplit";
 import { activityCommands } from "./activity/commands";
 import { Activity } from "./panels/Activity";
+import { agentCommands } from "./agent/agentNotes";
+import { useAgentNotes, type AgentNotesState } from "./agent/useAgentNotes";
+import { AgentNotes } from "./panels/AgentNotes";
 import { CountedButton, sentenceCount } from "./panels/CountedButton";
 import { ExportDialog } from "./panels/ExportDialog";
 import { Glossary } from "./panels/Glossary";
@@ -44,11 +47,11 @@ function Notice() {
 
 type SidePanelProps = {
   panel: Panel; onQuestion: (question: Question) => void; onJump: (at: PageRect) => void; onOpenNote: (noteId: string) => void;
-  aiTerms: AiGlossaryEntry[]; ask: AskPanelState;
+  aiTerms: AiGlossaryEntry[]; ask: AskPanelState; agent: AgentNotesState;
 };
 
 /** The side panel's contents: one panel at a time, beside whichever view is open. */
-function SidePanel({ panel, onQuestion, onJump, onOpenNote, aiTerms, ask }: SidePanelProps) {
+function SidePanel({ panel, onQuestion, onJump, onOpenNote, aiTerms, ask, agent }: SidePanelProps) {
   switch (panel) {
     case "ask": return <Ask ask={ask} onOpenNote={onOpenNote} />;
     case "questions": return <QuestionList onPick={onQuestion} />;
@@ -58,6 +61,7 @@ function SidePanel({ panel, onQuestion, onJump, onOpenNote, aiTerms, ask }: Side
     case "tags": return <TagManager />;
     case "template": return <TemplateEditor />;
     case "activity": return <Activity />;
+    case "agentNotes": return <AgentNotes agent={agent} onJump={onJump} onOpenNote={onOpenNote} />;
   }
 }
 
@@ -102,6 +106,7 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
   const openAsk = useCallback(() => setPanel("ask"), []);
   const closeAsk = useCallback(() => setPanel((p) => (p === "ask" ? null : p)), []);
   const ask = useAskPanel({ on: aiOn, open: openAsk, close: closeAsk });
+  const agent = useAgentNotes(paperId, panel === "agentNotes");
   const readerTerms = useMemo(() => glossary(state.board, termTagIds(tags)), [state.board, tags]);
   const aiTerms = useMemo(() => aiGlossary(ai, readerTerms.map((e) => e.term)), [ai, readerTerms]);
   const terms = readerTerms.length + aiTerms.length;
@@ -129,6 +134,7 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
     ...shellCommands({ openPanel: (p) => setPanel(p), newNote, find: () => requestFind(""), split: () => void splitAction.run(), shortcuts: openShortcuts }),
     ...activityCommands({ on: board.view.log, setOn: (log) => setView({ log }), open: () => setPanel("activity") }),
     ...extraCommands(board),
+    ...agentCommands({ open: () => setPanel("agentNotes") }),
   ];
   return (
     <>
@@ -147,6 +153,7 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
           <CountedButton panel="questions" open={panel} label="Questions" count={questions?.length ?? 0} onToggle={toggle} />
           <CountedButton panel="glossary" open={panel} label="Glossary" count={terms} onToggle={toggle} />
           <CountedButton panel="keySentences" open={panel} label="Key sentences" count={sentenceCount(keySentences)} onToggle={toggle} />
+          <CountedButton panel="agentNotes" open={panel} label="Agent notes" count={agent.notes.length} onToggle={toggle} />
           <button type="button" className="panel-button kbd" aria-label="Commands (⌘K)" title="All commands" onClick={openPalette}>⌘K</button>
           {splitAction.said && <span className="tool-note" role="status">{splitAction.said}</span>}
         </div>
@@ -167,7 +174,7 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
           </div>
           {view === "both" && <SplitDivider views={views} split={split} onCommit={(next) => setView({ split: next })} />}
         </div>
-        {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} onJump={openInPaper} onOpenNote={openOnBoard} aiTerms={aiTerms} ask={ask} /></aside>}
+        {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} onJump={openInPaper} onOpenNote={openOnBoard} aiTerms={aiTerms} ask={ask} agent={agent} /></aside>}
       </div>
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}

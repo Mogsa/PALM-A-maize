@@ -42,6 +42,21 @@ function lastCall(fn: { mock: { calls: unknown[][] } }): { url: string; init: Re
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("api, agent notes", () => {
+  it("agentNotes reads the paper's agent/ folder", async () => {
+    const fn = mockFetch(200, []);
+    expect(await api.agentNotes("p")).toEqual([]);
+    expect(lastCall(fn).url).toBe("/api/papers/p/agent-notes");
+  });
+  it("placeAgentNote posts placed for the file, its name encoded", async () => {
+    const fn = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fn);
+    await api.placeAgentNote("p", "why lava.md");
+    expect(lastCall(fn).url).toBe("/api/papers/p/agent-notes/why%20lava.md/placed");
+    expect(lastCall(fn).init.method).toBe("POST");
+  });
+});
+
 describe("api.putBoard", () => {
   it("sends If-Match and returns the new version", async () => {
     const fn = mockFetch(200, { version: 4 });
