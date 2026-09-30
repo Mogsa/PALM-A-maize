@@ -21,7 +21,7 @@ export function aiEntryFor(ai: AiFile | null, word: string): AiEntry | null {
   return quick ? { term: word, definedIn: null, explanation: quick.explanation, grounds: quick.grounds } : null;
 }
 
-const overlaps = (a: PageRect, b: PageRect) => a.page === b.page
+export const overlaps = (a: PageRect, b: PageRect) => a.page === b.page
   && a.rect[0] < b.rect[2] && b.rect[0] < a.rect[2] && a.rect[1] < b.rect[3] && b.rect[1] < a.rect[3];
 
 /** The dotted underlines on one page (spec B4): every occurrence of every AI term, except where the reader's own

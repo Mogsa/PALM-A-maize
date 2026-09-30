@@ -56,7 +56,7 @@ reader draws connections on top.
 - pytest: `lines` is filled for a quote that spans one line and one that wraps; empty for a quote the page
   does not have; GET fills lines for a pass saved without them; the prompt names the one-sentence rule.
 - vitest: overlay draws one AI rect per line only on its page and only with AI on; the panel groups by slot
-  in template order, jumps on click, and Keep dispatches one `addHighlight` with the same rects and quote;
+  in template order, jumps on click, and Keep dispatches one `addHighlight` whose anchor the server reads from the same lines (`POST /text`);
   the badge shows the count and hides at zero; SlotPin is gone.
 - e2e (canned Claude): turn AI on, the badge appears, the panel lists the canned sentences, clicking one
   scrolls the paper, Keep makes a reader highlight that survives a reload.

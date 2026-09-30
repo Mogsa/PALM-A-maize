@@ -62,6 +62,10 @@ test("key sentences: highlighted on the paper, listed by slot, a jump each, and 
   await expect(entries.first()).toContainText("Kept");
   await expect.poll(async () => (await (await request.get(`/api/papers/${paper}/board`)).json()).highlights.length)
     .toBe(before + 1);
+  // Its anchor was read off the paper, as a selection's is: placed in the text, with the words around it.
+  const kept = (await (await request.get(`/api/papers/${paper}/board`)).json()).highlights.at(-1);
+  expect(kept.anchor.position).toBeGreaterThan(0);
+  expect(kept.anchor.quote.prefix).not.toBe("");
   await page.reload();
   await expect.poll(async () => (await (await request.get(`/api/papers/${paper}/board`)).json()).highlights.length)
     .toBe(before + 1);
