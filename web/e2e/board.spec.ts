@@ -256,10 +256,13 @@ test('New note and a slot\'s question each open a note ready for typing', async 
   await page.locator('.react-flow__pane').click({ position: { x: 1200, y: 900 } });
   await expect(page.locator('.slot-prompt')).toHaveCount(0);
   await expect(page.locator('.notice')).toHaveText(/Saved/);
-  const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
-  const notes = board.nodes.filter((n: { type: string }) => n.type === 'note');
-  const texts = await Promise.all(notes.map(async (n: { id: string }) => (await (await page.request.get(`/api/papers/${id}/notes/${n.id}`)).json()).markdown));
-  expect(texts.sort()).toEqual(['In my own words', 'The answer']);
+  // A note's text is saved on its own, a moment after the board: wait for both rather than read once.
+  const texts = async () => {
+    const board = await (await page.request.get(`/api/papers/${id}/board`)).json();
+    const notes = board.nodes.filter((n: { type: string }) => n.type === 'note');
+    return (await Promise.all(notes.map(async (n: { id: string }) => (await (await page.request.get(`/api/papers/${id}/notes/${n.id}`)).json()).markdown))).sort();
+  };
+  await expect.poll(texts, { timeout: 10_000 }).toEqual(['In my own words', 'The answer']);
 });
 
 test('with trays off the Paper group is an ordinary group, and a slot question does not select the group it sits in', async ({page}) => {
