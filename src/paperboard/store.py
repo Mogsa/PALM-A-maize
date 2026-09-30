@@ -5,6 +5,7 @@ folder you can copy; this module is what keeps that true.
 """
 
 import hashlib
+import json
 import os
 import re
 import tempfile
@@ -17,6 +18,7 @@ from typing import Any
 import pymupdf
 from pydantic import BaseModel, TypeAdapter
 
+from paperboard.activity import ActivityEvent
 from paperboard.ai_model import AiFile, AiLogEntry
 from paperboard.board_model import (
     DEFAULT_SLOTS,
@@ -111,6 +113,7 @@ class Store:
     # Guards only the append itself (never a Claude call): distinct from _ai_lock,
     # which guards the read-modify-write of ai.json.
     _ai_log_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
+    _activity_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
 
     @property
     def papers_dir(self) -> Path:
@@ -262,6 +265,28 @@ class Store:
         with self._ai_log_lock, open(path, "a", encoding="utf-8") as handle:
             handle.write(line)
             handle.flush()
+
+    # -- activity log --------------------------------------------------------
+
+    def _activity_path(self, paper_id: str) -> Path:
+        return self.paper_dir(paper_id) / "activity.jsonl"
+
+    def append_activity(self, paper_id: str, events: list[ActivityEvent]) -> None:
+        """Append one JSON line per event to `papers/<id>/activity.jsonl`, the whole
+        batch in one write under the lock, so no two batches ever interleave."""
+        path = self._activity_path(paper_id)
+        lines = "".join(event.model_dump_json() + "\n" for event in events)
+        with self._activity_lock, open(path, "a", encoding="utf-8") as handle:
+            handle.write(lines)
+            handle.flush()
+
+    def read_activity(self, paper_id: str, limit: int) -> list[dict]:
+        """The last `limit` events, oldest first; none when nothing was logged."""
+        path = self._activity_path(paper_id)
+        if not path.exists():
+            return []
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
+        return [json.loads(line) for line in lines[-limit:]]
 
     # -- notes --------------------------------------------------------------
 
