@@ -786,13 +786,18 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
         return Response(status_code=204)
 
     # Papers from before this feature, or extracted by the CLI: paper.md when missing or older than
-    # the source, board.md when missing, so an agent opening the library finds both.
-    for summary in store.list_papers():
-        folder = store.paper_dir(summary.paper_id)
-        if paper_md_is_stale(folder):
-            refresh_paper_md(summary.paper_id)
+    # the source, board.md when missing, so an agent opening the library finds both. One damaged paper
+    # is logged and skipped: it must not keep the server from starting.
+    for folder in sorted(store.papers_dir.iterdir()) if store.papers_dir.is_dir() else []:
+        if not store.has_paper(folder.name):
+            continue
+        try:
+            if paper_md_is_stale(store.paper_dir(folder.name)):
+                refresh_paper_md(folder.name)
+        except Exception:   # logged with its traceback; the server starts without this paper's paper.md
+            logger.exception("could not write paper.md for %s", folder.name)
         if not (folder / "board.md").exists():
-            refresh_board_md(summary.paper_id)
+            refresh_board_md(folder.name)
 
     # -- tags ---------------------------------------------------------------
 

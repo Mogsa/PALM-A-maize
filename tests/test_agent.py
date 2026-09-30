@@ -94,6 +94,15 @@ def test_paper_md_is_written_for_older_papers_on_start_and_again_on_extraction(s
     assert (folder / "paper.md").exists()
 
 
+def test_a_damaged_paper_does_not_keep_the_server_from_starting(store_root, extracted, caplog):
+    damaged = store_root / "papers" / "damaged-paper"
+    damaged.mkdir()
+    (damaged / "source.json").write_text("not json")
+    create_app(store_root)
+    assert "could not write paper.md for damaged-paper" in caplog.text
+    assert (store_root / "papers" / extracted["resnet"].paper_id / "paper.md").exists()
+
+
 def test_a_stale_paper_md_is_rewritten_on_start(store_root, extracted):
     folder = store_root / "papers" / extracted["resnet"].paper_id
     (folder / "paper.md").write_text("old")
