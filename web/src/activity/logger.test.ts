@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BATCH_MAX, createActivityLog } from "./logger";
+import { BATCH_BYTES, BATCH_MAX, TEXT_MAX, createActivityLog } from "./logger";
 import type { ActivityEvent } from "./types";
 
 const at = new Date("2026-09-30T10:42:03.120Z");
@@ -97,5 +97,20 @@ describe("the activity logger", () => {
     log.log("build", "undo");
     await Promise.all([log.flush(), log.flush()]);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+  it("splits a flush into requests under the server's size limit, keeping the order", async () => {
+    const { log, sent } = setup();
+    const long = "x".repeat(Math.floor(BATCH_BYTES / 3));
+    for (let i = 0; i < 5; i++) log.log("build", "note", { id: `n-${i}`, text: long });
+    await log.flush();
+    expect(sent.length).toBeGreaterThan(1);
+    for (const request of sent) expect(JSON.stringify({ events: request.events }).length).toBeLessThanOrEqual(BATCH_BYTES);
+    expect(sent.flatMap((r) => r.events.map((e) => e.detail.id))).toEqual(["n-0", "n-1", "n-2", "n-3", "n-4"]);
+  });
+  it("cuts a text longer than TEXT_MAX, so one event never exceeds the limit", async () => {
+    const { log, sent } = setup();
+    log.log("build", "note", { id: "n-1", text: "y".repeat(TEXT_MAX + 500) });
+    await log.flush();
+    expect((sent[0].events[0].detail.text as string).length).toBe(TEXT_MAX + 1);   // the cut is marked with an ellipsis
   });
 });
