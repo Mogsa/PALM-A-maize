@@ -53,9 +53,10 @@ evidence…), each a click away, and **Ask**: a short chat about the paper that 
 Every answer points at the lines of the paper it rests on; a claim the server cannot find in the paper is
 dropped. The AI never writes your notes, and everything it shows is marked AI.
 
-Paper Board uses your own Claude access. Pick **one** of these:
+Paper Board uses your own Claude access (the whole-paper pass runs on Opus, Define and Ask on Sonnet; other
+providers are not wired in yet). Pick **one** of these:
 
-**Option A: you have a Claude Pro or Max subscription.** Install Claude Code and log in once:
+**Option A: you have a Claude Pro or Max subscription** (a free login is not enough). Install Claude Code and log in once:
 
 ```bash
 # macOS / Linux
