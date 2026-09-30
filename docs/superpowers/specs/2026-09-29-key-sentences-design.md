@@ -22,7 +22,9 @@ author's own words and jumps to where it is.
 
 1. **On the paper**, with AI help on: each key sentence is highlighted line by line in its slot's colour,
    fainter than a reader's own highlight and with a thin dashed underline, so AI marks never look like
-   yours. Hovering shows "AI · <slot name>". Nothing shows with AI help off.
+   yours. The marks take no pointer, so text selection is unaffected; which slot a colour is, is shown in the
+   Key sentences panel, where each group is led by its slot name and colour (the legend). Nothing shows with
+   AI help off.
 2. **In the top bar**, a **Key sentences** badge with a count, beside Questions and Glossary, shown only when
    there are any. It opens a side panel.
 3. **The panel** lists the key sentences grouped by slot, in the template's slot order, each group led by its

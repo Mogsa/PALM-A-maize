@@ -88,11 +88,11 @@ describe("PageOverlay key sentences", () => {
   const renderKeys = (keySentences: ReturnType<typeof sentence>[]) =>
     render(<PageOverlay page={0} scale={2} board={emptyBoard("p")} source={source} keySentences={keySentences}
       onOutlineClick={() => undefined} onJump={() => undefined} onOpenNote={() => undefined} />);
-  it("draws one AI rect per line on this page only, in the slot's colour, named on hover", () => {
+  it("draws one AI rect per line on this page only, in the slot's colour, with no hover title (the overlay takes no pointer)", () => {
     const { container } = renderKeys([sentence([line(0, 100), line(0, 112), line(1, 10)])]);
     const rects = [...container.querySelectorAll<HTMLElement>(".key-sentence")];
     expect(rects).toHaveLength(2);
-    expect(rects[0].title).toBe("AI · Problem");
+    expect(rects[0].hasAttribute("title")).toBe(false);   // the slot is named in the Key sentences panel
     expect(rects[0].style.getPropertyValue("--key-colour")).toBe("var(--slot-0)");
     expect(rects[1].style.top).toBe("224px");   // 112pt at scale 2
     expect(container.querySelector(".mark")).toBeNull();   // never drawn as the reader's own

@@ -41,7 +41,7 @@ export function PageOverlay({ page, scale, board, source, aiLines = [], keySente
       <CutRuler page={page} scale={scale} board={board} source={source} onOpen={onOutlineClick} />
       {/* Key sentences first, so a reader's own mark on the same line is painted over them. */}
       {keySentences.flatMap((k, n) => k.lines.filter((r) => r.page === page).map((r, i) => (
-        <div key={`key-${n}-${i}`} className="key-sentence" title={`AI · ${k.slot}`}
+        <div key={`key-${n}-${i}`} className="key-sentence"
              style={{ ...px(r.rect, scale), "--key-colour": k.colour } as React.CSSProperties} />
       )))}
       {/* A highlight is painted line by line, each of its rects on this page (addendum 5.1), in its main tag's colour;
