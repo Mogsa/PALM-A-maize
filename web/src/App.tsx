@@ -11,6 +11,8 @@ import { shellCommands, type Panel } from "./commands/shellCommands";
 import { ShortcutsSheet } from "./commands/ShortcutsSheet";
 import { useCommandKeys } from "./commands/useCommandKeys";
 import { useSplit } from "./commands/useSplit";
+import { activityCommands } from "./activity/commands";
+import { Activity } from "./panels/Activity";
 import { CountedButton, sentenceCount } from "./panels/CountedButton";
 import { ExportDialog } from "./panels/ExportDialog";
 import { Glossary } from "./panels/Glossary";
@@ -52,6 +54,7 @@ function SidePanel({ panel, onQuestion, onJump, onOpenNote, aiTerms }: SidePanel
     case "export": return <ExportDialog />;
     case "tags": return <TagManager />;
     case "template": return <TemplateEditor />;
+    case "activity": return <Activity />;
   }
 }
 
@@ -118,6 +121,7 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
   const newNote = () => { if (view === "paper") show("board"); setNoteRequests((n) => n + 1); };
   const commands = [
     ...shellCommands({ openPanel: (p) => setPanel(p), newNote, find: () => requestFind(""), split: () => void splitAction.run(), shortcuts: openShortcuts }),
+    ...activityCommands({ on: board.view.log, setOn: (log) => setView({ log }), open: () => setPanel("activity") }),
     ...extraCommands(board),
   ];
   return (
