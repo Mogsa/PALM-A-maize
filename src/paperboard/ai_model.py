@@ -17,6 +17,7 @@ class Ground(BaseModel):
     span: str
     quote: str
     at: PageRect | None = None   # the span's rect, filled by grounding, for "based on p3" and outlines
+    lines: list[PageRect] = []   # the quote's printed lines in reading order, for drawing it; empty when not found
 
 
 class AiTerm(BaseModel):

@@ -1,7 +1,8 @@
 import type { PageRect, Rect } from "../model/types";
 
 /** `ai.json` as the server writes it (spec B3). Generated, never edited, never exported. */
-export type Ground = { span: string; quote: string; at: PageRect | null };
+/** `lines`: one rect per printed line of the quote, in reading order; empty (or absent) when the server could not find them. */
+export type Ground = { span: string; quote: string; at: PageRect | null; lines?: PageRect[] };
 export type AiTerm = { term: string; defined_in: Ground[]; explanation: string | null; grounds: Ground[]; occurrences: PageRect[] };
 export type SlotSpans = { slot: string; spans: Ground[] };
 export type ReaderPass = { model: string; made_at: string; terms: AiTerm[]; where_to_look: SlotSpans[] };

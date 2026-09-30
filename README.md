@@ -8,35 +8,79 @@ and your boards are plain files in a folder.
 Why it is built the way it is: `docs/SPEC.md` (the design), `docs/RESEARCH.md` (how people read papers)
 and `docs/TOOLS.md` (what other reading tools do well and badly).
 
-## Set up (once)
+## Set up (once, about 5 minutes)
 
-You need [uv](https://docs.astral.sh/uv/), which also installs the right Python for you:
+Works on macOS, Linux and Windows. Use **Chrome**; Safari is not supported yet.
+
+**1. Install uv** (it installs the right Python for you):
 
 ```bash
+# macOS / Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Close and reopen the terminal afterwards.
+
+**2. Get the code:**
+
+```bash
 git clone https://github.com/Mogsa/PALM-A-maize.git
 cd PALM-A-maize
 uv sync
 ```
 
-The frontend is already built and included in `web/dist`, so you don't need Node just to read papers.
+The frontend is already built into `web/dist`, so you don't need Node to read papers.
 
 ## Start it
 
-Run this from the repo folder:
+From the `PALM-A-maize` folder:
 
 ```bash
 uv run paperboard serve --root ~/PaperBoard
 ```
 
-Then open **http://127.0.0.1:8765 in Chrome**. Safari isn't supported yet.
+Open **http://127.0.0.1:8765** in Chrome, and choose **Add paper…** in the paper picker to open a PDF.
+`~/PaperBoard` is where your boards are kept (it's made when you add your first paper). Stop the server
+with Ctrl+C; your work is already saved.
 
-`--root` is the folder where your boards live. It's created when you add your first paper. Add a paper with
-**Add paper…** in the paper picker, or from the terminal:
+## AI help (optional)
+
+Everything works without AI. With it, you get jargon explained in place, **Define** on any word, and
+**Key sentences**: the paper's own key sentences highlighted and listed by what they do (problem, main point,
+evidence…), each a click away. The AI never writes your notes, and everything it shows is marked AI.
+
+Paper Board uses your own Claude access. Pick **one** of these:
+
+**Option A: you have a Claude Pro or Max subscription.** Install Claude Code and log in once:
 
 ```bash
-uv run paperboard extract some-paper.pdf --out ~/PaperBoard/papers
+# macOS / Linux
+curl -fsSL https://claude.ai/install.sh | bash
+# or, with Node installed, on any system:
+npm install -g @anthropic-ai/claude-code
+
+claude        # log in when it asks, then type /exit
 ```
+
+Paper Board then uses your subscription. It runs Claude in an empty folder with no tools, so it can't see
+or touch anything else on your computer.
+
+**Option B: an API key** (pay per use). Create a key at https://console.anthropic.com, then save it:
+
+```bash
+mkdir -p ~/.config/paperboard
+echo "sk-ant-...your key..." > ~/.config/paperboard/anthropic_key
+chmod 600 ~/.config/paperboard/anthropic_key
+```
+
+(Or set `ANTHROPIC_API_KEY` in your environment.) Each paper costs one larger call the first time AI help is
+turned on for it, plus a small one per **Define**.
+
+**Check it worked:** the second line `serve` prints says which one it found, for example
+`AI help: your Claude Code login`. Then, in the app, press **⌘K** (Ctrl+K on Windows) → **Turn AI help on**.
+AI help is off by default and set per paper. Every AI call is logged to `papers/<id>/ai-log.jsonl`.
 
 ## Using it
 
@@ -48,21 +92,6 @@ uv run paperboard extract some-paper.pdf --out ~/PaperBoard/papers
   to lasso-select, and drag empty space to pan. Scrolling zooms.
 - **⌘K** lists every other command, including Export, Tags, Template and AI help. **?** shows the shortcuts.
 - A new board opens with a set of empty question slots (the template). Fill them, rename them or delete them.
-
-## AI help (optional, off by default)
-
-Turn it on per paper with **⌘K → AI help**. It underlines jargon with definitions grounded in the paper,
-lets you **Define** a word you select, and puts a 📍 on each slot showing where the paper answers it. The
-AI marks everything it adds and never writes your notes for you.
-
-It uses the first of these it finds:
-
-1. an Anthropic API key, from `ANTHROPIC_API_KEY` or the file `~/.config/paperboard/anthropic_key`;
-2. your **Claude Code** login. Install [Claude Code](https://claude.com/claude-code) and run `claude` once
-   to log in. The server runs `claude -p` in an empty folder with no tools, so it uses your own plan.
-
-The first line `serve` prints says which one is in use. Every AI call is logged to
-`papers/<id>/ai-log.jsonl`.
 
 ## Working on the code
 
@@ -80,3 +109,7 @@ To run the e2e tests while your own server is using the default ports, set
 
 Backend: `src/paperboard/` (FastAPI and PDF extraction with PyMuPDF). Frontend: `web/src/` (React,
 React Flow and react-pdf). Design notes and plans are in `docs/superpowers/`.
+
+## Licence
+
+AGPL-3.0 (see `LICENSE`), as required by PyMuPDF, which Paper Board uses to read PDFs.

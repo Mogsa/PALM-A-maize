@@ -8,7 +8,31 @@
         "grounds": [{ "span": "p1-r8", "quote": "residual learning framework" }]
       }
     ],
-    "where_to_look": []
+    "where_to_look": [
+      {
+        "slot": "Background",
+        "spans": [{ "span": "p1-r11", "quote": "Recent evidence [41, 44] reveals that network depth is of crucial importance, and the leading results [41, 44, 13, 16] on the challenging ImageNet dataset [36] all exploit “very deep” [41] models, with a depth of sixteen [41] to thirty [16]." }]
+      },
+      {
+        "slot": "Problem",
+        "spans": [
+          { "span": "p1-r8", "quote": "Deeper neural networks are more difficult to train." },
+          { "span": "p1-r16", "quote": "When deeper networks are able to start converging, a degradation problem has been exposed: with the network depth increasing, accuracy gets saturated (which might be unsurprising) and then degrades rapidly." }
+        ]
+      },
+      {
+        "slot": "Main point",
+        "spans": [{ "span": "p2-r3", "quote": "In this paper, we address the degradation problem by introducing a deep residual learning framework." }]
+      },
+      {
+        "slot": "How it works",
+        "spans": [{ "span": "p1-r8", "quote": "We explicitly reformulate the layers as learning residual functions with reference to the layer inputs, instead of learning unreferenced functions." }]
+      },
+      {
+        "slot": "Evidence",
+        "spans": [{ "span": "p1-r8", "quote": "An ensemble of these residual nets achieves 3.57% error on the ImageNet test set." }]
+      }
+    ]
   },
   "define": []
 }
