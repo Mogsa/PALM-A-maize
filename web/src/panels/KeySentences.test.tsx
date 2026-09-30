@@ -15,9 +15,10 @@ const groups: KeySentenceGroup[] = [
 ];
 const goTo = vi.fn();
 const dispatch = vi.fn();
+const log = vi.fn();
 vi.mock("../ai/AiProvider", () => ({ useAi: () => ({ keySentences: groups, goTo }) }));
 const board = vi.hoisted(() => ({ highlights: [] as unknown[] }));
-vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ paperId: "p", dispatch, state: { board } }) }));
+vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ paperId: "p", dispatch, state: { board }, activity: { log } }) }));
 // The server reads the anchor off the paper: its printed words, prefix, suffix and position, not the model's copy.
 const printed = { rects: [r(2, 100), r(2, 112)], quote: { exact: "Deep nets de-\ngrade.", prefix: "shown. ", suffix: " We" },
   position: 4321, state: "anchored" as const };
@@ -44,6 +45,7 @@ describe("KeySentences panel", () => {
     expect(goTo).toHaveBeenCalledWith(r(2, 100));
     fireEvent.click(getByRole("button", { name: /It is hard/ }));
     expect(goTo).toHaveBeenLastCalledWith(r(3, 40));
+    expect(log.mock.calls).toEqual([["ai", "jump", { slot: "Problem", text: "Deep nets degrade." }], ["ai", "jump", { slot: "Problem", text: "It is hard." }]]);
   });
   it("Keep makes one plain highlight of the reader's own, anchored by the server from the same lines, and is not offered without lines", async () => {
     const { getAllByRole } = render(<KeySentences />);
@@ -54,6 +56,7 @@ describe("KeySentences panel", () => {
     expect(postText).toHaveBeenCalledWith("p", [r(2, 100), r(2, 112)], false, "text", [r(2, 100), r(2, 112)]);
     expect(dispatch).toHaveBeenCalledWith({ type: "addHighlight", highlight: { id: expect.stringMatching(/^h-/), tags: [], anchor: printed } });
     expect(goTo).not.toHaveBeenCalled();   // keeping is not a jump
+    expect(log.mock.calls).toEqual([["ai", "keep", { slot: "Problem", text: "Deep nets degrade." }]]);
   });
   it("Keep pressed twice while the server answers still makes one highlight", async () => {
     const { getAllByRole } = render(<KeySentences />);

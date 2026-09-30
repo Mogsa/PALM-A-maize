@@ -8,7 +8,8 @@ import { AiStatus as AiStatusNote } from "./AiStatus";
 const view = { ai: false };
 const setView = vi.fn((patch: { ai?: boolean }) => Object.assign(view, patch));
 const flushView = vi.fn(() => Promise.resolve());
-vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ paperId: "p", view, setView, flushView }) }));
+const log = vi.fn();
+vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ paperId: "p", view, setView, flushView, activity: { log } }) }));
 
 const done: AiStatus = { status: "done", stale: false, message: null,
   ai: { schema: 1, extracted_at: "t", defined: {}, reader: { model: "m", made_at: "t", terms: [], where_to_look: [] } } };
@@ -22,7 +23,7 @@ const mount = () => render(<AiProvider goTo={() => {}}><Probe /></AiProvider>);
 // The template names the slots, so key sentences can follow its order.
 beforeEach(() => { vi.spyOn(api, "getTemplate").mockResolvedValue({ schema: 1, slots: [{ name: "Problem", prompt: "" }, { name: "Method", prompt: "" }] }); });
 afterEach(() => {
-  cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); view.ai = false; setView.mockClear();
+  cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); view.ai = false; setView.mockClear(); log.mockClear();
   flushView.mockReset(); flushView.mockImplementation(() => Promise.resolve());
 });
 
@@ -46,6 +47,7 @@ describe("AiProvider", () => {
     await waitFor(() => expect(screen.getByText("AI reading…")).toBeTruthy());
     await act(async () => finish(done));
     await waitFor(() => expect(screen.getByTestId("has").textContent).toBe("yes"));
+    expect(log.mock.calls).toEqual([["ai", "on"]]);   // the reader's switch, for the activity log
   });
 
   it("gives the key sentences in the template's slot order", async () => {
@@ -83,6 +85,7 @@ describe("AiProvider", () => {
     mount();
     await waitFor(() => expect(screen.getByText("AI help could not run: no valid API key")).toBeTruthy());
     expect(setView).toHaveBeenCalledWith({ ai: false });
+    expect(log).not.toHaveBeenCalled();   // turned off by a failure, not by the reader
   });
 
   it("a stale ai.json is not used", async () => {

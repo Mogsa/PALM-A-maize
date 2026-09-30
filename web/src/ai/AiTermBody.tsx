@@ -38,12 +38,16 @@ type Props = { term: string; at: PageRect | null; onGo: (at: PageRect) => void; 
 
 /** The card of an AI-underlined word the reader has not marked: in this paper, then AI; Keep makes it theirs. */
 export function AiTermBody({ term, at, onGo }: Props) {
-  const { paperId, source, state, dispatch } = useBoard();
+  const { paperId, source, state, dispatch, activity } = useBoard();
   const { tags } = useTags();
   const { ai } = useAi();
   const probe = useMemo(() => ({ id: "", tags: [], anchor: { quote: { exact: term, prefix: "", suffix: "" }, rects: at ? [at] : [], state: "ok" } }) as unknown as Highlight, [term, at]);
   const parts = useMemo(() => cardParts(termCard(state.board, source, probe), aiEntryFor(ai, term)), [state.board, source, probe, ai, term]);
-  const keep = async () => { if (at) dispatch({ type: "addHighlight", highlight: await keepTerm(paperId, at, tags) }); };
+  const keep = async () => {
+    if (!at) return;
+    activity.log("ai", "keep", { slot: null, text: term });   // an AI term, not a key sentence: no slot
+    dispatch({ type: "addHighlight", highlight: await keepTerm(paperId, at, tags) });
+  };
   return (
     <>
       {parts.map((part) => {

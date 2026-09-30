@@ -23,7 +23,7 @@ const isKept = (k: KeySentence, highlights: Highlight[]) => highlights.some(({ a
 
 function Entry({ sentence }: { sentence: KeySentence }) {
   const { goTo } = useAi();
-  const { paperId, dispatch, state } = useBoard();
+  const { paperId, dispatch, state, activity } = useBoard();
   const [keeping, setKeeping] = useState(false);
   const keepingNow = useRef(false);   // a ref too: two clicks before the next render would both see the old state
   const where = sentence.lines[0] ?? sentence.at;
@@ -31,6 +31,7 @@ function Entry({ sentence }: { sentence: KeySentence }) {
     if (keepingNow.current) return;
     keepingNow.current = true;
     setKeeping(true);
+    activity.log("ai", "keep", { slot: sentence.slot, text: sentence.quote });
     try {
       dispatch({ type: "addHighlight", highlight: await keptHighlight(paperId, sentence) });
     } catch (error) {
@@ -44,7 +45,7 @@ function Entry({ sentence }: { sentence: KeySentence }) {
   const kept = sentence.lines.length > 0 && isKept(sentence, state.board.highlights);
   return (
     <li>
-      <button type="button" className="sentence" disabled={!where} onClick={() => where && goTo(where)} title="Go to it in the paper">
+      <button type="button" className="sentence" disabled={!where} onClick={() => { if (!where) return; activity.log("ai", "jump", { slot: sentence.slot, text: sentence.quote }); goTo(where); }} title="Go to it in the paper">
         <span className="quote">{sentence.quote}</span> <span className="where">p. {sentence.page + 1}</span>
       </button>
       {kept && <span className="kept">Kept</span>}

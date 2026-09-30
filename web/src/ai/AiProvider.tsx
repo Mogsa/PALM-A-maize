@@ -27,7 +27,7 @@ const failure = (error: unknown) => (error instanceof Error ? error.message : "A
 /** AI help for one paper (spec B2): off, nothing is read or sent. On, it reads ai.json, runs the pass when there is
  *  none, and on a failure says so in one line and turns itself off. It never touches the board. */
 export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at: PageRect) => void }) {
-  const { paperId, view, setView, flushView } = useBoard();
+  const { paperId, view, setView, flushView, activity } = useBoard();
   const on = view.ai;
   const [status, setStatus] = useState<AiStatus>(NO_AI);
   const [slotNames, setSlotNames] = useState<string[]>([]);
@@ -89,10 +89,14 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
     const ai = on && !status.stale ? status.ai : null;
     return {
       on, status: on ? status.status : "none", message: status.message, stale: on && status.stale, ai,
-      setOn: (next) => { setView({ ai: next }); if (next) setStatus((s) => ({ ...s, message: null })); },
+      setOn: (next) => {
+        activity.log("ai", next ? "on" : "off");   // the reader's switch; a failure turning it off is not logged
+        setView({ ai: next });
+        if (next) setStatus((s) => ({ ...s, message: null }));
+      },
       redo: () => { readSlotNames(); void run(); }, addDefinition, goTo, keySentences: keySentences(ai, slotNames),
     };
-  }, [on, status, setView, run, readSlotNames, addDefinition, goTo, slotNames]);
+  }, [on, status, setView, run, readSlotNames, addDefinition, goTo, slotNames, activity]);
 
   useEffect(() => registerCommands(() => aiCommands({ on: value.on, setOn: value.setOn, redo: value.redo })),
     [value.on, value.setOn, value.redo]);

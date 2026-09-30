@@ -17,12 +17,13 @@ export function likelyDefinitionRange(word: string, source: Source): DefineReque
 
 /** One quick definition (spec B3b): streamed into `text`, then kept in ai.json and in AI state. */
 export function useDefine() {
-  const { paperId } = useBoard();
+  const { paperId, activity } = useBoard();
   const { addDefinition } = useAi();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const define = async (req: DefineRequest) => {
+    activity.log("ai", "define", { word: req.word });
     setBusy(true); setError(null); setText("");
     let buffer = "";
     try {

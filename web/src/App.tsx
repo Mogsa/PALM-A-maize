@@ -112,6 +112,8 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
     if (rect) openInPaper(rect);
   };
   const toggle = (p: Panel) => setPanel((current) => (current === p ? null : p));
+  const { activity } = board;
+  useEffect(() => { if (panel === "keySentences") activity.log("ai", "key-sentences"); }, [panel, activity]);
   /** A new note is made on the board: from the paper alone, the board is shown first. */
   const newNote = () => { if (view === "paper") show("board"); setNoteRequests((n) => n + 1); };
   const commands = [
