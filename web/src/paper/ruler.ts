@@ -1,5 +1,5 @@
 import { sectionRef } from "../model/sections";
-import { findTray } from "../model/tray";
+import { findTray, TRAYS_ENABLED } from "../model/tray";
 import type { AnchorState, Board, ChunkNode, FigureNode, Source } from "../model/types";
 
 /** A reader's cut is named by this many of its first words. */
@@ -46,9 +46,9 @@ function stretchOf(piece: Piece, source: Source, page: number, trayId: string | 
   return { stretch, ticks };
 }
 
-/** Where the paper has been cut on `page`, from where to where. */
-export function pageRuler(board: Board, source: Source, page: number): Ruler {
-  const trayId = findTray(board.nodes)?.id;
+/** Where the paper has been cut on `page`, from where to where. With trays off, every piece is placed (solid). */
+export function pageRuler(board: Board, source: Source, page: number, trays = TRAYS_ENABLED): Ruler {
+  const trayId = findTray(board.nodes, trays)?.id;
   const pieces = board.nodes.filter((n): n is Piece => (n.type === "chunk" || n.type === "figure") && n.data.region.rects.some((r) => r.page === page));
   const drawn = pieces.map((piece) => stretchOf(piece, source, page, trayId));
   return {
