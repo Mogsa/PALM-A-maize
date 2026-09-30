@@ -226,7 +226,7 @@ def test_ask_sends_the_readers_notes_and_keeps_only_notes_that_exist(store_root,
     board = _stored_board(pid)
     store.write_board(pid, board, 0)
     store.write_note(pid, NOTE, "My own words about depth.")
-    text = _raw([{"span": spans[0].id, "quote": spans[0].text.split()[0]}], notes=[NOTE, "n-nope"])
+    text = _raw([{"span": spans[0].id, "quote": " ".join(spans[0].text.split()[:4])}], notes=[NOTE, "n-nope"])
     fake = FakeClaude(ask_deltas=[text])
     client = local_client(create_app(store_root, claude=fake))
     _on(client, pid)
