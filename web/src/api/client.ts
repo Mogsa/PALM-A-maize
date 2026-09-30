@@ -8,6 +8,7 @@ import type { AiStatus, DefineRequest, Definition } from "../ai/types";
 import { NO_AI } from "../ai/types";
 import { readNdjson } from "../ai/ndjson";
 import type { ActivityEvent } from "../activity/types";
+import type { AgentNote } from "../agent/agentNotes";
 
 /** One method per route of SPEC-ADDENDUM.md section 6. */
 
@@ -179,6 +180,11 @@ export const api = {
   /** The log's last `limit` events, oldest first. */
   getActivity: async (id: string, limit: number): Promise<ActivityEvent[]> =>
     (await call<{ events: ActivityEvent[] }>(`${paper(id)}/activity?limit=${limit}`)).events,
+
+  /** Notes an AI agent wrote into `papers/<id>/agent/`, newest first (bring-your-own-agent spec). */
+  agentNotes: (id: string) => call<AgentNote[]>(`${paper(id)}/agent-notes`),
+  /** The note is on the board now: the server moves its file into `agent/placed/`. */
+  placeAgentNote: (id: string, file: string) => send<void>("POST", `${paper(id)}/agent-notes/${encodeURIComponent(file)}/placed`),
 
   getTags: () => call<TagFile>("/api/tags"),
   putTags: (tags: TagFile) => send<TagFile>("PUT", "/api/tags", tags),

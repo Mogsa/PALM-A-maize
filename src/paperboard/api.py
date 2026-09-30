@@ -23,6 +23,16 @@ from paperboard.activity import (
     MAX_READ_LIMIT,
     ActivityBatch,
 )
+from paperboard.agent import (
+    AgentNoteNotFound,
+    board_markdown,
+    list_agent_notes,
+    mark_placed,
+    paper_md_is_stale,
+    write_board_md,
+    write_instructions,
+    write_paper_md,
+)
 from paperboard.ai import (
     DEFINER_SYSTEM,
     WordNotHere,
@@ -192,6 +202,7 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     view_lock = threading.Lock()   # guards every read-modify-write of view.json: a client's
                                     # PUT and an AI failure's _turn_ai_off both read then write
     app = FastAPI(title="paperboard", docs_url=None, redoc_url=None)
+    write_instructions(root)   # AGENTS.md and its pointers, each only when missing (bring your own agent)
     app.state.view_lock = view_lock   # exposed only so a test can assert the routes share it
     # Bound to 127.0.0.1, but a page elsewhere can rebind its own name to that
     # address; it still sends its own name as Host, so refuse any other.
@@ -254,6 +265,10 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     @app.exception_handler(NodeNotFound)
     async def _node_missing(_: Request, exc: NodeNotFound):
         return _error(404, "node_not_found", f"no node {exc!r}")
+
+    @app.exception_handler(AgentNoteNotFound)
+    async def _agent_note_missing(_: Request, exc: AgentNoteNotFound):
+        return _error(404, "agent_note_not_found", f"no agent note {exc}")
 
     @app.exception_handler(VersionConflict)
     async def _conflict(_: Request, exc: VersionConflict):
@@ -321,8 +336,10 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
             return _error(500, "extraction_failed", f"{type(exc).__name__}: {exc}")
         if not store.has_paper(doc.paper_id):
             store.install_paper(doc, pdf_bytes)
+            refresh_paper_md(doc.paper_id)
             return {"paper_id": doc.paper_id}
         report = reanchored(doc.paper_id, lambda: store.install_paper(doc, pdf_bytes))
+        refresh_paper_md(doc.paper_id)
         return JSONResponse({"paper_id": doc.paper_id, **report}, status_code=200)
 
     @app.get("/api/papers/{paper_id}/source")
@@ -335,7 +352,9 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
             doc = extract(store.pdf_path(paper_id))
         except Exception as exc:  # noqa: BLE001 -- turned into a 500, not swallowed
             return _error(500, "extraction_failed", f"{type(exc).__name__}: {exc}")
-        return reanchored(paper_id, lambda: store.write_source(paper_id, doc))
+        report = reanchored(paper_id, lambda: store.write_source(paper_id, doc))
+        refresh_paper_md(paper_id)
+        return report
 
     @app.get("/api/papers/{paper_id}/pdf")
     def get_pdf(paper_id: str):
@@ -350,7 +369,9 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     @app.put("/api/papers/{paper_id}/board")
     def put_board(paper_id: str, board: Board, if_match: str | None = Header(default=None)):
         expected = int(if_match) if if_match is not None and if_match.isdigit() else None
-        return {"version": store.write_board(paper_id, board, expected)}
+        version = store.write_board(paper_id, board, expected)
+        refresh_board_md(paper_id)
+        return {"version": version}
 
     # -- view ---------------------------------------------------------------
 
@@ -403,6 +424,7 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     @app.put("/api/papers/{paper_id}/notes/{node_id}", status_code=204)
     def put_note(paper_id: str, node_id: str, body: NoteBody):
         store.write_note(paper_id, node_id, body.markdown)
+        refresh_board_md(paper_id)
         return Response(status_code=204)
 
     @app.put("/api/papers/{paper_id}/notes/{node_id}/sketch", status_code=204)
@@ -744,6 +766,47 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
                     store.append_ai_log(paper_id, logged)
 
         return StreamingResponse(lines(), media_type="application/x-ndjson")
+
+    # -- bring your own agent (spec 2026-09-30) ------------------------------
+
+    def refresh_paper_md(paper_id: str) -> None:
+        write_paper_md(store.paper_dir(paper_id), store.read_source(paper_id))
+
+    def refresh_board_md(paper_id: str) -> None:
+        """board.md follows every save of the board or a note. The save has already
+        landed, so a failure here is logged, not answered: the client must not retry it."""
+        try:
+            board = store.read_board(paper_id)
+            notes = {n.id: note_markdown(paper_id, n.id) for n in board.nodes if isinstance(n, NoteNode)}
+            sketches = {note_id for note_id in notes if store.has_sketch(paper_id, note_id)}
+            tag_names = {t.id: t.name for t in store.read_tags().tags}
+            markdown = board_markdown(store.read_source(paper_id), board, notes, tag_names, sketches)
+            write_board_md(store.paper_dir(paper_id), markdown)
+        except Exception:   # logged with its traceback; the save it follows stands
+            logger.exception("could not write board.md for %s", paper_id)
+
+    @app.get("/api/papers/{paper_id}/agent-notes")
+    def get_agent_notes(paper_id: str):
+        return [note.model_dump(mode="json") for note in list_agent_notes(store.paper_dir(paper_id))]
+
+    @app.post("/api/papers/{paper_id}/agent-notes/{file}/placed", status_code=204)
+    def post_agent_note_placed(paper_id: str, file: str):
+        mark_placed(store.paper_dir(paper_id), file)
+        return Response(status_code=204)
+
+    # Papers from before this feature, or extracted by the CLI: paper.md when missing or older than
+    # the source, board.md when missing, so an agent opening the library finds both. One damaged paper
+    # is logged and skipped: it must not keep the server from starting.
+    for folder in sorted(store.papers_dir.iterdir()) if store.papers_dir.is_dir() else []:
+        if not store.has_paper(folder.name):
+            continue
+        try:
+            if paper_md_is_stale(store.paper_dir(folder.name)):
+                refresh_paper_md(folder.name)
+        except Exception:   # logged with its traceback; the server starts without this paper's paper.md
+            logger.exception("could not write paper.md for %s", folder.name)
+        if not (folder / "board.md").exists():
+            refresh_board_md(folder.name)
 
     # -- tags ---------------------------------------------------------------
 
