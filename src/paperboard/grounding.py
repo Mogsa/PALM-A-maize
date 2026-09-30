@@ -1,6 +1,7 @@
 """The grounding rule (spec B3a), in one place, for both tiers: a claim stays
-only if it names a span that exists and quotes words that span has. The AI
-cannot point at text the paper does not have."""
+only if it names a span that exists and quotes a real run of that span's words,
+whole words and at least MIN_QUOTE_WORDS of them. The AI cannot point at text
+the paper does not have."""
 
 import re
 import unicodedata
@@ -11,6 +12,9 @@ from paperboard.ai_model import MAX_SLOT_SPANS, AiTerm, Ground, SlotSpans
 from paperboard.source_model import PageRect
 from paperboard.spans import Span
 
+# The fewest words a quote may have: shorter, "we" or "cause" would ground almost any claim.
+MIN_QUOTE_WORDS = 3
+
 _LINE_HYPHEN = re.compile(r"-\s*\n\s*")
 _SPACE = re.compile(r"\s+")
 
@@ -20,15 +24,24 @@ def normalise(text: str) -> str:
     return _SPACE.sub(" ", _LINE_HYPHEN.sub("", text)).strip()
 
 
+def _quotes(quote: str, text: str) -> bool:
+    """True when the normalised quote is at least MIN_QUOTE_WORDS words and sits in the
+    normalised text at word boundaries: "cause" is not a quote of "because"."""
+    if len(quote.split()) < MIN_QUOTE_WORDS:
+        return False
+    return re.search(rf"(?<!\w){re.escape(quote)}(?!\w)", text) is not None
+
+
 def _grounded(item: Ground, spans: dict[str, Span]) -> Ground | None:
+    """The ground with its span's rect, or None when the span is unknown or the quote fails _quotes."""
     span = spans.get(item.span)
-    quote = normalise(item.quote)
-    if span is None or not quote or quote not in normalise(span.text):
+    if span is None or not _quotes(normalise(item.quote), normalise(span.text)):
         return None
     return Ground(span=span.id, quote=item.quote, at=PageRect(page=span.page, rect=span.rect))
 
 
 def ground_all(items: list[dict], spans: dict[str, Span]) -> list[Ground]:
+    """Only the grounds whose quote is a whole-word run of at least MIN_QUOTE_WORDS words of a span that exists."""
     out = []
     for raw in items:
         kept = _grounded(Ground.model_validate(raw), spans)

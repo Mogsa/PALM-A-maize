@@ -129,6 +129,7 @@ The model ids are held in two constants.
   ```
 - **Grounding rule, enforced on the server:**
   - Every `{span, quote}` must name a span that exists, and its quote must appear in that span's text after whitespace is normalised.
+  - The quote must be whole words, at least three of them (`MIN_QUOTE_WORDS`): it may not start or end inside a longer word, so "cause" is not a quote of "because" and "we" grounds nothing (tightened 30 September 2026 after review).
   - Anything that fails is dropped.
   - A term with no surviving `grounds` keeps only its `defined_in` and loses its explanation.
   - A slot keeps at most three spans.
