@@ -53,16 +53,6 @@ describe("Ask panel", () => {
     expect(screen.getByText("Deeper nets are more accurate.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "p7" }));
     expect(goTo).toHaveBeenCalledWith(at);
-    expect(screen.queryByText(/Not found in the paper/)).toBeNull();
-  });
-
-  it("an answer with no grounds left says so instead of chips", async () => {
-    vi.spyOn(api, "ask").mockResolvedValue({ ...grounded, grounds: [] });
-    render(<Harness />);
-    openThroughCommand();
-    send("What about cats?");
-    expect(await screen.findByText("Not found in the paper: treat with care")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^p\d+$/ })).toBeNull();
   });
 
   it("a note the answer relies on is a chip that opens the note", async () => {

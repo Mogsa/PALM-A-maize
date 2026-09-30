@@ -148,7 +148,6 @@ button { cursor: pointer; }
 .ask-grounds .hint { margin: 0; }
 .ask-grounds .chip { cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ask-grounds .chip:hover { color: var(--cut); }
-.ask-not-found { margin: 0; font-size: var(--text-ui-small); color: var(--ink-muted); font-style: italic; }
 .ask-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .ask-selection { display: flex; align-items: flex-start; gap: 4px; }
 .ask-selection blockquote { flex: 1; }

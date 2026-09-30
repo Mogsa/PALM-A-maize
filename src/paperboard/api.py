@@ -748,7 +748,7 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
                         yield ndjson({"delta": value})
                     elif value is None:
                         logged = entry("".join(parts), None, None)
-                        yield ndjson({"error": "AI help could not answer that."})
+                        yield ndjson({"error": "AI help found nothing in the paper to ground an answer on."})
                     else:
                         logged = entry("".join(parts), value.model_dump(mode="json"), None)
                         keep_chat(value)

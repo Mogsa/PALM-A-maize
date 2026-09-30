@@ -14,8 +14,8 @@ model as context so it answers in terms of how *they* are reading it.
 - From a selection's › menu, **Ask about this** opens the panel with the selected words quoted as the
   question's subject.
 - Each answer streams in. Below it, **based on** chips (`p3`, `p5`…) for its grounds; a chip scrolls the
-  paper to that span. An answer whose grounds all fail the grounding rule is shown with a plain line
-  "Not found in the paper: treat with care" instead of chips.
+  paper to that span. An answer whose grounds all fail the grounding rule is an error, as Define's is,
+  and is never saved (changed by the owner after review, 30 September 2026).
 - An answer can also point at the reader's own note ("your note on §3"): such a ground is a chip that
   opens that note.
 - **New chat** clears the conversation on screen (the file keeps it).
@@ -77,7 +77,7 @@ instructions (as the other prompts do).
   route returns the very block that is sent; grounding drops bad
   spans and unknown note ids; refused when AI is off; chat.jsonl and ai-log get one line per turn; the
   Claude Code route builds a no-tools argv for ask.
-- vitest: panel streams deltas, shows chips for grounds and the "Not found" line when none, chips scroll
+- vitest: panel streams deltas, shows chips for grounds, chips scroll
   or open notes, Ask about this pre-fills the selection, hidden when AI is off, the switch sends
   `use_marks: false`, Show what's sent shows the server's block, the "left out to fit" line.
 - e2e with the canned Claude: ask a question, see the answer and a chip, click the chip, the paper scrolls.

@@ -171,7 +171,7 @@ def ask_prompt(spans: list[Span], layer: str | None, history: list[AskTurn], que
 
 def ask_result(text: str, spans: dict[str, Span], note_ids: set[str]) -> AskAnswer | None:
     """The answer with every ground that fails the rule dropped, and only notes that exist. None when there
-    is no answer at all. An answer whose grounds all fail is kept: the reader is told it was not found."""
+    is no answer, or when no ground survives: as Define, an answer nothing in the paper backs is no answer."""
     try:
         raw = json.loads(text)
         answer = str(raw.get("answer", "")).strip()
@@ -179,7 +179,7 @@ def ask_result(text: str, spans: dict[str, Span], note_ids: set[str]) -> AskAnsw
         notes = list(dict.fromkeys(n for n in raw.get("notes", []) if n in note_ids))
     except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
         return None
-    return AskAnswer(answer=answer, grounds=grounds, notes=notes) if answer else None
+    return AskAnswer(answer=answer, grounds=grounds, notes=notes) if answer and grounds else None
 
 
 def ask_stream(claude: ClaudeClient, prompt: str, spans: list[Span],

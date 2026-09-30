@@ -24,13 +24,13 @@ function Grounds({ entry, onOpenNote }: { entry: ChatEntry; onOpenNote: (id: str
   const grounds = answer.grounds.filter((g) => g.at);
   return (
     <>
-      {grounds.length > 0
-        ? <div className="ask-grounds"><span className="hint">based on</span>
-            {grounds.map((g, i) => (
-              <button key={i} type="button" className="chip" onClick={() => goTo(g.at!)} title={g.quote}>p{g.at!.page + 1}</button>
-            ))}
-          </div>
-        : <p className="ask-not-found">Not found in the paper: treat with care</p>}
+      {grounds.length > 0 && (
+        <div className="ask-grounds"><span className="hint">based on</span>
+          {grounds.map((g, i) => (
+            <button key={i} type="button" className="chip" onClick={() => goTo(g.at!)} title={g.quote}>p{g.at!.page + 1}</button>
+          ))}
+        </div>
+      )}
       {answer.notes.length > 0 && (
         <div className="ask-grounds">{answer.notes.map((id) => <NoteChip key={id} noteId={id} onOpen={onOpenNote} />)}</div>
       )}
