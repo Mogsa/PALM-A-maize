@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api/client";
 import { AiProvider, useAi } from "./ai/AiProvider";
 import { AiStatus } from "./ai/AiStatus";
+import { useAskPanel, type AskPanelState } from "./ai/ask/useAskPanel";
+import { Ask } from "./panels/Ask";
 import { aiGlossary, type AiGlossaryEntry } from "./ai/terms";
 import { BoardView } from "./board/BoardView";
 import type { PageRect, PaperSummary, Question, View } from "./model/types";
@@ -40,12 +42,13 @@ function Notice() {
 
 type SidePanelProps = {
   panel: Panel; onQuestion: (question: Question) => void; onJump: (at: PageRect) => void; onOpenNote: (noteId: string) => void;
-  aiTerms: AiGlossaryEntry[];
+  aiTerms: AiGlossaryEntry[]; ask: AskPanelState;
 };
 
 /** The side panel's contents: one panel at a time, beside whichever view is open. */
-function SidePanel({ panel, onQuestion, onJump, onOpenNote, aiTerms }: SidePanelProps) {
+function SidePanel({ panel, onQuestion, onJump, onOpenNote, aiTerms, ask }: SidePanelProps) {
   switch (panel) {
+    case "ask": return <Ask ask={ask} onOpenNote={onOpenNote} />;
     case "questions": return <QuestionList onPick={onQuestion} />;
     case "glossary": return <Glossary onJump={onJump} onOpenNote={onOpenNote} aiTerms={aiTerms} />;
     case "keySentences": return <KeySentences />;
@@ -92,7 +95,10 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
   const board = useBoard();
   const { tags } = useTags();
   const { questions } = useQuestions();
-  const { ai, keySentences } = useAi();   // null and none when stale
+  const { ai, keySentences, on: aiOn } = useAi();   // null and none when stale
+  const openAsk = useCallback(() => setPanel("ask"), []);
+  const closeAsk = useCallback(() => setPanel((p) => (p === "ask" ? null : p)), []);
+  const ask = useAskPanel({ on: aiOn, open: openAsk, close: closeAsk });
   const readerTerms = useMemo(() => glossary(state.board, termTagIds(tags)), [state.board, tags]);
   const aiTerms = useMemo(() => aiGlossary(ai, readerTerms.map((e) => e.term)), [ai, readerTerms]);
   const terms = readerTerms.length + aiTerms.length;
@@ -155,7 +161,7 @@ function ShellBody({ papers, paperId, onChoose, onAdded, focusRect, setFocusRect
           </div>
           {view === "both" && <SplitDivider views={views} split={split} onCommit={(next) => setView({ split: next })} />}
         </div>
-        {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} onJump={openInPaper} onOpenNote={openOnBoard} aiTerms={aiTerms} /></aside>}
+        {panel && <aside className="panel"><SidePanel panel={panel} onQuestion={onQuestion} onJump={openInPaper} onOpenNote={openOnBoard} aiTerms={aiTerms} ask={ask} /></aside>}
       </div>
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
