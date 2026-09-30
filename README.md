@@ -47,9 +47,11 @@ with Ctrl+C; your work is already saved.
 
 ## AI help (optional)
 
-Everything works without AI. With it, you get jargon explained in place, **Define** on any word, and
+Everything works without AI. With it, you get jargon explained in place, **Define** on any word,
 **Key sentences**: the paper's own key sentences highlighted and listed by what they do (problem, main point,
-evidence…), each a click away. The AI never writes your notes, and everything it shows is marked AI.
+evidence…), each a click away, and **Ask**: a short chat about the paper that knows your highlights and notes.
+Every answer points at the lines of the paper it rests on; a claim the server cannot find in the paper is
+dropped. The AI never writes your notes, and everything it shows is marked AI.
 
 Paper Board uses your own Claude access. Pick **one** of these:
 
@@ -109,6 +111,9 @@ cd ~/PaperBoard && git init && git add -A && git commit -m "before the agent"
 - **On the board:** double-click empty space for a note, drag from a card's edge to connect it, Shift+drag
   to lasso-select, and drag empty space to pan. Scrolling zooms.
 - **⌘K** lists every other command, including Export, Tags, Template and AI help. **?** shows the shortcuts.
+- **Activity log:** each paper keeps a local record of what you did (highlights and their text, notes, views,
+  AI questions) in `papers/<id>/activity.jsonl`. It is on by default, never leaves your machine, and ⌘K →
+  **Turn activity log off** stops it for that paper. ⌘K → **Activity** shows it in plain words.
 - A new board opens with a set of empty question slots (the template). Fill them, rename them or delete them.
 
 ## Working on the code
