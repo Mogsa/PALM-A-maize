@@ -12,7 +12,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "dependencies": {
     "@xyflow/react": "^12.11.6",
