@@ -82,6 +82,24 @@ turned on for it, plus a small one per **Define**.
 `AI help: your Claude Code login`. Then, in the app, press **⌘K** (Ctrl+K on Windows) → **Turn AI help on**.
 AI help is off by default and set per paper. Every AI call is logged to `papers/<id>/ai-log.jsonl`.
 
+## Using your own AI agent
+
+Your library is plain files, so the AI agent you already use can read it. Open `~/PaperBoard` as a folder in
+Antigravity, Claude Code, Cursor or Codex, and ask it about a paper ("what problem does the residual paper
+solve?"). It finds `AGENTS.md` at the top, which tells it where things are: `paper.md` (the paper's text by
+section) and `board.md` (your highlights and notes) in each paper's folder. It writes its notes only into that
+paper's `agent/` folder.
+
+In the app, an **Agent notes** button appears with a count when there are any (also **⌘K → Agent notes**). Each
+note is marked AI; **Put on board** makes it a note on your board, connected to the highlight it is about. Nothing
+an agent writes reaches your board unless you put it there.
+
+To see every change an agent makes as a diff, make the library a git repository once:
+
+```bash
+cd ~/PaperBoard && git init && git add -A && git commit -m "before the agent"
+```
+
 ## Using it
 
 - **Paper | Both | Board** at the top switches views. **Both** shows the paper and the board side by side.
