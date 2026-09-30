@@ -1,5 +1,6 @@
 import pytest
 
+from paperboard.ai_model import Ground
 from paperboard.grounding import ground_all, ground_pass, normalise
 from paperboard.spans import Span
 
@@ -73,3 +74,9 @@ def test_a_slot_with_nothing_grounded_is_dropped():
 def test_a_wrong_shape_is_a_value_error():
     with pytest.raises(ValueError):
         ground_pass({"terms": "nope"}, SPANS, SLOTS)
+
+
+def test_a_ground_has_no_lines_until_they_are_found():
+    [g] = ground_all([{"span": "p1-r1", "quote": "Batch Normalization"}], SPANS)
+    assert g.lines == []
+    assert Ground.model_validate({"span": "p1-r1", "quote": "BN"}).lines == []
