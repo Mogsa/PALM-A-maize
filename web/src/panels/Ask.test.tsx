@@ -125,6 +125,19 @@ describe("Ask panel", () => {
     expect((screen.getByRole("textbox", { name: "Question" }) as HTMLTextAreaElement).maxLength).toBe(MAX_QUESTION_CHARS);
   });
 
+  it("Enter while an input method is composing does not send", () => {
+    const ask = vi.spyOn(api, "ask").mockResolvedValue(grounded);
+    render(<Harness />);
+    openThroughCommand();
+    const box = screen.getByRole("textbox", { name: "Question" });
+    fireEvent.change(box, { target: { value: "にほん" } });
+    fireEvent.keyDown(box, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(box, { key: "Enter", keyCode: 229 });
+    expect(ask).not.toHaveBeenCalled();
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
   it("the switch off sends use_marks false", async () => {
     const ask = vi.spyOn(api, "ask").mockResolvedValue(grounded);
     render(<Harness />);

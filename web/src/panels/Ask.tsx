@@ -87,7 +87,9 @@ export function Ask({ ask: { chat, selection, setSelection, useMarks, setUseMark
     setSelection(null);
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) submit(e);
+    // Enter that confirms an input method's composition (Japanese, Chinese, …) is not a send.
+    const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+    if (e.key === "Enter" && !e.shiftKey && !composing) submit(e);
   };
   return (
     <section className="ask" aria-label="Ask">
