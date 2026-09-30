@@ -705,12 +705,19 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
         layer, note_ids = ask_layer(paper_id) if body.use_marks else (None, set())
         prompt, trimmed = ask_prompt(spans, layer, body.history, body.question, body.selection)
 
-        def log(raw: str, grounded: object | None, error: AiError | None) -> None:
-            store.append_ai_log(paper_id, log_entry("ask", claude, ASK_MODEL, ASK_SYSTEM, prompt, raw, grounded,
-                                                    error, doc.extracted_at))
+        def entry(raw: str, grounded: object | None, error: AiError | None) -> AiLogEntry:
+            return log_entry("ask", claude, ASK_MODEL, ASK_SYSTEM, prompt, raw, grounded, error, doc.extracted_at)
+
+        def keep_chat(value) -> None:
+            """A turn that cannot be kept in chat.jsonl is still a good answer: say so in the server log only."""
+            try:
+                store.append_chat(paper_id, chat_turn(body, value))
+            except Exception:
+                logger.exception("could not keep an Ask turn in chat.jsonl for %s", paper_id)
 
         def lines():
             parts: list[str] = []
+            logged: AiLogEntry | None = None
             stream = ask_stream(claude, prompt, spans, note_ids)
             try:
                 for kind, value in stream:
@@ -718,21 +725,23 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
                         parts.append(value)
                         yield ndjson({"delta": value})
                     elif value is None:
-                        log("".join(parts), None, None)
+                        logged = entry("".join(parts), None, None)
                         yield ndjson({"error": "AI help could not answer that."})
                     else:
-                        log("".join(parts), value.model_dump(mode="json"), None)
-                        store.append_chat(paper_id, chat_turn(body, value))
+                        logged = entry("".join(parts), value.model_dump(mode="json"), None)
+                        keep_chat(value)
                         yield ndjson({"done": {**value.model_dump(mode="json"), "trimmed": trimmed}})
             except AiError as exc:
-                log("".join(parts), None, exc)
+                logged = entry("".join(parts), None, exc)
                 yield ndjson({"error": f"AI help could not run: {exc}"})
             except Exception as exc:
                 logger.exception("unexpected error while asking about %s", paper_id)
-                log("".join(parts), None, AiError(type(exc).__name__, str(exc)))
+                logged = entry("".join(parts), None, AiError(type(exc).__name__, str(exc)))
                 yield ndjson({"error": f"AI help could not run: {type(exc).__name__}: {exc}"})
             finally:
                 stream.close()   # as Define: kills and reaps a Claude Code child when the client goes away
+                if logged is not None:   # as Define: each turn is logged exactly once
+                    store.append_ai_log(paper_id, logged)
 
         return StreamingResponse(lines(), media_type="application/x-ndjson")
 

@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from html import escape
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from paperboard.ai import spans_block
 from paperboard.ai_client import ClaudeClient
@@ -17,6 +17,8 @@ from paperboard.grounding import ground_all
 from paperboard.spans import Span
 
 MAX_QUESTION_CHARS = 2000
+# A selection longer than this is clipped, marked with "…", not refused. Kept in sync with the client's
+# MAX_SELECTION_CHARS in web/src/ai/ask/useAskPanel.ts, which clips the same way before sending.
 MAX_SELECTION_CHARS = 4000
 # The whole chat is sent with every question; only past this many characters of it are the oldest turns left out.
 HISTORY_BUDGET_CHARS = 150_000
@@ -56,6 +58,13 @@ ASK_SCHEMA = {
 }
 
 
+def clip_selection(selection: str) -> str:
+    """At most MAX_SELECTION_CHARS: a longer selection keeps its start and ends in "…"."""
+    if len(selection) <= MAX_SELECTION_CHARS:
+        return selection
+    return selection[:MAX_SELECTION_CHARS - 1] + "…"
+
+
 class AskTurn(BaseModel):
     """One earlier turn, as the client sends it back: the answer without its grounds."""
     question: str
@@ -64,9 +73,14 @@ class AskTurn(BaseModel):
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARS)
-    selection: str | None = Field(default=None, max_length=MAX_SELECTION_CHARS)
+    selection: str | None = None
     history: list[AskTurn] = []
     use_marks: bool = True
+
+    @field_validator("selection")
+    @classmethod
+    def _clipped(cls, selection: str | None) -> str | None:
+        return clip_selection(selection) if selection is not None else None
 
 
 class AskAnswer(BaseModel):

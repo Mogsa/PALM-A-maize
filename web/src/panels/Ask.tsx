@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { useAi } from "../ai/AiProvider";
-import { isStreaming, type AskPanelState, type ChatEntry } from "../ai/ask/useAskPanel";
+import { isStreaming, MAX_QUESTION_CHARS, type AskPanelState, type ChatEntry } from "../ai/ask/useAskPanel";
 import { api } from "../api/client";
 import { firstLine } from "../model/notes";
 import { useBoard, useNote } from "../state/BoardProvider";
@@ -87,7 +87,9 @@ export function Ask({ ask: { chat, selection, setSelection, useMarks, setUseMark
     setSelection(null);
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) submit(e);
+    // Enter that confirms an input method's composition (Japanese, Chinese, …) is not a send.
+    const composing = e.nativeEvent.isComposing || e.keyCode === 229;
+    if (e.key === "Enter" && !e.shiftKey && !composing) submit(e);
   };
   return (
     <section className="ask" aria-label="Ask">
@@ -103,7 +105,7 @@ export function Ask({ ask: { chat, selection, setSelection, useMarks, setUseMark
             <button type="button" className="quiet" aria-label="Remove the quoted words" onClick={() => setSelection(null)}>×</button>
           </div>
         )}
-        <textarea aria-label="Question" rows={2} placeholder="Ask about the paper…" value={question}
+        <textarea aria-label="Question" rows={2} placeholder="Ask about the paper…" value={question} maxLength={MAX_QUESTION_CHARS}
                   onChange={(e) => setQuestion(e.target.value)} onKeyDown={onKey} />
         <div className="ask-actions">
           <label><input type="checkbox" checked={useMarks} onChange={(e) => setUseMarks(e.target.checked)} /> Use my highlights &amp; notes</label>

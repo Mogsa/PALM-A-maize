@@ -13,6 +13,8 @@ from paperboard.api import create_app
 from paperboard.ask import (
     ASK_SYSTEM,
     HISTORY_BUDGET_CHARS,
+    MAX_QUESTION_CHARS,
+    MAX_SELECTION_CHARS,
     AskTurn,
     ask_prompt,
     ask_result,
@@ -316,6 +318,50 @@ def test_an_empty_question_is_refused(store_root, paper):
     client = local_client(create_app(store_root, claude=FakeClaude()))
     _on(client, pid)
     assert _ask(client, pid, question="").status_code == 422
+
+
+def test_an_over_long_question_is_refused(store_root, paper):
+    _, pid, _ = paper
+    client = local_client(create_app(store_root, claude=FakeClaude()))
+    _on(client, pid)
+    assert _ask(client, pid, question="x" * (MAX_QUESTION_CHARS + 1)).status_code == 422
+
+
+def test_an_over_long_selection_is_clipped_with_an_ellipsis_not_refused(store_root, paper):
+    store, pid, spans = paper
+    fake = FakeClaude(ask_deltas=[_grounded_answer(spans[0])])
+    client = local_client(create_app(store_root, claude=fake))
+    _on(client, pid)
+    response = _ask(client, pid, selection="y" * (MAX_SELECTION_CHARS + 500))
+    assert response.status_code == 200 and "done" in _lines(response)[-1]
+    clipped = "y" * (MAX_SELECTION_CHARS - 1) + "…"
+    assert f"<selection>{clipped}</selection>" in fake.calls[0][1]
+    assert _jsonl(store.paper_dir(pid) / "chat.jsonl")[0]["selection"] == clipped
+
+
+def test_a_selection_at_the_limit_is_kept_as_is(store_root, paper):
+    _, pid, spans = paper
+    fake = FakeClaude(ask_deltas=[_grounded_answer(spans[0])])
+    client = local_client(create_app(store_root, claude=fake))
+    _on(client, pid)
+    _ask(client, pid, selection="z" * MAX_SELECTION_CHARS)
+    assert f"<selection>{'z' * MAX_SELECTION_CHARS}</selection>" in fake.calls[0][1]
+
+
+def test_a_chat_line_that_cannot_be_written_still_sends_the_answer_and_logs_once(store_root, paper, monkeypatch):
+    store, pid, spans = paper
+    fake = FakeClaude(ask_deltas=[_grounded_answer(spans[0])])
+    client = local_client(create_app(store_root, claude=fake))
+    _on(client, pid)
+
+    def broken(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Store, "append_chat", broken)
+    lines = _lines(_ask(client, pid))
+    assert lines[-1]["done"]["answer"] == "Because depth." and not any("error" in line for line in lines)
+    log = _jsonl(store.paper_dir(pid) / "ai-log.jsonl")
+    assert len(log) == 1 and log[0]["grounded"]["answer"] == "Because depth." and log[0]["error"] is None
 
 
 def test_ask_never_writes_to_the_board(store_root, paper):

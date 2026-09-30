@@ -44,6 +44,18 @@ export function useAsk(paperId: string) {
   return { entries, busy: entries.some(isStreaming), ask, newChat };
 }
 
+/** The server's limits (MAX_QUESTION_CHARS and MAX_SELECTION_CHARS in src/paperboard/ask.py): keep them in sync.
+ *  A longer question is refused there, so the box stops at it; a longer selection is clipped as `clipSelection` does. */
+export const MAX_QUESTION_CHARS = 2000;
+export const MAX_SELECTION_CHARS = 4000;
+
+/** At most MAX_SELECTION_CHARS characters, counted as Python counts them: a longer selection keeps its start and
+ *  ends in "…", as the server's clip_selection does. */
+export function clipSelection(text: string): string {
+  const chars = Array.from(text);
+  return chars.length <= MAX_SELECTION_CHARS ? text : chars.slice(0, MAX_SELECTION_CHARS - 1).join("") + "…";
+}
+
 const words = (text: string) => text.replace(/\s+/g, " ").trim();
 
 /** ⌘K "Ask", only while AI help is on (spec: off, no Ask command). */
@@ -52,7 +64,7 @@ export const askCommands = (on: boolean, open: () => void): Command[] =>
 
 /** A selection's › "Ask about this": the panel opens with the words quoted as the question's subject. */
 export function askAboutThis(on: boolean, text: string, open: (selection: string) => void): MenuItem | null {
-  const selection = words(text);
+  const selection = clipSelection(words(text));
   return on && selection ? { id: "ai-ask-about", label: "Ask about this", run: () => open(selection) } : null;
 }
 
