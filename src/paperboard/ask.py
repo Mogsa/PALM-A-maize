@@ -118,6 +118,8 @@ def reader_layer(board: Board, notes: dict[str, str], tag_names: dict[str, str])
     lines += [f'<connection from="{e.from_}" to="{e.to}" tags="{_names(e.data.tags, tag_names)}"/>' for e in edges]
     for group in (n for n in board.nodes if isinstance(n, GroupNode)):
         members = [n.id for n in board.nodes if n.parentId == group.id and n.id not in ai_notes]
+        if not members:   # an empty slot says nothing about how they read; it only costs words
+            continue
         lines.append(f'<group id="{group.id}" name="{_attr(group.data.name or "")}" '
                      f'members="{_attr(", ".join(members))}"/>')
     lines.append("</reader>")

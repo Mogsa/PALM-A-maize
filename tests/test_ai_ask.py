@@ -75,6 +75,11 @@ def test_each_group_has_its_name_and_members():
     assert '<group id="n-g" name="Problem" members="n-1"/>' in _layer()
 
 
+def test_an_empty_group_is_not_sent():
+    board = BOARD.model_copy(update={"nodes": [*BOARD.nodes, BOARD.nodes[0].model_copy(update={"id": "n-empty"})]})
+    assert "n-empty" not in reader_layer(board, NOTES, TAG_NAMES)
+
+
 def test_the_ais_own_notes_and_their_connections_are_not_sent():
     layer = _layer()
     assert "n-ai" not in layer and "The model's own note." not in layer
