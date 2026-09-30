@@ -348,6 +348,22 @@ def test_a_selection_at_the_limit_is_kept_as_is(store_root, paper):
     assert f"<selection>{'z' * MAX_SELECTION_CHARS}</selection>" in fake.calls[0][1]
 
 
+def test_a_chat_line_that_cannot_be_written_still_sends_the_answer_and_logs_once(store_root, paper, monkeypatch):
+    store, pid, spans = paper
+    fake = FakeClaude(ask_deltas=[_grounded_answer(spans[0])])
+    client = local_client(create_app(store_root, claude=fake))
+    _on(client, pid)
+
+    def broken(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Store, "append_chat", broken)
+    lines = _lines(_ask(client, pid))
+    assert lines[-1]["done"]["answer"] == "Because depth." and not any("error" in line for line in lines)
+    log = _jsonl(store.paper_dir(pid) / "ai-log.jsonl")
+    assert len(log) == 1 and log[0]["grounded"]["answer"] == "Because depth." and log[0]["error"] is None
+
+
 def test_ask_never_writes_to_the_board(store_root, paper):
     store, pid, spans = paper
     fake = FakeClaude(ask_deltas=[_grounded_answer(spans[0])])
