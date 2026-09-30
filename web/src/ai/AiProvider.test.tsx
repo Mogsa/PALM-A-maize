@@ -111,26 +111,49 @@ describe("AiProvider", () => {
     await waitFor(() => expect(run).toHaveBeenCalled());
   });
 
-  it("a status that cannot be read says so and turns AI off", async () => {
+  it("a status that cannot be read says so, keeps AI on, and asks again", async () => {
+    vi.useFakeTimers();
     view.ai = true;
-    vi.spyOn(api, "getAi").mockRejectedValue(new Error("AI help could not run: server down"));
+    const get = vi.spyOn(api, "getAi").mockRejectedValueOnce(new Error("AI help could not run: server down")).mockResolvedValue(done);
     mount();
-    await waitFor(() => expect(screen.getByText("AI help could not run: server down")).toBeTruthy());
-    expect(setView).toHaveBeenCalledWith({ ai: false });
+    await act(async () => {});
+    expect(screen.getByText("AI help could not run: server down")).toBeTruthy();
+    expect(setView).not.toHaveBeenCalledWith({ ai: false });
+    await act(async () => { await vi.advanceTimersByTimeAsync(AI_POLL_MS); });
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/could not run/)).toBeNull();   // the next status read clears the line
+    expect(screen.getByTestId("has").textContent).toBe("yes");
   });
 
-  it("a poll that fails stops polling, says so and turns AI off", async () => {
+  it("a first read that fails still gets the paper its pass once the server answers that there is none", async () => {
+    vi.useFakeTimers();
+    view.ai = true;
+    vi.spyOn(api, "getAi").mockRejectedValueOnce(new Error("AI help could not run: server down")).mockResolvedValue(NO_AI);
+    const run = vi.spyOn(api, "runAi").mockResolvedValue(done);
+    mount();
+    await act(async () => {});
+    expect(run).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(AI_POLL_MS); });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(setView).not.toHaveBeenCalledWith({ ai: false });
+    expect(screen.getByTestId("has").textContent).toBe("yes");
+  });
+
+  it("a poll that fails says so, keeps AI on, and the next poll takes the status it reads", async () => {
     vi.useFakeTimers();
     view.ai = true;
     const get = vi.spyOn(api, "getAi").mockResolvedValueOnce({ ...NO_AI, status: "running" })
-      .mockRejectedValue(new Error("AI help could not run: server down"));
+      .mockRejectedValueOnce(new Error("AI help could not run: server down")).mockResolvedValue(done);
     mount();
     await act(async () => {});
     await act(async () => { await vi.advanceTimersByTimeAsync(AI_POLL_MS); });
     expect(screen.getByText("AI help could not run: server down")).toBeTruthy();
-    expect(setView).toHaveBeenCalledWith({ ai: false });
-    const calls = get.mock.calls.length;
+    expect(setView).not.toHaveBeenCalledWith({ ai: false });
+    await act(async () => { await vi.advanceTimersByTimeAsync(AI_POLL_MS); });
+    expect(get).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText(/could not run/)).toBeNull();
+    expect(screen.getByTestId("has").textContent).toBe("yes");
     await act(async () => { await vi.advanceTimersByTimeAsync(AI_POLL_MS * 3); });
-    expect(get.mock.calls.length).toBe(calls);
+    expect(get).toHaveBeenCalledTimes(3);   // done: nothing left to wait for
   });
 });

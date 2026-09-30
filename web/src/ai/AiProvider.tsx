@@ -22,10 +22,11 @@ export type AiContext = {
 };
 
 const Ctx = createContext<AiContext | null>(null);
-const failure = (error: unknown) => (error instanceof Error ? error.message : "AI help could not run: unknown error");
+const failed = (error: unknown): AiStatus =>
+  ({ ...NO_AI, status: "failed", message: error instanceof Error ? error.message : "AI help could not run: unknown error" });
 
 /** AI help for one paper (spec B2): off, nothing is read or sent. On, it reads ai.json, runs the pass when there is
- *  none, and on a failure says so in one line and turns itself off. It never touches the board. */
+ *  none, and on a failed pass says so in one line and turns itself off. It never touches the board. */
 export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at: PageRect) => void }) {
   const { paperId, view, setView, flushView, activity } = useBoard();
   const on = view.ai;
@@ -33,11 +34,14 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
   const [slotNames, setSlotNames] = useState<string[]>([]);
   const running = useRef(false);
 
-  /** Spec B3: any error is one plain line and leaves AI help off. */
-  const fail = useCallback((error: unknown) => {
-    setStatus({ ...NO_AI, status: "failed", message: failure(error) });
+  /** Spec B3: a failed pass is one plain line and leaves AI help off (the server has already written that). */
+  const failPass = useCallback((error: unknown) => {
+    setStatus(failed(error));
     setView({ ai: false });
   }, [setView]);
+  // A status that could not be read (server restarting, laptop asleep) is not a failed pass: the pass may well be
+  // running still. Say so, keep AI help on, and let the poll below ask again.
+  const failRead = useCallback((error: unknown) => setStatus(failed(error)), []);
 
   const run = useCallback(async () => {
     if (running.current) return;
@@ -46,23 +50,23 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
     try {
       setStatus(await api.runAi(paperId));
     } catch (error) {
-      fail(error);
+      failPass(error);
     } finally {
       running.current = false;
     }
-  }, [paperId, fail]);
+  }, [paperId, failPass]);
+
+  /** A status just read is kept, and a paper with no pass yet gets one. */
+  const settle = useCallback((s: AiStatus) => { setStatus(s); if (s.status === "none") void run(); }, [run]);
 
   useEffect(() => {
     if (!on) return;
     let live = true;
     // The server refuses a pass while view.json says off, and turning on only schedules that write: save it first.
-    flushView().then(() => api.getAi(paperId)).then((s) => {
-      if (!live) return;
-      setStatus(s);
-      if (s.status === "none") void run();
-    }).catch((error: unknown) => { if (live) fail(error); });
+    flushView().then(() => api.getAi(paperId)).then((s) => { if (live) settle(s); })
+      .catch((error: unknown) => { if (live) failRead(error); });
     return () => { live = false; };
-  }, [on, paperId, run, fail, flushView]);
+  }, [on, paperId, settle, failRead, flushView]);
 
   // The template orders and colours the key sentences. Without it they keep the pass's order, so it is not a failure.
   // Read when AI help turns on and again on every redo: slots renamed or reordered since must match the new pass.
@@ -72,14 +76,13 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
   }, []);
   useEffect(() => { if (on) readSlotNames(); }, [on, readSlotNames]);
 
-  useEffect(() => {   // a pass this tab did not start: wait for it
-    if (!on || status.status !== "running" || running.current) return;
-    const timer = setInterval(() => void api.getAi(paperId).then(setStatus).catch((error: unknown) => {
-      clearInterval(timer);
-      fail(error);
-    }), AI_POLL_MS);
+  // A pass this tab did not start, or a status it could not read: ask again until the answer is in. "failed" while
+  // AI help is on can only be a failed read, since a failed pass turns it off in the same render.
+  useEffect(() => {
+    if (!on || running.current || (status.status !== "running" && status.status !== "failed")) return;
+    const timer = setInterval(() => void api.getAi(paperId).then(settle, failRead), AI_POLL_MS);
     return () => clearInterval(timer);
-  }, [on, status.status, paperId, fail]);
+  }, [on, status.status, paperId, settle, failRead]);
 
   const addDefinition = useCallback((key: string, d: Definition) => setStatus((s) => (s.ai
     ? { ...s, ai: { ...s.ai, defined: { ...s.ai.defined, [key]: d } } }
