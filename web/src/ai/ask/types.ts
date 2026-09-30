@@ -6,3 +6,5 @@ export type AskTurn = { question: string; answer: string };
 export type AskRequest = { question: string; selection: string | null; history: AskTurn[]; use_marks: boolean };
 /** `notes`: ids of the reader's notes the answer relies on. `trimmed`: the oldest turns were left out to fit. */
 export type AskAnswer = { answer: string; grounds: Ground[]; notes: string[]; trimmed: boolean };
+/** One finished turn as `chat.jsonl` keeps it and GET /ai/ask/chat returns it: the latest chat comes back when the paper opens. */
+export type SavedTurn = { t: string; question: string; selection: string | null; answer: string; grounds: Ground[]; notes: string[] };

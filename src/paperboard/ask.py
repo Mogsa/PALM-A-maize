@@ -6,6 +6,7 @@ import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from html import escape
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -97,6 +98,22 @@ class ChatTurn(BaseModel):
     answer: str
     grounds: list[Ground]
     notes: list[str]
+
+
+class ChatDivider(BaseModel):
+    """One line of `chat.jsonl` written by New chat: what follows is a new conversation. The file keeps every chat."""
+    t: datetime
+    new_chat: Literal[True] = True
+
+
+def new_chat_divider() -> ChatDivider:
+    return ChatDivider(t=datetime.now(UTC))
+
+
+def current_chat(lines: list[dict]) -> list[dict]:
+    """The latest chat, as the panel shows it when the paper opens: every turn after the last New chat line."""
+    start = max((i + 1 for i, line in enumerate(lines) if line.get("new_chat")), default=0)
+    return lines[start:]
 
 
 def chat_turn(request: AskRequest, answer: AskAnswer) -> ChatTurn:

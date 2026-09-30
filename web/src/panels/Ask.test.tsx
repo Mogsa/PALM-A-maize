@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useCallback, useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AskAnswer } from "../ai/ask/types";
 import { MAX_QUESTION_CHARS, MAX_SELECTION_CHARS, useAskPanel } from "../ai/ask/useAskPanel";
 import { api } from "../api/client";
@@ -36,6 +36,10 @@ function send(question: string) {
 }
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); goTo.mockReset(); });
+beforeEach(() => {
+  vi.spyOn(api, "getChat").mockResolvedValue([]);
+  vi.spyOn(api, "newChat").mockResolvedValue(undefined);
+});
 
 describe("Ask panel", () => {
   it("streams the answer in, then shows a chip per ground that scrolls the paper there", async () => {
@@ -156,5 +160,32 @@ describe("Ask panel", () => {
     expect(extraCommands(board).some((c) => c.label === "Ask")).toBe(false);
     const target = { on: "paper" as const, text: "word", rects: [at], at: new DOMRect() };
     expect(extraSelectionItems(target, board).some((i) => i.label === "Ask about this")).toBe(false);
+  });
+
+  it("the paper's saved chat comes back when it opens with AI help on, chips and all", async () => {
+    vi.spyOn(api, "getChat").mockResolvedValue([
+      { t: "2026-09-30T10:00:00Z", question: "Why deeper?", selection: null, answer: grounded.answer, grounds: grounded.grounds, notes: [] },
+    ]);
+    render(<Harness />);
+    openThroughCommand();
+    expect(await screen.findByText("Why deeper?")).toBeTruthy();
+    expect(screen.getByText(grounded.answer)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "p7" }));
+    expect(goTo).toHaveBeenCalledWith(at);
+    expect(api.getChat).toHaveBeenCalledWith("p");
+  });
+  it("with AI help off the saved chat is not read", () => {
+    render(<Harness on={false} />);
+    expect(api.getChat).not.toHaveBeenCalled();
+  });
+  it("New chat clears the screen and marks the file, so the next open starts there", async () => {
+    vi.spyOn(api, "ask").mockResolvedValue(grounded);
+    render(<Harness />);
+    openThroughCommand();
+    send("Why?");
+    expect(await screen.findByText(grounded.answer)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    await waitFor(() => expect(api.newChat).toHaveBeenCalledWith("p"));
+    expect(screen.queryByText(grounded.answer)).toBeNull();
   });
 });

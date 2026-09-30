@@ -48,7 +48,16 @@ from paperboard.ai import (
 from paperboard.ai_client import ASK_MODEL, DEFINER_MODEL, AiError, AnthropicClaude, ClaudeClient
 from paperboard.ai_model import AiFile, AiLogEntry
 from paperboard.anchoring import anchor_basis, build_index, resolve_chunk, resolve_highlight
-from paperboard.ask import ASK_SYSTEM, AskRequest, ask_prompt, ask_stream, chat_turn, reader_layer
+from paperboard.ask import (
+    ASK_SYSTEM,
+    AskRequest,
+    ask_prompt,
+    ask_stream,
+    chat_turn,
+    current_chat,
+    new_chat_divider,
+    reader_layer,
+)
 from paperboard.blocks import chunk_blocks
 from paperboard.board_model import (
     Board,
@@ -716,6 +725,17 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
     def get_ask_context(paper_id: str):
         """Show what's sent: the very block a question would carry. Reads only; sends nothing."""
         return {"text": ask_layer(paper_id)[0]}
+
+    @app.get("/api/papers/{paper_id}/ai/ask/chat")
+    def get_chat(paper_id: str):
+        """The saved chat, so the panel goes on where the reader left off: the turns after the last New chat line."""
+        return {"turns": current_chat(store.read_chat(paper_id))}
+
+    @app.post("/api/papers/{paper_id}/ai/ask/new", status_code=204)
+    def post_new_chat(paper_id: str):
+        """New chat: one divider line in chat.jsonl. The file keeps every chat; the panel shows the latest."""
+        store.append_chat(paper_id, new_chat_divider())
+        return Response(status_code=204)
 
     @app.post("/api/papers/{paper_id}/ai/ask")
     def post_ask(paper_id: str, body: AskRequest):

@@ -3,7 +3,7 @@ import type {
   RecutMode, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload, Source, SplitDraft, TagFile, TemplateFile,
 } from "../model/types";
 import type { PaperViewState } from "../model/paperView";
-import type { AskAnswer, AskRequest } from "../ai/ask/types";
+import type { AskAnswer, AskRequest, SavedTurn } from "../ai/ask/types";
 import type { AiStatus, DefineRequest, Definition } from "../ai/types";
 import { NO_AI } from "../ai/types";
 import { readNdjson } from "../ai/ndjson";
@@ -172,6 +172,10 @@ export const api = {
     streamed<AskAnswer>(`${paper(id)}/ai/ask`, body, onDelta),
   /** The reader's layer exactly as a question sends it (Show what's sent). */
   askContext: async (id: string) => (await call<{ text: string }>(`${paper(id)}/ai/ask/context`)).text,
+  /** The latest saved chat: the turns after the last New chat, oldest first. */
+  getChat: async (id: string) => (await call<{ turns: SavedTurn[] }>(`${paper(id)}/ai/ask/chat`)).turns,
+  /** New chat: a divider line in chat.jsonl; the file keeps every chat. */
+  newChat: (id: string) => call<void>(`${paper(id)}/ai/ask/new`, { method: "POST" }),
 
   /** Appends to the paper's activity log (activity log spec). `keepalive` lets a send on pagehide outlive the page;
    *  fetch, not sendBeacon, so the Paperboard header goes too. */

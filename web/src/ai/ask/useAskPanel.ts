@@ -3,10 +3,11 @@ import { api } from "../../api/client";
 import { registerCommands, registerSelectionItems, type Command, type MenuItem } from "../../commands/registry";
 import { useBoard } from "../../state/BoardProvider";
 import { partialField } from "../partial";
-import type { AskAnswer, AskTurn } from "./types";
+import type { AskAnswer, AskTurn, SavedTurn } from "./types";
 
-/** One turn on screen: `text` fills as the answer streams; `answer` or `error` ends it. */
-export type ChatEntry = { question: string; selection: string | null; text: string; answer: AskAnswer | null; error: string | null };
+/** One turn on screen: `text` fills as the answer streams; `answer` or `error` ends it. `id` is the turn's own, so a
+ *  saved chat arriving after a question was asked can go in front of it without moving it. */
+export type ChatEntry = { id: number; question: string; selection: string | null; text: string; answer: AskAnswer | null; error: string | null };
 
 export const isStreaming = (e: ChatEntry) => !e.answer && !e.error;
 
@@ -17,17 +18,37 @@ export const sentHistory = (entries: ChatEntry[]): AskTurn[] =>
 
 const failure = (error: unknown) => (error instanceof Error ? error.message : "AI help could not run.");
 
-/** The chat on screen. New chat clears it (chat.jsonl keeps it); an answer still coming for a cleared chat is dropped. */
-export function useAsk(paperId: string) {
+/** A saved turn back on screen, its chips from the grounds the server kept. */
+const restored = (turn: SavedTurn, id: number): ChatEntry => ({
+  id, question: turn.question, selection: turn.selection, text: turn.answer, error: null,
+  answer: { answer: turn.answer, grounds: turn.grounds, notes: turn.notes, trimmed: false },
+});
+
+/** The chat on screen: the paper's latest saved chat, read back when it opens with AI help on, so the reader goes on
+ *  where they left off. New chat clears it and marks the file (which keeps every chat); an answer still coming for a
+ *  cleared or left chat is dropped. */
+export function useAsk(paperId: string, on: boolean) {
   const [entries, setEntries] = useState<ChatEntry[]>([]);
   const chat = useRef(0);
+  const nextId = useRef(0);
+  useEffect(() => {
+    if (!on) return;
+    const mine = chat.current;
+    api.getChat(paperId).then((turns) => {
+      if (chat.current !== mine) return;
+      const first = nextId.current;
+      nextId.current += turns.length;
+      setEntries((all) => [...turns.map((turn, i) => restored(turn, first + i)), ...all]);   // in front of anything asked meanwhile
+    }, (error: unknown) => console.error("Could not read the saved chat", error));
+    return () => { chat.current += 1; setEntries([]); };
+  }, [paperId, on]);
   const ask = async (question: string, selection: string | null, useMarks: boolean) => {
     const mine = chat.current;
-    const index = entries.length;
+    const id = nextId.current++;
     const history = sentHistory(entries);
-    setEntries((all) => [...all, { question, selection, text: "", answer: null, error: null }]);
+    setEntries((all) => [...all, { id, question, selection, text: "", answer: null, error: null }]);
     const update = (patch: Partial<ChatEntry>) => {
-      if (chat.current === mine) setEntries((all) => all.map((e, i) => (i === index ? { ...e, ...patch } : e)));
+      if (chat.current === mine) setEntries((all) => all.map((e) => (e.id === id ? { ...e, ...patch } : e)));
     };
     let buffer = "";
     try {
@@ -40,7 +61,11 @@ export function useAsk(paperId: string) {
       update({ error: failure(error) });
     }
   };
-  const newChat = () => { chat.current += 1; setEntries([]); };
+  const newChat = () => {
+    chat.current += 1;
+    setEntries([]);
+    api.newChat(paperId).catch((error: unknown) => console.error("Could not mark the new chat", error));
+  };
   return { entries, busy: entries.some(isStreaming), ask, newChat };
 }
 
@@ -74,7 +99,7 @@ export type AskPanelState = ReturnType<typeof useAskPanel>;
  *  nothing is offered and the panel closes. `open` and `close` must be stable. */
 export function useAskPanel({ on, open, close }: { on: boolean; open: () => void; close: () => void }) {
   const { paperId } = useBoard();
-  const chat = useAsk(paperId);
+  const chat = useAsk(paperId, on);
   const [selection, setSelection] = useState<string | null>(null);
   const [useMarks, setUseMarks] = useState(true);
   useEffect(() => registerCommands(() => askCommands(on, open)), [on, open]);

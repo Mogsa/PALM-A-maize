@@ -18,7 +18,10 @@ model as context so it answers in terms of how *they* are reading it.
   and is never saved (changed by the owner after review, 30 September 2026).
 - An answer can also point at the reader's own note ("your note on §3"): such a ground is a chip that
   opens that note.
-- **New chat** clears the conversation on screen (the file keeps it).
+- The paper's latest chat comes back when it opens with AI help on, chips and all (added 30 September 2026: the
+  panel reads `chat.jsonl` through `GET /ai/ask/chat`, so the reader goes on where they left off).
+- **New chat** clears the conversation on screen and writes a divider line to the file (`POST /ai/ask/new`); the
+  file keeps every chat, and the panel shows the turns after the last divider.
 - A switch **Use my highlights & notes** (on by default). Off, the reader's layer is not sent.
 - **Show what's sent** opens the reader's layer exactly as the model receives it (read from the server, which
   builds it the same way the prompt does, so what is shown is what is sent).

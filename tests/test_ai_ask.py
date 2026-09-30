@@ -18,6 +18,7 @@ from paperboard.ask import (
     AskTurn,
     ask_prompt,
     ask_result,
+    current_chat,
     reader_layer,
 )
 from paperboard.board_model import Board
@@ -394,3 +395,39 @@ def test_the_e2e_canned_answer_is_grounded_in_the_paper(store_root, paper):
     _on(client, pid)
     done = _lines(_ask(client, pid))[-1]["done"]
     assert done["answer"] and len(done["grounds"]) == len(json.loads("".join(canned.ask_deltas))["grounds"]) > 0
+
+
+def test_current_chat_is_what_follows_the_last_new_chat_line():
+    turn = lambda q: {"question": q}
+    assert current_chat([]) == []
+    assert current_chat([turn("a"), turn("b")]) == [turn("a"), turn("b")]
+    assert current_chat([turn("a"), {"new_chat": True}, turn("b")]) == [turn("b")]
+    assert current_chat([turn("a"), {"new_chat": True}]) == []
+
+
+def test_the_saved_chat_comes_back_and_new_chat_starts_after_a_divider(store_root, paper):
+    store, pid, spans = paper
+    fake = FakeClaude(ask_deltas=[_grounded_answer(spans[0])])   # replayed for every question
+    client = local_client(create_app(store_root, claude=fake))
+    _on(client, pid)
+    assert client.get(f"/api/papers/{pid}/ai/ask/chat").json() == {"turns": []}
+    _ask(client, pid, question="First?")
+    turns = client.get(f"/api/papers/{pid}/ai/ask/chat").json()["turns"]
+    assert [(t["question"], t["answer"], t["notes"]) for t in turns] == [("First?", "Because depth.", [])]
+    assert turns[0]["grounds"][0]["at"]["page"] == 0   # chips need where each ground is
+    assert client.post(f"/api/papers/{pid}/ai/ask/new").status_code == 204
+    assert client.get(f"/api/papers/{pid}/ai/ask/chat").json() == {"turns": []}
+    _ask(client, pid, question="Second?")
+    assert [t["question"] for t in client.get(f"/api/papers/{pid}/ai/ask/chat").json()["turns"]] == ["Second?"]
+    kinds = [line.get("question", "new chat") for line in _jsonl(store.paper_dir(pid) / "chat.jsonl")]
+    assert kinds == ["First?", "new chat", "Second?"]   # the file keeps every chat, in order
+
+
+def test_a_damaged_chat_line_is_skipped_when_the_chat_is_read_back(store_root, paper):
+    store, pid, spans = paper
+    client = local_client(create_app(store_root, claude=FakeClaude(ask_deltas=[_grounded_answer(spans[0])])))
+    _on(client, pid)
+    _ask(client, pid, question="First?")
+    path = store.paper_dir(pid) / "chat.jsonl"
+    path.write_text(path.read_text() + "{not json\n")
+    assert [t["question"] for t in client.get(f"/api/papers/{pid}/ai/ask/chat").json()["turns"]] == ["First?"]

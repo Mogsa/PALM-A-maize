@@ -265,8 +265,12 @@ class Store:
         self._append_line(self.paper_dir(paper_id) / "ai-log.jsonl", entry)
 
     def append_chat(self, paper_id: str, turn: BaseModel) -> None:
-        """Append one finished Ask turn to `papers/<id>/chat.jsonl` (Ask spec): only ever appended."""
+        """Append one finished Ask turn, or a New chat line, to `papers/<id>/chat.jsonl` (Ask spec): only ever appended."""
         self._append_line(self.paper_dir(paper_id) / "chat.jsonl", turn)
+
+    def read_chat(self, paper_id: str) -> list[dict]:
+        """Every line of `chat.jsonl`, oldest first; none when nothing was asked."""
+        return _read_jsonl(self.paper_dir(paper_id) / "chat.jsonl")
 
     def _append_line(self, path: Path, record: BaseModel) -> None:
         line = record.model_dump_json(by_alias=True) + "\n"
@@ -290,19 +294,7 @@ class Store:
 
     def read_activity(self, paper_id: str, limit: int) -> list[dict]:
         """The last `limit` events, oldest first; none when nothing was logged."""
-        path = self._activity_path(paper_id)
-        if not path.exists():
-            return []
-        events = []
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-            if not line:
-                continue
-            try:
-                events.append(json.loads(line))
-            except json.JSONDecodeError:
-                # The log is a record, not the reader's work: one torn line must not hide the rest.
-                logger.warning("skipped damaged line %d of %s", number, path)
-        return events[-limit:]
+        return _read_jsonl(self._activity_path(paper_id))[-limit:]
 
     # -- notes --------------------------------------------------------------
 
@@ -384,3 +376,19 @@ class Store:
     def write_clip(self, paper_id: str, node_id: str, png: bytes) -> str:
         atomic_write(self.clip_path(paper_id, node_id), png)
         return f"clips/{node_id}.png"
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    """The records of a JSON-lines file, oldest first; none when there is no file. A log is a record, not the
+    reader's work: one torn line is skipped with a warning and must not hide the rest."""
+    if not path.exists():
+        return []
+    records = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            logger.warning("skipped damaged line %d of %s", number, path)
+    return records

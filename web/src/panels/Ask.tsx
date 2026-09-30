@@ -97,7 +97,7 @@ export function Ask({ ask: { chat, selection, setSelection, useMarks, setUseMark
         {chat.entries.length > 0 && <button type="button" className="quiet new-chat" onClick={chat.newChat}>New chat</button>}
       </h3>
       {!chat.entries.length && <p className="hint">Ask about the paper. Each answer points to the lines it rests on.</p>}
-      <ul className="ask-turns">{chat.entries.map((entry, i) => <Turn key={i} entry={entry} onOpenNote={onOpenNote} />)}</ul>
+      <ul className="ask-turns">{chat.entries.map((entry) => <Turn key={entry.id} entry={entry} onOpenNote={onOpenNote} />)}</ul>
       <form className="ask-form" onSubmit={submit}>
         {selection && (
           <div className="ask-selection">
