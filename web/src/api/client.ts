@@ -3,7 +3,8 @@ import type {
   RecutMode, ReextractResult, Selection, SelectionMode, Sketch, SketchUpload, Source, SplitDraft, TagFile, TemplateFile,
 } from "../model/types";
 import type { PaperViewState } from "../model/paperView";
-import type { AiStatus, DefineLine, DefineRequest, Definition } from "../ai/types";
+import type { AskAnswer, AskRequest } from "../ai/ask/types";
+import type { AiStatus, DefineRequest, Definition } from "../ai/types";
 import { NO_AI } from "../ai/types";
 import { readNdjson } from "../ai/ndjson";
 
@@ -42,6 +43,22 @@ const send = <T>(method: string, path: string, body?: unknown) =>
   call<T>(path, { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
 const paper = (id: string) => `/api/papers/${id}`;
+
+/** POSTs `body` and reads the NDJSON answer: `onDelta` gets the model's raw text as it comes, then the result. */
+async function streamed<T>(path: string, body: unknown, onDelta: (text: string) => void): Promise<T> {
+  const response = await request(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!response.ok) await parse(response);   // throws ApiError with the server's code
+  let result: T | null = null;
+  let failure: string | null = null;
+  await readNdjson(response, (raw) => {
+    const line = raw as { delta: string } | { done: T } | { error: string };
+    if ("delta" in line) onDelta(line.delta);
+    else if ("done" in line) result = line.done;
+    else failure = line.error;
+  });
+  if (failure || !result) throw new Error(failure ?? "AI help could not run: the answer stopped early");
+  return result;
+}
 
 /** Clips render at three times the page's 72 dpi, so an equation stays sharp (addendum 5.3). */
 export const CLIP_DPI = 216;
@@ -146,22 +163,13 @@ export const api = {
   },
   runAi: (id: string) => send<AiStatus>("POST", `${paper(id)}/ai`),
   /** A quick definition, streamed: `onDelta` gets the model's raw text as it comes. */
-  async define(id: string, body: DefineRequest, onDelta: (text: string) => void): Promise<Definition> {
-    const response = await request(`${paper(id)}/ai/define`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-    });
-    if (!response.ok) await parse(response);   // throws ApiError with the server's code
-    let result: Definition | null = null;
-    let failure: string | null = null;
-    await readNdjson(response, (raw) => {
-      const line = raw as DefineLine;
-      if ("delta" in line) onDelta(line.delta);
-      else if ("done" in line) result = line.done;
-      else failure = line.error;
-    });
-    if (failure || !result) throw new Error(failure ?? "AI help could not run: the answer stopped early");
-    return result;
-  },
+  define: (id: string, body: DefineRequest, onDelta: (text: string) => void) =>
+    streamed<Definition>(`${paper(id)}/ai/define`, body, onDelta),
+  /** A question about the paper (Ask spec), streamed as Define is. */
+  ask: (id: string, body: AskRequest, onDelta: (text: string) => void) =>
+    streamed<AskAnswer>(`${paper(id)}/ai/ask`, body, onDelta),
+  /** The reader's layer exactly as a question sends it (Show what's sent). */
+  askContext: async (id: string) => (await call<{ text: string }>(`${paper(id)}/ai/ask/context`)).text,
 
   getTags: () => call<TagFile>("/api/tags"),
   putTags: (tags: TagFile) => send<TagFile>("PUT", "/api/tags", tags),
