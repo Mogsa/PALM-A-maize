@@ -5,6 +5,8 @@ export const FLUSH_MS = 5000;
 export const BATCH_MAX = 50;
 /** One request stays under the server's 64 KB limit, with room for the envelope. */
 export const BATCH_BYTES = 48_000;
+/** The server takes at most this many events in one request. */
+export const REQUEST_MAX = 200;
 /** A longer text (a very long note) is cut, so one event alone always fits in a request. */
 export const TEXT_MAX = 20_000;
 
@@ -26,16 +28,18 @@ type Queued = { event: ActivityEvent; tries: number };
 const cut = (detail: ActivityDetail): ActivityDetail => Object.fromEntries(Object.entries(detail).map(([k, v]) =>
   [k, typeof v === "string" && v.length > TEXT_MAX ? `${v.slice(0, TEXT_MAX)}…` : v]));
 
-/** The queue in order, as requests each under BATCH_BYTES. */
+const bytes = new TextEncoder();
+
+/** The queue in order, as requests each under BATCH_BYTES (UTF-8, as the server counts) and REQUEST_MAX events. */
 function requests(queue: Queued[]): Queued[][] {
   const out: Queued[][] = [];
   let current: Queued[] = [];
-  let bytes = 0;
+  let total = 0;
   for (const q of queue) {
-    const size = JSON.stringify(q.event).length + 1;
-    if (current.length && bytes + size > BATCH_BYTES) { out.push(current); current = []; bytes = 0; }
+    const size = bytes.encode(JSON.stringify(q.event)).length + 1;
+    if (current.length && (total + size > BATCH_BYTES || current.length >= REQUEST_MAX)) { out.push(current); current = []; total = 0; }
     current.push(q);
-    bytes += size;
+    total += size;
   }
   if (current.length) out.push(current);
   return out;

@@ -45,8 +45,8 @@ export function AiTermBody({ term, at, onGo }: Props) {
   const parts = useMemo(() => cardParts(termCard(state.board, source, probe), aiEntryFor(ai, term)), [state.board, source, probe, ai, term]);
   const keep = async () => {
     if (!at) return;
-    activity.log("ai", "keep", { slot: null, text: term });   // an AI term, not a key sentence: no slot
     dispatch({ type: "addHighlight", highlight: await keepTerm(paperId, at, tags) });
+    activity.log("ai", "keep", { slot: null, text: term });   // after it is kept; an AI term has no slot
   };
   return (
     <>

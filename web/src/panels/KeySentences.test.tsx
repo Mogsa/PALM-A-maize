@@ -58,6 +58,15 @@ describe("KeySentences panel", () => {
     expect(goTo).not.toHaveBeenCalled();   // keeping is not a jump
     expect(log.mock.calls).toEqual([["ai", "keep", { slot: "Problem", text: "Deep nets degrade." }]]);
   });
+  it("a Keep the server refuses adds nothing and records nothing", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    postText.mockRejectedValueOnce(new Error("no anchor"));
+    const { getAllByRole } = render(<KeySentences />);
+    await act(async () => { fireEvent.click(within(getAllByRole("listitem")[0]).getByRole("button", { name: /Keep/ })); });
+    await waitFor(() => expect(postText).toHaveBeenCalledTimes(1));
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+  });
   it("Keep pressed twice while the server answers still makes one highlight", async () => {
     const { getAllByRole } = render(<KeySentences />);
     const keep = within(getAllByRole("listitem")[0]).getByRole("button", { name: /Keep/ });

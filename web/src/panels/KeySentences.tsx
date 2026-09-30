@@ -31,9 +31,9 @@ function Entry({ sentence }: { sentence: KeySentence }) {
     if (keepingNow.current) return;
     keepingNow.current = true;
     setKeeping(true);
-    activity.log("ai", "keep", { slot: sentence.slot, text: sentence.quote });
     try {
       dispatch({ type: "addHighlight", highlight: await keptHighlight(paperId, sentence) });
+      activity.log("ai", "keep", { slot: sentence.slot, text: sentence.quote });   // only once it is kept
     } catch (error) {
       console.error("Could not keep the key sentence", error);
     } finally {

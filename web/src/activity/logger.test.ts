@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BATCH_BYTES, BATCH_MAX, TEXT_MAX, createActivityLog } from "./logger";
+import { BATCH_BYTES, BATCH_MAX, REQUEST_MAX, TEXT_MAX, createActivityLog } from "./logger";
 import type { ActivityEvent } from "./types";
 
 const at = new Date("2026-09-30T10:42:03.120Z");
@@ -112,5 +112,24 @@ describe("the activity logger", () => {
     log.log("build", "note", { id: "n-1", text: "y".repeat(TEXT_MAX + 500) });
     await log.flush();
     expect((sent[0].events[0].detail.text as string).length).toBe(TEXT_MAX + 1);   // the cut is marked with an ellipsis
+  });
+  it("measures a request in bytes, so text in other scripts stays under the server's limit", async () => {
+    const { log, sent } = setup();
+    const chinese = "读".repeat(Math.floor(BATCH_BYTES / 6));   // 3 bytes a character: each note is half the limit in bytes
+    for (let i = 0; i < 3; i++) log.log("build", "note", { id: `n-${i}`, text: chinese });
+    await log.flush();
+    for (const request of sent) expect(new TextEncoder().encode(JSON.stringify({ events: request.events })).length).toBeLessThanOrEqual(BATCH_BYTES);
+    expect(sent.flatMap((r) => r.events.map((e) => e.detail.id))).toEqual(["n-0", "n-1", "n-2"]);
+  });
+  it("never sends more events in one request than the server takes", async () => {
+    const send = vi.fn(async (_events: ActivityEvent[]): Promise<void> => { throw new Error("down"); });
+    const log = createActivityLog({ send, enabled: () => true, now: () => at });
+    for (let i = 0; i < REQUEST_MAX + 50; i++) log.log("read", "view", { view: "board" });
+    await log.flush();   // fails: all are kept for one retry
+    const sizes: number[] = [];
+    send.mockImplementation(async (events: ActivityEvent[]) => { sizes.push(events.length); });
+    await log.flush();
+    expect(Math.max(...sizes)).toBeLessThanOrEqual(REQUEST_MAX);
+    expect(sizes.reduce((a, b) => a + b, 0)).toBe(REQUEST_MAX + 50);
   });
 });
