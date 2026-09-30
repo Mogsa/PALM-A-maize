@@ -260,8 +260,7 @@ def test_a_pass_saves_each_key_sentence_with_its_lines(store_root, paper):
     assert len(store.read_ai(pid).reader.where_to_look[0].spans[0].lines) == 3
 
 
-def test_get_fills_lines_for_a_pass_saved_without_them_and_writes_nothing(store_root, paper):
-    store, pid, _ = paper
+def _save_a_pass_without_lines(store, pid, extracted_at=None):
     import pymupdf
 
     from paperboard.ai import run_pass
@@ -271,11 +270,35 @@ def test_get_fills_lines_for_a_pass_saved_without_them_and_writes_nothing(store_
         reader = run_pass(doc, pdf, ["Problem"], FakeClaude(paper=_key_sentence_answer()))
     old = reader.model_copy(update={"where_to_look": [s.model_copy(update={
         "spans": [g.model_copy(update={"lines": []}) for g in s.spans]}) for s in reader.where_to_look]})
-    store.update_ai(pid, lambda _: AiFile(extracted_at=doc.extracted_at, reader=old))
+    store.update_ai(pid, lambda _: AiFile(extracted_at=extracted_at or doc.extracted_at, reader=old))
+
+
+def test_get_fills_lines_for_a_pass_saved_without_them_and_writes_nothing(store_root, paper):
+    store, pid, _ = paper
+    _save_a_pass_without_lines(store, pid)
     fake = FakeClaude()
     body = _client(store_root, fake).get(f"/api/papers/{pid}/ai").json()
     assert len(body["ai"]["reader"]["where_to_look"][0]["spans"][0]["lines"]) == 3
     assert fake.calls == [] and store.read_ai(pid).reader.where_to_look[0].spans[0].lines == []
+
+
+def test_get_leaves_a_stale_pass_without_lines(store_root, paper):
+    """A pass from an older extraction points at spans that may have moved: its lines are not looked for."""
+    from datetime import timedelta
+    store, pid, _ = paper
+    _save_a_pass_without_lines(store, pid, store.read_source(pid).extracted_at - timedelta(days=1))
+    body = _client(store_root, FakeClaude()).get(f"/api/papers/{pid}/ai").json()
+    assert body["stale"] is True
+    assert body["ai"]["reader"]["where_to_look"][0]["spans"][0]["lines"] == []
+
+
+def test_get_answers_without_lines_when_the_pdf_cannot_be_opened(store_root, paper):
+    store, pid, _ = paper
+    _save_a_pass_without_lines(store, pid)
+    store.pdf_path(pid).unlink()
+    response = _client(store_root, FakeClaude()).get(f"/api/papers/{pid}/ai")
+    assert response.status_code == 200
+    assert response.json()["ai"]["reader"]["where_to_look"][0]["spans"][0]["lines"] == []
 
 
 def test_the_e2e_canned_answer_keeps_every_key_sentence_with_its_lines(store_root, paper):

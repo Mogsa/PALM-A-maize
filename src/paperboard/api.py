@@ -528,11 +528,17 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
         return ai_status(paper_id, status, with_key_sentence_lines(paper_id, ai))
 
     def with_key_sentence_lines(paper_id: str, ai: AiFile | None) -> AiFile | None:
-        """A pass saved before key sentences had lines, shown with them; ai.json is left as it is."""
-        if not missing_lines(ai and ai.reader):
+        """A pass saved before key sentences had lines, shown with them; ai.json is left as it is.
+        A stale pass is left alone (its spans may have moved), and so is one whose paper cannot be
+        read: the lines only decorate the answer, so failing to find them must not fail it."""
+        if not missing_lines(ai and ai.reader) or store.ai_is_stale(paper_id, ai):
             return ai
-        with opened(paper_id) as pdf:
-            where = with_lines(ai.reader.where_to_look, build_index(store.read_source(paper_id)), pdf)
+        try:
+            with opened(paper_id) as pdf:
+                where = with_lines(ai.reader.where_to_look, build_index(store.read_source(paper_id)), pdf)
+        except Exception:
+            logger.exception("could not find the key sentences' lines for %s; answering without them", paper_id)
+            return ai
         return ai.model_copy(update={"reader": ai.reader.model_copy(update={"where_to_look": where})})
 
     def _turn_ai_off(paper_id: str) -> None:
