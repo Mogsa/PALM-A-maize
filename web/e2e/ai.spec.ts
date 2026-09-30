@@ -70,3 +70,26 @@ test("key sentences: highlighted on the paper, listed by slot, a jump each, and 
   await expect.poll(async () => (await (await request.get(`/api/papers/${paper}/board`)).json()).highlights.length)
     .toBe(before + 1);
 });
+
+test("Ask: a question answered from the paper, and its chip scrolls the paper to the line", async ({ page, request }) => {
+  const papers = (await (await request.get("/api/papers")).json()) as { paper_id: string }[];
+  paper = papers.find((p) => p.paper_id.includes("residual"))!.paper_id;
+  await putView(request, paper, { view: "paper", ai: true });
+
+  await page.goto("/");
+  await page.getByRole("combobox", { name: "Paper", exact: true }).selectOption(paper);
+  await page.getByRole("button", { name: "Commands (⌘K)" }).click();
+  await page.getByRole("dialog", { name: "Commands" }).getByRole("option", { name: "Ask", exact: true }).click();
+
+  const panel = page.getByRole("region", { name: "Ask" });
+  await panel.getByRole("textbox", { name: "Question" }).fill("Does going deeper help?");
+  await panel.getByRole("button", { name: "Send" }).click();
+  await expect(panel.getByText("Depth helps once residual learning removes the degradation problem")).toBeVisible();
+  const chip = panel.getByRole("button", { name: "p7" });
+  await expect(chip).toBeVisible();
+
+  const scroller = page.locator(".paper").first();
+  const top = await scroller.evaluate((el) => el.scrollTop);
+  await chip.click();
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(top);
+});
