@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import type { Highlight, PageRect } from "../model/types";
 import type { AiFile, AiTerm } from "./types";
-import { aiEntryFor, aiGlossary, aiTermAt, aiUnderlines, cardParts, keepTerm, slotSpans } from "./terms";
+import { aiEntryFor, aiGlossary, aiTermAt, aiUnderlines, cardParts, keepTerm } from "./terms";
 
 const at = (page: number, x0: number): PageRect => ({ page, rect: [x0, 10, x0 + 40, 20] });
 const g = (span: string, quote: string) => ({ span, quote, at: at(0, 0) });
@@ -50,13 +50,9 @@ describe("cardParts", () => {
   });
 });
 
-describe("aiGlossary and slotSpans", () => {
+describe("aiGlossary", () => {
   it("lists AI terms the reader has not kept", () => {
     expect(aiGlossary(file([term({}), term({ term: "shortcut" })]), ["Residual"]).map((e) => e.term)).toEqual(["shortcut"]);
-  });
-  it("gives a slot's spans, or null when the AI had nothing", () => {
-    expect(slotSpans(file([]), "Problem")?.spans).toHaveLength(1);
-    expect(slotSpans(file([]), "Evidence")).toBeNull();
   });
 });
 

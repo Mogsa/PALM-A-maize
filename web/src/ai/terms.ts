@@ -2,7 +2,7 @@ import { api } from "../api/client";
 import { newId } from "../model/ids";
 import type { Highlight, PageRect, Tag } from "../model/types";
 import { TERM_TAG_ID, termOf, termTagIds, type TermPart } from "../paper/term";
-import type { AiFile, Ground, SlotSpans } from "./types";
+import type { AiFile, Ground } from "./types";
 
 /** What the AI has on one word: from the pass, or from a quick definition. */
 export type AiEntry = { term: string; definedIn: Ground | null; explanation: string | null; grounds: Ground[] };
@@ -59,9 +59,6 @@ export function aiGlossary(ai: AiFile | null, keptTerms: string[]): AiGlossaryEn
     .map((t) => ({ term: t.term, explanation: t.explanation }))
     .sort((a, b) => a.term.localeCompare(b.term, undefined, { sensitivity: "base" }));
 }
-
-export const slotSpans = (ai: AiFile | null, slot: string): SlotSpans | null =>
-  ai?.reader?.where_to_look.find((s) => s.slot === slot && s.spans.length) ?? null;
 
 /** The tag Keep puts on: the term preset, or the reader's own tag named "term". */
 export function keepTagId(tags: Tag[]): string {

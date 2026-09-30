@@ -10,10 +10,12 @@
 .overlay .mark { position: absolute; background: var(--hl); mix-blend-mode: multiply; border-radius: 2px; }
 .overlay .mark.relocated { outline: 1px dashed var(--moved); outline-offset: 1px; }
 .overlay .mark.orphaned { background: var(--lost); opacity: 0.22; }
+/* a key sentence (AI): fainter than a reader's wash and dashed beneath, so it never passes for one of theirs */
+.overlay .key-sentence {
+  position: absolute; pointer-events: none; border-radius: 2px;
+  background: color-mix(in srgb, var(--key-colour) 16%, transparent); border-bottom: 1.5px dashed var(--key-colour);
+}
 .overlay .ai-term { position: absolute; border-bottom: 1.5px dotted var(--ink-faint); pointer-events: none; }
-/* where to look (spec B5): a slot's spans, dashed on the page they are on */
-.overlay .ai-outline { position: absolute; border: 1.5px dashed var(--ink-faint); border-radius: 3px; pointer-events: none; }
-.overlay .ai-outline .ai-badge { position: absolute; top: -9px; right: -6px; pointer-events: auto; background: var(--paper, #fff); }
 
 /* where the paper has been cut: one thin line in the left margin, faint along a piece still in the tray, solid in the
    accent along one out of it, a short tick at every start and end. A solid stretch is drawn after, so over a faint one. */

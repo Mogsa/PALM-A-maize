@@ -27,7 +27,17 @@
   --focus: rgba(47, 111, 237, 0.35);
   --ai: #7c3aed;                         /* a note pasted from an AI (D14) */
   --ai-tint: rgba(124, 58, 237, 0.08);
-  --dim: 0.3;                            /* opacity of what the tag filter dims */
+  /* a template slot's key sentences (by the slot's index): Tableau 10 without its yellow, which is a reader's highlight */
+  --slot-0: #4e79a7;
+  --slot-1: #f28e2b;
+  --slot-2: #59a14f;
+  --slot-3: #e15759;
+  --slot-4: #76b7b2;
+  --slot-5: #b07aa1;
+  --slot-6: #9c755f;
+  --slot-7: #ff9da7;
+  --slot-8: #bab0ac;
+  --dim: 0.3;                           /* opacity of what the tag filter dims */
   --ghost: 0.55;                         /* opacity of a tray ghost row */
 
   /* type */

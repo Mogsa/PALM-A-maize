@@ -1,5 +1,5 @@
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../api/client";
 import { NO_AI, type AiStatus } from "./types";
 import { AI_POLL_MS, AiProvider, useAi } from "./AiProvider";
@@ -19,6 +19,8 @@ function Probe() {
 }
 const mount = () => render(<AiProvider goTo={() => {}}><Probe /></AiProvider>);
 
+// The template names the slots, so key sentences can follow its order.
+beforeEach(() => { vi.spyOn(api, "getTemplate").mockResolvedValue({ schema: 1, slots: [{ name: "Problem", prompt: "" }, { name: "Method", prompt: "" }] }); });
 afterEach(() => {
   cleanup(); vi.restoreAllMocks(); vi.useRealTimers(); view.ai = false; setView.mockClear();
   flushView.mockReset(); flushView.mockImplementation(() => Promise.resolve());
@@ -29,7 +31,7 @@ describe("AiProvider", () => {
     const get = vi.spyOn(api, "getAi"); const run = vi.spyOn(api, "runAi");
     mount();
     await act(async () => {});
-    expect(get).not.toHaveBeenCalled(); expect(run).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled(); expect(run).not.toHaveBeenCalled(); expect(api.getTemplate).not.toHaveBeenCalled();
     expect(screen.getByTestId("has").textContent).toBe("no");
     expect(screen.queryByText(/AI/)).toBeNull();
   });
@@ -44,6 +46,17 @@ describe("AiProvider", () => {
     await waitFor(() => expect(screen.getByText("AI reading…")).toBeTruthy());
     await act(async () => finish(done));
     await waitFor(() => expect(screen.getByTestId("has").textContent).toBe("yes"));
+  });
+
+  it("gives the key sentences in the template's slot order", async () => {
+    view.ai = true;
+    const at = { page: 2, rect: [0, 0, 10, 10] as [number, number, number, number] };
+    const where = [{ slot: "Method", spans: [{ span: "s", quote: "We train.", at }] }, { slot: "Problem", spans: [{ span: "s", quote: "It degrades.", at }] }];
+    vi.spyOn(api, "getAi").mockResolvedValue({ ...done, ai: { ...done.ai!, reader: { ...done.ai!.reader!, where_to_look: where } } });
+    let slots: string[] = [];
+    function Slots() { slots = useAi().keySentences.map((g) => g.slot); return null; }
+    render(<AiProvider goTo={() => {}}><Slots /></AiProvider>);
+    await waitFor(() => expect(slots).toEqual(["Problem", "Method"]));
   });
 
   it("a failed pass is one plain line and turns AI off", async () => {
