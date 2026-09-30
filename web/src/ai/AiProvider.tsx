@@ -5,7 +5,7 @@ import type { PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
 import { aiCommands } from "./commands";
 import { defineAction } from "./defineAction";
-import { NO_AI, type AiFile, type AiStatus, type Definition, type SlotSpans } from "./types";
+import { NO_AI, type AiFile, type AiStatus, type Definition } from "./types";
 
 /** How often the status is re-read while a pass started elsewhere (another tab, before a reload) runs. */
 export const AI_POLL_MS = 3000;
@@ -15,7 +15,7 @@ export type AiContext = {
   /** The pass's answer, or null when AI help is off, has nothing yet, or is stale: everything AI reads this. */
   ai: AiFile | null;
   setOn: (on: boolean) => void; redo: () => void; addDefinition: (key: string, d: Definition) => void;
-  outlined: SlotSpans | null; toggleSlot: (slot: SlotSpans) => void; goTo: (at: PageRect) => void;
+  goTo: (at: PageRect) => void;
 };
 
 const Ctx = createContext<AiContext | null>(null);
@@ -27,7 +27,6 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
   const { paperId, view, setView, flushView } = useBoard();
   const on = view.ai;
   const [status, setStatus] = useState<AiStatus>(NO_AI);
-  const [outlined, setOutlined] = useState<SlotSpans | null>(null);
   const running = useRef(false);
 
   /** Spec B3: any error is one plain line and leaves AI help off. */
@@ -74,18 +73,12 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
     ? { ...s, ai: { ...s.ai, defined: { ...s.ai.defined, [key]: d } } }
     : { ...s, ai: { schema: 1, extracted_at: "", reader: null, defined: { [key]: d } } })), []);
 
-  const toggleSlot = useCallback((slot: SlotSpans) => {
-    setOutlined((current) => (current?.slot === slot.slot ? null : slot));
-    const first = slot.spans.find((g) => g.at)?.at;
-    if (first && outlined?.slot !== slot.slot) goTo(first);
-  }, [goTo, outlined]);
-
   const value = useMemo<AiContext>(() => ({
     on, status: on ? status.status : "none", message: status.message, stale: on && status.stale,
     ai: on && !status.stale ? status.ai : null,
-    setOn: (next) => { setOutlined(null); setView({ ai: next }); if (next) setStatus((s) => ({ ...s, message: null })); },
-    redo: () => void run(), addDefinition, outlined: on ? outlined : null, toggleSlot, goTo,
-  }), [on, status, setView, run, addDefinition, outlined, toggleSlot, goTo]);
+    setOn: (next) => { setView({ ai: next }); if (next) setStatus((s) => ({ ...s, message: null })); },
+    redo: () => void run(), addDefinition, goTo,
+  }), [on, status, setView, run, addDefinition, goTo]);
 
   useEffect(() => registerCommands(() => aiCommands({ on: value.on, setOn: value.setOn, redo: value.redo })),
     [value.on, value.setOn, value.redo]);

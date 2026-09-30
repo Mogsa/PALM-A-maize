@@ -1,5 +1,4 @@
 import type { AiUnderline } from "../ai/terms";
-import type { Ground } from "../ai/types";
 import type { Board, PageRect, Rect, Source, Tag } from "../model/types";
 import { useTags } from "../state/TagsProvider";
 import { mainTagColour } from "../tags/mainTag";
@@ -10,10 +9,7 @@ import type { JumpTarget } from "./margin";
 type Props = {
   page: number; scale: number; board: Board; source: Source;
   aiLines?: AiUnderline[];
-  /** Where to look (spec B5): the outlined slot's spans, dashed on their own page only. */
-  outlines?: Ground[];
   onOutlineClick: (nodeId: string) => void; onJump: (target: JumpTarget) => void; onOpenNote: (noteId: string) => void;
-  onOutlineGo?: (at: PageRect) => void;
 };
 
 const px = (rect: Rect, scale: number) => ({
@@ -35,7 +31,7 @@ function MarkExtras({ ids }: { ids: string[] }) {
 
 /** Marks and the cut ruler for one page. The overlay is pointer-events: none, so a drag anywhere over a page still
  *  selects the text underneath (fix round 1, finding 2); the ruler sits in the margin, off the text. */
-export function PageOverlay({ page, scale, board, source, aiLines = [], outlines = [], onOutlineClick, onJump, onOpenNote, onOutlineGo }: Props) {
+export function PageOverlay({ page, scale, board, source, aiLines = [], onOutlineClick, onJump, onOpenNote }: Props) {
   const { byId } = useTags();
   return (
     <div className="overlay">
@@ -49,11 +45,6 @@ export function PageOverlay({ page, scale, board, source, aiLines = [], outlines
         </div>
       )))}
       {aiLines.map((l, i) => <div key={`ai-${i}`} className="ai-term" style={px(l.at.rect, scale)} title="AI term" />)}
-      {outlines.filter((g) => g.at?.page === page).map((g, i) => (
-        <div key={`out-${i}`} className="ai-outline" style={px(g.at!.rect, scale)}>
-          <button type="button" className="ai-badge" onClick={() => onOutlineGo?.(g.at!)} title={g.quote}>AI</button>
-        </div>
-      ))}
       <Margin page={page} scale={scale} board={board} source={source} onJump={onJump} onOpenNote={onOpenNote} />
     </div>
   );

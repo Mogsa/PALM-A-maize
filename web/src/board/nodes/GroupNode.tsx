@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
-import { SlotPin } from "../../ai/SlotPin";
 import { newNote } from "../../model/notes";
 import type { GroupNode as GroupNodeType } from "../../model/types";
 import { useBoard } from "../../state/BoardProvider";
@@ -50,7 +49,6 @@ export function GroupNode({ id, data, selected }: NodeProps<GroupNodeType>) {
           {!hasNote(state.board.nodes, id) && (
             <button type="button" className="slot-prompt nodrag" onClick={answer} title="Answer it in a note of your own">{data.prompt}</button>
           )}
-          <SlotPin slot={data.name ?? ""} />
         </div>
       )}
       {data.tray && <TrayRows trayId={id} />}

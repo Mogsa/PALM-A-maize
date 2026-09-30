@@ -77,7 +77,7 @@ export function PaperView(props: Props) {
   const [ready, setReady] = useState(false);
   const pageWidth = usePageWidth(container, fit);
   const pdf = useRef<LinkDocument | null>(null);
-  const { ai, outlined, goTo } = useAi();
+  const { ai } = useAi();
   const { tags } = useTags();
   const citation = useCitationCard(pdf, source, paperId, hover);
   const termHover = useTermHover(container, source, board, hover, ai);
@@ -118,7 +118,6 @@ export function PaperView(props: Props) {
               <Page pageIndex={p.index} width={pageWidth} renderAnnotationLayer renderTextLayer {...findProps(p.index)} />
               <PageOverlay page={p.index} scale={pageWidth / p.width} board={board} source={source}
                            aiLines={aiUnderlines(ai, board.highlights.filter((h) => isTerm(h, termTagIds(tags))), p.index)}
-                           outlines={outlined?.spans ?? []} onOutlineGo={goTo}
                            onOutlineClick={onOutlineClick} onJump={onJump} onOpenNote={onOpenNote} />
               {flash?.page === p.index && <div className="focus-flash" style={flashStyle(flash, pageWidth / p.width)} />}
             </div>
