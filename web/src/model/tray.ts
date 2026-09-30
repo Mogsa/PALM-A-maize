@@ -3,6 +3,11 @@ import { trayOrder } from "./paperOrder";
 import type { XY } from "./reparent";
 import type { Board, BoardNode, GroupNode, Source, SplitDraft, TemplateFile } from "./types";
 
+/** Trays off everywhere (owner, 29-30 Sep 2026): a new board opens with the template only, a group marked tray is an
+ *  ordinary group (no ghost rows, no tray look, its pieces solid on the cut ruler, its chunks no different when a mark
+ *  picks its holder), and ⌘K has no "Add missing sections". The `tray` mark stays in the data. Set true to bring it all back. */
+export const TRAYS_ENABLED = false;
+
 export const TRAY_NAME = "Paper";
 export const TRAY_PAD = 20;
 export const TRAY_TOP = 48;                // below the group's name
@@ -19,8 +24,13 @@ export const SLOTS_OFFSET = 60;            // between the tray and the first col
 export const trayRow = (index: number): XY => ({ x: TRAY_PAD, y: TRAY_TOP + index * TRAY_STEP });
 export const trayHeight = (rows: number): number => TRAY_TOP + rows * TRAY_STEP + TRAY_PAD;
 
-export function findTray(nodes: BoardNode[]): GroupNode | undefined {
-  return nodes.find((n): n is GroupNode => n.type === "group" && n.data.tray === true);
+/** The tray is a group marked tray, while trays are on. */
+export function isTray(node: BoardNode, enabled = TRAYS_ENABLED): node is GroupNode {
+  return enabled && node.type === "group" && node.data.tray === true;
+}
+
+export function findTray(nodes: BoardNode[], enabled = TRAYS_ENABLED): GroupNode | undefined {
+  return nodes.find((n): n is GroupNode => isTray(n, enabled));
 }
 
 function newGroup(position: XY, width: number, height: number, data: GroupNode["data"]): GroupNode {
@@ -64,7 +74,7 @@ function leftOfEverything(nodes: BoardNode[]): XY {
 export function splitIntoTray(board: Board, drafts: SplitDraft[], source: Source): BoardNode[] {
   const order = trayOrder(source);
   const needed = trayHeight(order.length);
-  const existing = findTray(board.nodes);
+  const existing = findTray(board.nodes, true);   // split is the tray's own machinery: it finds the marked group regardless
   const tray = existing
     ? { ...existing, height: Math.max(existing.height ?? 0, needed) }
     : newGroup(leftOfEverything(board.nodes), TRAY_WIDTH, needed, { tags: [], name: TRAY_NAME, tray: true });

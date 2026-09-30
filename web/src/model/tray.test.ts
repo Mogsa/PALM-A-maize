@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  findTray, firstLayout, SLOT_GAP, SLOT_HEIGHT, SLOT_WIDTH, SLOTS_OFFSET, splitIntoTray,
-  TRAY_NAME, TRAY_PIECE_WIDTH, TRAY_WIDTH, trayHeight, trayRow,
+  findTray, firstLayout, isTray, SLOT_GAP, SLOT_HEIGHT, SLOT_WIDTH, SLOTS_OFFSET, splitIntoTray,
+  TRAY_NAME, TRAY_PIECE_WIDTH, TRAY_WIDTH, trayHeight, trayRow, TRAYS_ENABLED,
 } from "./tray";
 import { emptyBoard, type BoardNode, type GroupNode, type Rect, type Source, type SplitDraft, type TemplateFile } from "./types";
 
@@ -54,7 +54,25 @@ describe("split into the tray (D16)", () => {
     expect(made.id).not.toBe("n-g");
   });
   it("the tray is the first group marked tray", () => {
-    expect(findTray([{ ...tray(50), id: "n-a", data: { tags: [] } }, tray(50)])?.id).toBe("n-tray");
-    expect(findTray([])).toBeUndefined();
+    expect(findTray([{ ...tray(50), id: "n-a", data: { tags: [] } }, tray(50)], true)?.id).toBe("n-tray");
+    expect(findTray([], true)).toBeUndefined();
+  });
+  it("still grows the marked group when trays are off: split is the tray's own machinery", () => {
+    expect(splitIntoTray({ ...emptyBoard("p"), nodes: [tray(50)] }, [draft("sec-1", 100)], source)[0].id).toBe("n-tray");
+  });
+});
+
+describe("trays off (owner, 30 Sep 2026)", () => {
+  const marked: GroupNode = { id: "n-tray", type: "group", position: { x: 0, y: 0 }, data: { tags: [], name: TRAY_NAME, tray: true } };
+  it("are off everywhere", () => expect(TRAYS_ENABLED).toBe(false));
+  it("with trays off a group marked tray is no tray, and keeps its mark", () => {
+    expect(isTray(marked, false)).toBe(false);
+    expect(findTray([marked], false)).toBeUndefined();
+    expect(findTray([marked])).toBeUndefined();
+    expect(marked.data.tray).toBe(true);
+  });
+  it("with trays on it is the tray", () => {
+    expect(isTray(marked, true)).toBe(true);
+    expect(isTray({ ...marked, data: { tags: [] } }, true)).toBe(false);
   });
 });
