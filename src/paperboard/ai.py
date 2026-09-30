@@ -18,11 +18,14 @@ from paperboard.ai_model import (
     AiLogError,
     AiLogPrompt,
     Definition,
+    Ground,
     ReaderPass,
 )
+from paperboard.anchoring import PageIndex, find_quote, global_position, matched_lines
+from paperboard.board_model import QuoteSelector
 from paperboard.geometry import Rect
 from paperboard.grounding import ground_all, ground_pass, normalise
-from paperboard.source_model import SourceDocument
+from paperboard.source_model import PageRect, SourceDocument
 from paperboard.spans import Span, paper_spans, term_occurrences, words_by_page
 from paperboard.words import text_under
 
@@ -102,6 +105,17 @@ def run_pass(doc: SourceDocument, pdf: pymupdf.Document, slot_names: list[str], 
     reader = ReaderPass(model=READER_MODEL, made_at=datetime.now(UTC), terms=terms, where_to_look=where)
     _log(read.raw, reader.model_dump(mode="json"), None)
     return reader
+
+
+def quote_lines(ground: Ground, index: list[PageIndex], pdf: pymupdf.Document) -> list[PageRect]:
+    """A quote's printed lines, found the way a highlight's are re-found (anchoring),
+    so the page can draw it line by line. The model copies normalised words
+    ("difficult" where the PDF prints "difﬁcult", "learning" for "learn-\\ning"); the
+    fuzzy match takes them as they are. The position is the start of the span's page
+    so that, of two identical sentences, the one near the span wins. Empty when not found."""
+    page = ground.at.page if ground.at else 0
+    match = find_quote(index, QuoteSelector(exact=ground.quote), global_position(index, page, 0), page)
+    return (matched_lines(pdf, index, match) or []) if match else []
 
 
 def word_key(word: str) -> str:

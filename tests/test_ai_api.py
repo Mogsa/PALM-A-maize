@@ -2,8 +2,12 @@ import pytest
 from conftest import local_client
 from fake_claude import FakeClaude
 
+from paperboard.ai import quote_lines
 from paperboard.ai_client import AiError
+from paperboard.ai_model import Ground
+from paperboard.anchoring import build_index
 from paperboard.api import create_app
+from paperboard.source_model import PageRect
 from paperboard.spans import paper_spans
 from paperboard.store import Store
 
@@ -199,6 +203,41 @@ def test_ai_output_is_never_exported(store_root, paper):
     client.post(f"/api/papers/{pid}/ai")
     markdown = client.post(f"/api/papers/{pid}/export", json={"tags": []}).json()["markdown"]
     assert "Plain words." not in markdown
+
+
+LIGATURE = "Deeper neural networks are more difficult to train."   # printed "difﬁcult"
+WRAPPED = ("We explicitly reformulate the layers as learning residual functions with reference to the layer "
+           "inputs, instead of learning unreferenced functions.")   # three lines, two of them hyphenated
+
+
+def _lines(store, pid, spans, quote, span_id="p1-r8"):
+    by_id = {s.id: s for s in spans}
+    ground = Ground(span=span_id, quote=quote, at=PageRect(page=by_id[span_id].page, rect=by_id[span_id].rect))
+    import pymupdf
+    with pymupdf.open(store.pdf_path(pid)) as pdf:
+        return quote_lines(ground, build_index(store.read_source(pid)), pdf)
+
+
+def test_a_one_line_quote_with_a_ligature_has_its_line(store_root, paper):
+    store, pid, spans = paper
+    [line] = _lines(store, pid, spans, LIGATURE)
+    span = next(s for s in spans if s.id == "p1-r8")
+    assert line.page == 0 and span.rect[1] <= line.rect[1] < line.rect[3] <= span.rect[3]
+
+
+def test_a_quote_that_wraps_has_one_rect_per_line_in_reading_order(store_root, paper):
+    store, pid, spans = paper
+    lines = _lines(store, pid, spans, WRAPPED)
+    assert len(lines) == 3 and {line.page for line in lines} == {0}
+    assert [line.rect[1] for line in lines] == sorted(line.rect[1] for line in lines)
+    span = next(s for s in spans if s.id == "p1-r8")
+    # It starts after "previously." and stops before "We provide": the sentence's words, not whole lines.
+    assert lines[0].rect[0] > span.rect[0] + 20 and lines[-1].rect[2] < span.rect[2] - 20
+
+
+def test_a_quote_the_paper_does_not_have_has_no_lines(store_root, paper):
+    store, pid, spans = paper
+    assert _lines(store, pid, spans, "Protein folding is solved by attention alone, we claim.") == []
 
 
 def test_an_ai_pass_never_clears_a_question(store_root, paper):
