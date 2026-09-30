@@ -6,6 +6,7 @@ import type { PaperViewState } from "../model/paperView";
 import type { AiStatus, DefineLine, DefineRequest, Definition } from "../ai/types";
 import { NO_AI } from "../ai/types";
 import { readNdjson } from "../ai/ndjson";
+import type { ActivityEvent } from "../activity/types";
 
 /** One method per route of SPEC-ADDENDUM.md section 6. */
 
@@ -162,6 +163,14 @@ export const api = {
     if (failure || !result) throw new Error(failure ?? "AI help could not run: the answer stopped early");
     return result;
   },
+
+  /** Appends to the paper's activity log (activity log spec). `keepalive` lets a send on pagehide outlive the page;
+   *  fetch, not sendBeacon, so the Paperboard header goes too. */
+  postActivity: (id: string, events: ActivityEvent[], { keepalive = false }: { keepalive?: boolean } = {}) =>
+    call<void>(`${paper(id)}/activity`, { method: "POST", keepalive, body: JSON.stringify({ events }) }),
+  /** The log's last `limit` events, oldest first. */
+  getActivity: async (id: string, limit: number): Promise<ActivityEvent[]> =>
+    (await call<{ events: ActivityEvent[] }>(`${paper(id)}/activity?limit=${limit}`)).events,
 
   getTags: () => call<TagFile>("/api/tags"),
   putTags: (tags: TagFile) => send<TagFile>("PUT", "/api/tags", tags),

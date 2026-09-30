@@ -1,6 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "./client";
 
+describe("api, activity log", () => {
+  const events = [{ t: "2026-09-30T10:00:00.000Z", kind: "read" as const, action: "view", detail: { view: "board" } }];
+
+  it("postActivity sends the events with the Paperboard header, keepalive when asked", async () => {
+    const fn = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fn);
+    await api.postActivity("p", events, { keepalive: true });
+    const { url, init, body } = lastCall(fn);
+    expect(url).toBe("/api/papers/p/activity");
+    expect(init).toMatchObject({ method: "POST", keepalive: true });
+    expect((init.headers as Record<string, string>)["X-Paperboard"]).toBe("1");
+    expect(body).toEqual({ events });
+    await api.postActivity("p", events);
+    expect(lastCall(fn).init.keepalive).toBe(false);
+  });
+
+  it("postActivity throws on a refusal", async () => {
+    mockFetch(400, { error: { code: "bad_activity", message: "no" } });
+    await expect(api.postActivity("p", events)).rejects.toMatchObject({ code: "bad_activity" });
+  });
+
+  it("getActivity reads the last `limit` events", async () => {
+    const fn = mockFetch(200, { events });
+    expect(await api.getActivity("p", 500)).toEqual(events);
+    expect(lastCall(fn).url).toBe("/api/papers/p/activity?limit=500");
+  });
+});
+
 function mockFetch(status: number, body: unknown) {
   const fn = vi.fn(async () => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
   vi.stubGlobal("fetch", fn);
