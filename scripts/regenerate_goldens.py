@@ -10,9 +10,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "tests"))
 
-from conftest import FIXTURES, GOLDEN_DIR  # noqa: E402
+from conftest import FIXTURES, GOLDEN_DIR
 
-from paperboard.extract import extract  # noqa: E402
+from paperboard.extract import extract
 
 
 def summarise(document) -> dict:
