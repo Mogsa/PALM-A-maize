@@ -59,6 +59,23 @@ describe("AiProvider", () => {
     await waitFor(() => expect(slots).toEqual(["Problem", "Method"]));
   });
 
+  it("redo reads the template again, so slots renamed or reordered since keep their order and colours", async () => {
+    view.ai = true;
+    const at = { page: 2, rect: [0, 0, 10, 10] as [number, number, number, number] };
+    const where = [{ slot: "Method", spans: [{ span: "s", quote: "We train.", at }] }, { slot: "Problem", spans: [{ span: "s", quote: "It degrades.", at }] }];
+    const status = { ...done, ai: { ...done.ai!, reader: { ...done.ai!.reader!, where_to_look: where } } };
+    vi.spyOn(api, "getAi").mockResolvedValue(status);
+    vi.spyOn(api, "runAi").mockResolvedValue(status);
+    let ai: ReturnType<typeof useAi> | null = null;
+    function Slots() { ai = useAi(); return null; }
+    render(<AiProvider goTo={() => {}}><Slots /></AiProvider>);
+    await waitFor(() => expect(ai!.keySentences.map((g) => g.slot)).toEqual(["Problem", "Method"]));
+    vi.mocked(api.getTemplate).mockResolvedValue({ schema: 1, slots: [{ name: "Method", prompt: "" }, { name: "Problem", prompt: "" }] });
+    await act(async () => ai!.redo());
+    await waitFor(() => expect(ai!.keySentences.map((g) => g.slot)).toEqual(["Method", "Problem"]));
+    expect(api.getTemplate).toHaveBeenCalledTimes(2);
+  });
+
   it("a failed pass is one plain line and turns AI off", async () => {
     view.ai = true;
     vi.spyOn(api, "getAi").mockResolvedValue(NO_AI);

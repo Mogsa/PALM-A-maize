@@ -65,11 +65,12 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
   }, [on, paperId, run, fail, flushView]);
 
   // The template orders and colours the key sentences. Without it they keep the pass's order, so it is not a failure.
-  useEffect(() => {
-    if (!on) return;
+  // Read when AI help turns on and again on every redo: slots renamed or reordered since must match the new pass.
+  const readSlotNames = useCallback(() => {
     api.getTemplate().then((t) => setSlotNames(t.slots.map((s) => s.name)),
       (error: unknown) => console.error("Could not read the template; key sentences keep the AI's order", error));
-  }, [on]);
+  }, []);
+  useEffect(() => { if (on) readSlotNames(); }, [on, readSlotNames]);
 
   useEffect(() => {   // a pass this tab did not start: wait for it
     if (!on || status.status !== "running" || running.current) return;
@@ -89,9 +90,9 @@ export function AiProvider({ children, goTo }: { children: ReactNode; goTo: (at:
     return {
       on, status: on ? status.status : "none", message: status.message, stale: on && status.stale, ai,
       setOn: (next) => { setView({ ai: next }); if (next) setStatus((s) => ({ ...s, message: null })); },
-      redo: () => void run(), addDefinition, goTo, keySentences: keySentences(ai, slotNames),
+      redo: () => { readSlotNames(); void run(); }, addDefinition, goTo, keySentences: keySentences(ai, slotNames),
     };
-  }, [on, status, setView, run, addDefinition, goTo, slotNames]);
+  }, [on, status, setView, run, readSlotNames, addDefinition, goTo, slotNames]);
 
   useEffect(() => registerCommands(() => aiCommands({ on: value.on, setOn: value.setOn, redo: value.redo })),
     [value.on, value.setOn, value.redo]);
