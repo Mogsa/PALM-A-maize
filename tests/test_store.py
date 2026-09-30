@@ -286,6 +286,14 @@ def test_a_view_is_written_to_its_own_file_and_read_back(store_root):
     assert store.read_view(paper_id) == view
 
 
+def test_a_view_file_from_before_the_activity_log_reads_with_the_log_on(store_root):
+    store = Store(store_root)
+    paper_id = store.list_papers()[0].paper_id
+    (store.paper_dir(paper_id) / "view.json").write_text(json.dumps({"view": "both", "ai": True}))
+    view = store.read_view(paper_id)
+    assert (view.view, view.ai, view.log) == ("both", True, True)
+
+
 def test_a_view_for_an_unknown_paper_is_refused(store_root):
     with pytest.raises(PaperNotFound):
         Store(store_root).read_view("no-such-paper")

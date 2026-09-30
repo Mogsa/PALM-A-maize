@@ -225,6 +225,8 @@ class ViewState(BaseModel):
     split: float = Field(default=SPLIT_DEFAULT, ge=SPLIT_MIN, le=SPLIT_MAX)
     # AI help (spec B2): off unless the reader turns it on, per paper.
     ai: bool = False
+    # Activity log: on unless the reader turns it off, per paper. Off, the client sends nothing.
+    log: bool = True
 
 
 VIEW_KEYS = ("view", "paper_scroll", "active_tags", "viewport")

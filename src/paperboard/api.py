@@ -11,11 +11,18 @@ from typing import Annotated, Literal
 
 import pymupdf
 from fastapi import FastAPI, File, Header, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from paperboard.activity import (
+    DEFAULT_READ_LIMIT,
+    MAX_ACTIVITY_BYTES,
+    MAX_READ_LIMIT,
+    ActivityBatch,
+)
 from paperboard.ai import (
     DEFINER_SYSTEM,
     WordNotHere,
@@ -356,6 +363,26 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
         with view_lock:
             store.write_view(paper_id, view)
         return Response(status_code=204)
+
+    # -- activity log -------------------------------------------------------
+
+    @app.post("/api/papers/{paper_id}/activity", status_code=204)
+    async def post_activity(paper_id: str, request: Request):
+        # Read raw, not as a typed body: the spec answers every bad shape with 400, and
+        # a body over the limit is refused before it is parsed at all.
+        body = await request.body()
+        if len(body) > MAX_ACTIVITY_BYTES:
+            return _error(400, "too_large", f"an activity request is at most {MAX_ACTIVITY_BYTES} bytes")
+        try:
+            batch = ActivityBatch.model_validate_json(body)
+        except ValidationError as exc:
+            return _error(400, "invalid", str(exc.errors()[0].get("msg", "invalid activity")))
+        await run_in_threadpool(store.append_activity, paper_id, batch.events)
+        return Response(status_code=204)
+
+    @app.get("/api/papers/{paper_id}/activity")
+    def get_activity(paper_id: str, limit: Annotated[int, Query(ge=1)] = DEFAULT_READ_LIMIT):
+        return {"events": store.read_activity(paper_id, min(limit, MAX_READ_LIMIT))}
 
     # -- notes --------------------------------------------------------------
 
