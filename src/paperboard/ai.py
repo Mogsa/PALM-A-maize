@@ -22,9 +22,16 @@ from paperboard.ai_model import (
     ReaderPass,
     SlotSpans,
 )
-from paperboard.anchoring import PageIndex, build_index, find_quote, global_position, matched_lines
+from paperboard.anchoring import (
+    Match,
+    PageIndex,
+    build_index,
+    find_quote,
+    global_position,
+    matched_lines,
+)
 from paperboard.board_model import QuoteSelector
-from paperboard.geometry import Rect
+from paperboard.geometry import Rect, contains_point, midpoint
 from paperboard.grounding import ground_all, ground_pass, normalise
 from paperboard.source_model import PageRect, SourceDocument
 from paperboard.spans import Span, paper_spans, term_occurrences, words_by_page
@@ -114,11 +121,22 @@ def quote_lines(ground: Ground, index: list[PageIndex], pdf: pymupdf.Document) -
     """A quote's printed lines, found the way a highlight's are re-found (anchoring),
     so the page can draw it line by line. The model copies normalised words
     ("difficult" where the PDF prints "difﬁcult", "learning" for "learn-\\ning"); the
-    fuzzy match takes them as they are. The position is the start of the span's page
-    so that, of two identical sentences, the one near the span wins. Empty when not found."""
+    fuzzy match takes them as they are. A match counts only when its first and last
+    lines lie inside the cited span (`at`), so a like sentence elsewhere is never
+    taken. Empty when not found there."""
     page = ground.at.page if ground.at else 0
-    match = find_quote(index, QuoteSelector(exact=ground.quote), global_position(index, page, 0), page)
+
+    def in_span(match: Match) -> bool:
+        lines = matched_lines(pdf, index, match)
+        return ground.at is None or (bool(lines) and _in_rect(lines[0], ground.at) and _in_rect(lines[-1], ground.at))
+
+    match = find_quote(index, QuoteSelector(exact=ground.quote), global_position(index, page, 0), page, accept=in_span)
     return (matched_lines(pdf, index, match) or []) if match else []
+
+
+def _in_rect(line: PageRect, span: PageRect) -> bool:
+    """The line's midpoint inside the span's rect, on its page: the containment test chunks use."""
+    return line.page == span.page and contains_point(span.rect, *midpoint(line.rect))
 
 
 def with_lines(where: list[SlotSpans], index: list[PageIndex], pdf: pymupdf.Document) -> list[SlotSpans]:

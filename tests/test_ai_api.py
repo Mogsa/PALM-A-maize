@@ -240,6 +240,13 @@ def test_a_quote_the_paper_does_not_have_has_no_lines(store_root, paper):
     assert _lines(store, pid, spans, "Protein folding is solved by attention alone, we claim.") == []
 
 
+def test_a_quote_is_found_only_inside_its_own_span(store_root, paper):
+    """The same words elsewhere on the paper are not the cited sentence: with the span of another paragraph,
+    a quote found only outside it has no lines."""
+    store, pid, spans = paper
+    assert _lines(store, pid, spans, WRAPPED, span_id="p1-r15") == []
+
+
 def _key_sentence_answer():
     return {"terms": [], "where_to_look": [{"slot": "Problem", "spans": [{"span": "p1-r8", "quote": WRAPPED}]}]}
 
