@@ -110,15 +110,19 @@ const draft = { type: "chunk" as const, position: { x: 0, y: 0 },
 const groups = () => ctx!.state.board.nodes.filter((n) => n.type === "group");
 
 describe("BoardProvider, first open (D15)", () => {
-  it("lays out a new board once under StrictMode, as one undo step, with the template's slots and no tray", async () => {
+  it("lays out a new board once under StrictMode, as one undo step: the Paper group with its pieces, no slots", async () => {
     // StrictMode runs the load effect twice, so the board is fetched twice; the layout must land once.
     vi.mocked(api.getBoard).mockResolvedValueOnce(emptyBoard("p")).mockResolvedValueOnce(emptyBoard("p"));
+    const q = { exact: "x", prefix: "", suffix: "" };
+    const region = { rects: [{ page: 0, rect: [0, 0, 10, 10] }], start: q, end: q, position: 0, state: "anchored" };
+    const draft = { type: "chunk", position: { x: 0, y: 0 }, data: { tags: [], collapsed: true, region, blocks: [], user_sized: false, source_id: "s-1" } };
+    vi.mocked(api.split).mockResolvedValue({ nodes: [draft as never] });
     render(<StrictMode><BoardProvider paperId="p"><Probe /></BoardProvider></StrictMode>);
     await waitFor(() => expect(ctx).not.toBeNull());
-    expect(groups().map((g) => g.data)).toEqual([{ tags: [], name: "Main point", prompt: "What is it?" }]);
-    expect(ctx!.state.board.nodes.filter((n) => n.type === "chunk")).toHaveLength(0);
+    await waitFor(() => expect(groups()).toHaveLength(1));
+    expect(groups().map((g) => g.data)).toEqual([{ tags: [], name: "Paper", tray: true }]);
+    expect(ctx!.state.board.nodes.filter((n) => n.type === "chunk")).toHaveLength(1);
     expect(ctx!.state.history.past).toHaveLength(1);
-    expect(api.split).not.toHaveBeenCalled();
   });
   it("never lays out a saved board, even an empty one", async () => {
     render(<BoardProvider paperId="p"><Probe /></BoardProvider>);

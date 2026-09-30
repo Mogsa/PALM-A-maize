@@ -22,10 +22,10 @@ describe("the cut ruler in the paper's margin", () => {
     const { stretches } = pageRuler(board(nodes), source, 0, true);
     expect(stretches.map((s) => [s.nodeId, s.tray])).toEqual([["n-in", true], ["n-out", false], ["n-cut", false]]);
   });
-  it("with trays off, a piece in the Paper group is an ordinary placed piece: solid, drawn in board order", () => {
+  it("with trays off a piece in the Paper group is an ordinary placed piece, solid, in board order; by default it is faint and first", () => {
     const nodes = [tray, piece("n-placed", [at(0, 100, 300)]), piece("n-in", [at(0, 200, 400)], { parentId: "n-tray" })];
     expect(pageRuler(board(nodes), source, 0, false).stretches.map((s) => [s.nodeId, s.tray])).toEqual([["n-placed", false], ["n-in", false]]);
-    expect(pageRuler(board(nodes), source, 0).stretches.every((s) => !s.tray)).toBe(true);
+    expect(pageRuler(board(nodes), source, 0).stretches.map((s) => [s.nodeId, s.tray])).toEqual([["n-in", true], ["n-placed", false]]);
   });
   it("spans exactly from the piece's first line to its last on the page, with a tick at each end", () => {
     const ruler = pageRuler(board([piece("n-1", [at(0, 300, 312), at(0, 140, 152), at(0, 200, 212)])]), source, 0);

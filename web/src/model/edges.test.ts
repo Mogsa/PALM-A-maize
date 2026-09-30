@@ -84,11 +84,11 @@ describe("resolveEdges", () => {
     ])("%s", (_, holders, expected) => {
       expect(chunkHolder(holders, true)(mark("h-left", IN_LEFT))?.id).toBe(expected);
     });
-    it("with trays off the Paper group is an ordinary group: its smaller, first chunk draws the end", () => {
+    it("with trays off the Paper group is an ordinary group and its smaller, first chunk draws the end; by default the reader's chunk does", () => {
       const holders = [tray, inside(chunk("n-in-tray", SMALL), "n-tray"), chunk("n-reader", WIDE)];
       expect(chunkHolder(holders, false)(mark("h-left", IN_LEFT))?.id).toBe("n-in-tray");
       const b = board([...holders, note("n-note")], [mark("h-left", IN_LEFT)], [edge("e-1", "h-left", "n-note")]);
-      expect(ends(b)[0]).toMatchObject({ source: "n-in-tray", sourceHandle: "h-left" });
+      expect(ends(b)[0]).toMatchObject({ source: "n-reader", sourceHandle: "h-left" });
     });
   });
 

@@ -135,8 +135,7 @@ test("⌘K lists every command, and ? opens the shortcuts (A1)", async ({ page }
   await page.getByRole("button", { name: "Commands (⌘K)" }).click();
   const options = page.getByRole("dialog", { name: "Commands" }).getByRole("option");
   // "Turn AI help on" is Part B's ⌘K entry (spec B2, B3a), merged in after this plan was written; AI itself stays off.
-  // No "Add missing sections": trays are off (TRAYS_ENABLED).
-  await expect(options).toHaveText(["Export", "Tags", "Template", "New note", "Find in paper", "Shortcuts", "Activity", "Turn activity log off", "Turn AI help on", "Agent notes"]);
+  await expect(options).toHaveText(["Export", "Tags", "Template", "Add missing sections", "New note", "Find in paper", "Shortcuts", "Activity", "Turn activity log off", "Turn AI help on", "Agent notes"]);
   await page.keyboard.press("Escape");
   await page.locator("body").press("?");
   await expect(page.getByRole("dialog", { name: "Shortcuts" })).toBeVisible();

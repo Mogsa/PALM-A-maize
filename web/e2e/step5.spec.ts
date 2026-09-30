@@ -148,31 +148,36 @@ async function writeExport(page: Page): Promise<string> {
 
 // ---- Attention: first open, the template, blocks, links ---------------------------------------------------------
 
-test("first open shows the nine slots and no tray, and one Cmd-Z takes the whole layout back", async ({ page }) => {
+test("first open shows the Paper group holding the paper's pieces and none of the template's slots, and one Cmd-Z takes the whole layout back", async ({ page }) => {
   expect((await boardOf(page.request, attention)).version).toBe(0);
   const template: Json = await (await page.request.get("/api/template")).json();
   expect(template.slots).toHaveLength(9);
   await open(page, attention);
   await showBoard(page);
-  await expect(page.locator(".node.group.slot")).toHaveCount(9);
-  await expect(page.locator(".slot-prompt")).toHaveCount(9);
-  await expect(page.locator(".node.group.tray")).toHaveCount(0);
-  await expect(page.locator(".node.chunk")).toHaveCount(0);
+  await expect(page.locator(".node.group.tray")).toHaveCount(1);
+  expect(await page.locator(".node.chunk").count()).toBeGreaterThan(0);
+  await expect(page.locator(".node.group.slot")).toHaveCount(0);
+  await expect(page.locator(".slot-prompt")).toHaveCount(0);
   await expect.poll(async () => (await boardOf(page.request, attention)).version).toBeGreaterThan(0);
+  const placed = (await boardOf(page.request, attention)).nodes.length;
 
   await page.keyboard.press("ControlOrMeta+z");
   await expect(page.locator(".react-flow__node")).toHaveCount(0);
   await page.keyboard.press("ControlOrMeta+Shift+z");
-  await expect(page.locator(".node.group.slot")).toHaveCount(9);
-  await expect.poll(async () => (await boardOf(page.request, attention)).nodes.length).toBe(9);
+  await expect(page.locator(".node.group.tray")).toHaveCount(1);
+  await expect.poll(async () => (await boardOf(page.request, attention)).nodes.length).toBe(placed);
 });
 
 test("in the paper view the hidden board's slots neither show nor take the paper's clicks", async ({ page }) => {
-  // The laid-out board of first open, saved in the paper view at zoom 1, so the slots sit over the paper's first page.
+  // The template's nine slots added to the board, saved in the paper view at zoom 1, so they sit over the paper's first page.
+  const template: Json = await (await page.request.get("/api/template")).json();
+  const slotNodes = template.slots.map((slot: Json, i: number) => ({
+    id: `n-slot-${i}`, type: "group", position: { x: (i % 3) * 424, y: Math.floor(i / 3) * 324 }, width: 400, height: 300,
+    data: { tags: [], name: slot.name, prompt: slot.prompt },
+  }));
   const laidOut = await boardOf(page.request, attention);
-  expect(laidOut.nodes.filter((n: Json) => n.type === "group" && n.data.prompt)).toHaveLength(9);
   const put = await page.request.put(`/api/papers/${attention}/board`, {
-    data: laidOut, headers: { "If-Match": String(laidOut.version), ...WRITE },
+    data: { ...laidOut, nodes: [...laidOut.nodes, ...slotNodes] }, headers: { "If-Match": String(laidOut.version), ...WRITE },
   });
   expect(put.ok()).toBeTruthy();
   await putView(page.request, attention, { viewport: { x: 0, y: 0, zoom: 1 } });

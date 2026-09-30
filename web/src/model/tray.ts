@@ -3,10 +3,13 @@ import { trayOrder } from "./paperOrder";
 import type { XY } from "./reparent";
 import type { Board, BoardNode, GroupNode, Source, SplitDraft, TemplateFile } from "./types";
 
-/** Trays off everywhere (owner, 29-30 Sep 2026): a new board opens with the template only, a group marked tray is an
- *  ordinary group (no ghost rows, no tray look, its pieces solid on the cut ruler, its chunks no different when a mark
- *  picks its holder), and ⌘K has no "Add missing sections". The `tray` mark stays in the data. Set true to bring it all back. */
-export const TRAYS_ENABLED = false;
+/** The Paper group of pre-cut sections is on (owner, 30 Sep 2026): a new board opens with every section and figure
+ *  in it, ready to drag out, and ⌘K has "Add missing sections". Set false to make a group marked tray an ordinary
+ *  group and open a new board without it. */
+export const TRAYS_ENABLED = true;
+/** The template's nine empty question slots, in a grid beside the Paper group (D15): off (owner, 30 Sep 2026). The
+ *  template file stays, for Key sentences' slot names and order. Set true to lay the grid out on first open again. */
+export const TEMPLATE_ON_FIRST_OPEN = false;
 
 export const TRAY_NAME = "Paper";
 export const TRAY_PAD = 20;
@@ -57,11 +60,14 @@ export function templateLayout(template: TemplateFile): GroupNode[] {
   return slotGroups(template, 0);
 }
 
-/** First open (D15): the tray on the left holding every piece, the template's slots in a grid to its right. */
-export function firstLayout(drafts: SplitDraft[], template: TemplateFile, source: Source): BoardNode[] {
+/** First open (D15): the tray on the left holding every piece and, only with TEMPLATE_ON_FIRST_OPEN, the template's
+ *  slots in a grid to its right. */
+export function firstLayout(drafts: SplitDraft[], template: TemplateFile, source: Source,
+                            withTemplate = TEMPLATE_ON_FIRST_OPEN): BoardNode[] {
   const order = trayOrder(source);
   const tray = newGroup({ x: 0, y: 0 }, TRAY_WIDTH, trayHeight(order.length), { tags: [], name: TRAY_NAME, tray: true });
-  return [tray, ...placeInTray(drafts, order, tray.id), ...slotGroups(template, TRAY_WIDTH + SLOTS_OFFSET)];
+  const slots = withTemplate ? slotGroups(template, TRAY_WIDTH + SLOTS_OFFSET) : [];
+  return [tray, ...placeInTray(drafts, order, tray.id), ...slots];
 }
 
 function leftOfEverything(nodes: BoardNode[]): XY {

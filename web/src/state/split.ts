@@ -7,8 +7,8 @@ import type { Board, BoardNode, Source } from "../model/types";
 export const CLIP_FAILED_MESSAGE = (count: number) =>
   `${count} figure image${count === 1 ? "" : "s"} could not be made. Cut ${count === 1 ? "it" : "them"} again from the paper.`;
 
-/** First open (D15): every section and figure from the server, and the template, laid out; with trays off
- *  (TRAYS_ENABLED), the template alone. Writes nothing. */
+/** First open (D15): every section and figure from the server in the Paper group, and the template's grid only when
+ *  TEMPLATE_ON_FIRST_OPEN; with trays off (TRAYS_ENABLED), the template alone. Writes nothing. */
 export async function planFirstOpen(paperId: string, source: Source): Promise<BoardNode[]> {
   if (!TRAYS_ENABLED) return templateLayout(await api.getTemplate());
   const [{ nodes: drafts }, template] = await Promise.all([api.split(paperId), api.getTemplate()]);

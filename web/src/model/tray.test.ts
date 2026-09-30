@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   findTray, firstLayout, isTray, SLOT_GAP, SLOT_HEIGHT, SLOT_WIDTH, SLOTS_OFFSET, splitIntoTray,
-  TRAY_NAME, TRAY_PIECE_WIDTH, TRAY_WIDTH, trayHeight, trayRow, TRAYS_ENABLED,
+  TEMPLATE_ON_FIRST_OPEN, TRAY_NAME, TRAY_PIECE_WIDTH, TRAY_WIDTH, trayHeight, trayRow, TRAYS_ENABLED,
 } from "./tray";
 import { emptyBoard, type BoardNode, type GroupNode, type Rect, type Source, type SplitDraft, type TemplateFile } from "./types";
 
@@ -21,13 +21,17 @@ const template: TemplateFile = { schema: 1, slots: Array.from({ length: 9 }, (_,
 const sourceId = (n: BoardNode) => (n.data as { source_id?: string }).source_id;
 
 describe("first layout (D15, addendum 4.9)", () => {
-  it("is the tray, its pieces at their paper-order rows, then nine slots in three columns to its right", () => {
+  it("is the tray, its pieces at their paper-order rows, and no slots: the template's grid is off (owner, 30 Sep 2026)", () => {
     const [tray, ...rest] = firstLayout([draft("sec-2", 400), draft("fig-1", 250, "figure"), draft("sec-1", 100)], template, source);
     expect(tray).toMatchObject({ type: "group", position: { x: 0, y: 0 }, width: TRAY_WIDTH, height: trayHeight(3), data: { name: TRAY_NAME, tray: true } });
     const pieces = rest.filter((n) => n.parentId === tray.id);
     expect(pieces.map(sourceId)).toEqual(["sec-2", "fig-1", "sec-1"]);
     expect(pieces.map((n) => n.position)).toEqual([trayRow(2), trayRow(1), trayRow(0)]);
     expect(pieces.every((n) => n.width === TRAY_PIECE_WIDTH && n.id.startsWith("n-"))).toBe(true);
+    expect(rest.filter((n) => n.type === "group")).toEqual([]);
+  });
+  it("with the template on, the nine slots sit in three columns to the tray's right", () => {
+    const [tray, ...rest] = firstLayout([draft("sec-1", 100)], template, source, true);
     const slots = rest.filter((n): n is GroupNode => n.type === "group");
     expect(slots).toHaveLength(9);
     expect(slots[0]).toMatchObject({ position: { x: TRAY_WIDTH + SLOTS_OFFSET, y: 0 }, width: SLOT_WIDTH, height: SLOT_HEIGHT, data: { name: "Slot 0", prompt: "Question 0?" } });
@@ -62,13 +66,16 @@ describe("split into the tray (D16)", () => {
   });
 });
 
-describe("trays off (owner, 30 Sep 2026)", () => {
+describe("the flags (owner, 30 Sep 2026)", () => {
   const marked: GroupNode = { id: "n-tray", type: "group", position: { x: 0, y: 0 }, data: { tags: [], name: TRAY_NAME, tray: true } };
-  it("are off everywhere", () => expect(TRAYS_ENABLED).toBe(false));
-  it("with trays off a group marked tray is no tray, and keeps its mark", () => {
+  it("the tray is on and the template's grid is off", () => {
+    expect(TRAYS_ENABLED).toBe(true);
+    expect(TEMPLATE_ON_FIRST_OPEN).toBe(false);
+  });
+  it("with trays off a group marked tray is no tray, and keeps its mark; by default it is the tray", () => {
     expect(isTray(marked, false)).toBe(false);
     expect(findTray([marked], false)).toBeUndefined();
-    expect(findTray([marked])).toBeUndefined();
+    expect(findTray([marked])).toBe(marked);
     expect(marked.data.tray).toBe(true);
   });
   it("with trays on it is the tray", () => {

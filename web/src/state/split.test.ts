@@ -13,11 +13,14 @@ const figure = (id: string, clip: string | null = null): BoardNode => ({ id, typ
 beforeEach(() => { vi.clearAllMocks(); vi.spyOn(console, "error").mockImplementation(() => undefined); });
 
 describe("first open and split", () => {
-  it("planFirstOpen lays out only the template's slots: no tray, and split is not asked", async () => {
+  it("planFirstOpen lays out the Paper group with the server's pieces, and none of the template's slots", async () => {
     vi.mocked(api.getTemplate).mockResolvedValue({ schema: 1, slots: [{ name: "A", prompt: "a?" }, { name: "B", prompt: "b?" }] });
-    const nodes = await planFirstOpen("p", source);
-    expect(nodes.map((n) => n.type === "group" && n.data.prompt)).toEqual(["a?", "b?"]);
-    expect(api.split).not.toHaveBeenCalled();
+    const draft = { type: "chunk", position: { x: 0, y: 0 }, data: { tags: [], collapsed: true, region, blocks: [], user_sized: false, source_id: "s-1" } };
+    vi.mocked(api.split).mockResolvedValue({ nodes: [draft as never] });
+    const [tray, ...rest] = await planFirstOpen("p", source);
+    expect(tray).toMatchObject({ type: "group", data: { name: "Paper", tray: true } });
+    expect(rest.map((n) => [n.type, n.parentId])).toEqual([["chunk", tray.id]]);
+    expect(api.split).toHaveBeenCalledWith("p");
   });
   it("planSplit saves pending changes before asking the server, and adds nothing when nothing is missing", async () => {
     const order: string[] = [];
