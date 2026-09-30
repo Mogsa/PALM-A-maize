@@ -271,6 +271,20 @@ def test_get_fills_lines_for_a_pass_saved_without_them_and_writes_nothing(store_
     assert fake.calls == [] and store.read_ai(pid).reader.where_to_look[0].spans[0].lines == []
 
 
+def test_the_e2e_canned_answer_keeps_every_key_sentence_with_its_lines(store_root, paper):
+    """The e2e suite's key sentences are real: each survives grounding and is found on the page."""
+    from pathlib import Path
+
+    from paperboard.canned_claude import CannedClaude
+    _, pid, _ = paper
+    canned = CannedClaude(Path(__file__).parents[1] / "web" / "e2e" / "fake-claude.json")
+    client = _client(store_root, canned)
+    _turn_on(client, pid)
+    where = client.post(f"/api/papers/{pid}/ai").json()["ai"]["reader"]["where_to_look"]
+    assert sum(len(s["spans"]) for s in where) == sum(len(s["spans"]) for s in canned.paper["where_to_look"])
+    assert all(g["lines"] for s in where for g in s["spans"])
+
+
 def test_the_reader_prompt_asks_for_one_complete_sentence_per_span():
     from paperboard.ai import READER_SYSTEM
     assert "the one complete sentence in that span that best answers the slot, copied exactly" in READER_SYSTEM
