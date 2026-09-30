@@ -145,6 +145,7 @@ button { cursor: pointer; }
 .ask-answer { margin: 0; font-family: var(--font-read); font-size: 13px; line-height: var(--leading-read); white-space: pre-wrap; }
 .ask-answer.streaming { color: var(--ink-muted); }
 .ask-grounds { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ask-not-found { margin: 0; font-size: var(--text-ui-small); color: var(--ink-muted); font-style: italic; }
 .ask-grounds .hint { margin: 0; }
 .ask-grounds .chip { cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .ask-grounds .chip:hover { color: var(--cut); }

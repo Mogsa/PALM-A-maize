@@ -268,16 +268,16 @@ def test_define_reads_the_stderr_file_capped_for_the_failure_message():
     assert "x" * 201 not in str(err.value)
 
 
-def test_define_ignores_a_second_structured_output_block_from_a_retry():
+def test_define_forwards_a_retried_structured_output_block_after_the_first():
     """Claude Code can retry a StructuredOutput call that failed its own schema
-    check: a second tool_use block starts, with its own deltas. Only the first
-    block's fragments are ever forwarded, so concatenating them never builds
-    invalid JSON out of two separate attempts."""
-    lines = [tool_start(0), json_delta(0, '{"explanation": "first'),
-             tool_start(1), json_delta(1, '"nope"'),
-             envelope(structured_output={"explanation": "first, complete"})]
+    check: a second tool_use block starts, with its own deltas, and it is the one
+    that counts. Its fragments follow the first attempt's; whoever joins the
+    stream takes the last complete JSON object (ai.last_json_object)."""
+    lines = [tool_start(0), json_delta(0, '{"explanation": "first"}'),
+             tool_start(1), json_delta(1, '{"explanation": "second"}'),
+             envelope(structured_output={"explanation": "second"})]
     deltas = list(ClaudeCodeClaude(popen=FakePopen(FakeProc(lines)), env=ENV).define("S", "w", SCHEMA))
-    assert deltas == ['{"explanation": "first']
+    assert deltas == ['{"explanation": "first"}', '{"explanation": "second"}']
 
 
 def test_define_ignores_json_deltas_from_other_tools_and_subagents():

@@ -14,8 +14,9 @@ model as context so it answers in terms of how *they* are reading it.
 - From a selection's › menu, **Ask about this** opens the panel with the selected words quoted as the
   question's subject.
 - Each answer streams in. Below it, **based on** chips (`p3`, `p5`…) for its grounds; a chip scrolls the
-  paper to that span. An answer whose grounds all fail the grounding rule is an error, as Define's is,
-  and is never saved (changed by the owner after review, 30 September 2026).
+  paper to that span. An answer whose grounds all fail the grounding rule is shown with a plain line
+  "Not found in the paper: treat with care" instead of chips, and kept in the file with no grounds (30 September
+  2026: summaries and comparisons are often answered without one quotable line).
 - An answer can also point at the reader's own note ("your note on §3"): such a ground is a chip that
   opens that note.
 - The paper's latest chat comes back when it opens with AI help on, chips and all (added 30 September 2026: the

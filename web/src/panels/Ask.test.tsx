@@ -174,6 +174,15 @@ describe("Ask panel", () => {
     expect(goTo).toHaveBeenCalledWith(at);
     expect(api.getChat).toHaveBeenCalledWith("p");
   });
+  it("an answer with no grounds left says so instead of chips, and is still a turn", async () => {
+    vi.spyOn(api, "ask").mockResolvedValue({ ...grounded, grounds: [] });
+    render(<Harness />);
+    openThroughCommand();
+    send("What about cats?");
+    expect(await screen.findByText("Not found in the paper: treat with care")).toBeTruthy();
+    expect(screen.getByText(grounded.answer)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /^p\d+$/ })).toBeNull();
+  });
   it("with AI help off the saved chat is not read", () => {
     render(<Harness on={false} />);
     expect(api.getChat).not.toHaveBeenCalled();

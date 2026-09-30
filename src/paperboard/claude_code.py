@@ -108,16 +108,17 @@ def _structured_delta(message: dict, tool_blocks: set[int]) -> str | None:
     """The StructuredOutput JSON fragment in one stream-json line, if it holds one.
 
     Only the top-level turn counts (no parent tool use); `tool_blocks` remembers which content
-    block index is the StructuredOutput call. Only ever the first one: on a retry (a first
-    StructuredOutput call whose output Claude Code itself rejects, followed by a second), a
-    second block's fragments are never tracked, so they are never forwarded and never get
-    concatenated onto the first attempt's, which would otherwise build invalid JSON."""
+    block index is the StructuredOutput call, always the latest one: on a retry (a first
+    StructuredOutput call whose output Claude Code itself rejects, followed by a second, in the
+    same or a later message) the second attempt's fragments follow the first's, and the reader
+    of the whole stream takes the last complete JSON object (`last_json_object`)."""
     if message.get("type") != "stream_event" or message.get("parent_tool_use_id") is not None:
         return None
     event = message.get("event", {})
     if event.get("type") == "content_block_start":
         block = event.get("content_block", {})
-        if block.get("type") == "tool_use" and block.get("name") == STRUCTURED_TOOL and not tool_blocks:
+        if block.get("type") == "tool_use" and block.get("name") == STRUCTURED_TOOL:
+            tool_blocks.clear()
             tool_blocks.add(event.get("index"))
         return None
     delta = event.get("delta", {})

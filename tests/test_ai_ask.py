@@ -150,8 +150,20 @@ def test_grounding_keeps_real_quotes_and_drops_bad_spans_and_unknown_notes():
     assert result.notes == ["n-1"]
 
 
-def test_an_answer_whose_grounds_all_fail_is_none_as_defines_is():
-    assert ask_result(_raw([{"span": "p9-r9", "quote": "x"}]), {s.id: s for s in SPANS}, set()) is None
+def test_an_answer_whose_grounds_all_fail_is_kept_with_none():
+    result = ask_result(_raw([{"span": "p9-r9", "quote": "x"}]), {s.id: s for s in SPANS}, set())
+    assert result is not None and result.answer == "Because depth." and result.grounds == []
+
+
+def test_a_retried_answer_is_read_from_its_last_complete_object():
+    two = _raw([], answer="first try, rejected") + "\n" + _raw([{"span": "p1-r1", "quote": "more difficult to train"}], answer="second")
+    result = ask_result(two, {s.id: s for s in SPANS}, set())
+    assert result is not None and result.answer == "second" and [g.span for g in result.grounds] == ["p1-r1"]
+    assert ask_result('{"answer": "cut off', {}, set()) is None
+
+
+def test_the_ask_prompt_keeps_markup_out_of_the_answer():
+    assert "plain prose with no tags" in ASK_SYSTEM and "quotes go only in grounds" in ASK_SYSTEM
 
 
 @pytest.mark.parametrize("text", ["not json", _raw([], answer="  "), json.dumps([1])])
@@ -304,17 +316,17 @@ def test_an_unusable_answer_is_an_error_line_logged_but_not_chatted(store_root, 
     assert log[0]["kind"] == "ask" and log[0]["raw"] == "not json" and log[0]["grounded"] is None
 
 
-def test_an_answer_with_no_surviving_ground_is_an_error_line_never_a_turn(store_root, paper):
+def test_an_answer_with_no_surviving_ground_is_a_turn_with_no_grounds(store_root, paper):
     store, pid, _ = paper
     fake = FakeClaude(ask_deltas=[_raw([{"span": "p9-r9", "quote": "words not in the paper"}])])
     client = local_client(create_app(store_root, claude=fake))
     _on(client, pid)
-    lines = _lines(_ask(client, pid))
-    assert lines[-1]["error"] == "AI help found nothing in the paper to ground an answer on."
-    assert not any("done" in line for line in lines)
-    assert not (store.paper_dir(pid) / "chat.jsonl").exists()
+    done = _lines(_ask(client, pid))[-1]["done"]
+    assert done["answer"] == "Because depth." and done["grounds"] == []
+    chat = _jsonl(store.paper_dir(pid) / "chat.jsonl")
+    assert len(chat) == 1 and chat[0]["grounds"] == []
     log = _jsonl(store.paper_dir(pid) / "ai-log.jsonl")
-    assert len(log) == 1 and log[0]["kind"] == "ask" and log[0]["grounded"] is None and log[0]["error"] is None
+    assert len(log) == 1 and log[0]["grounded"]["grounds"] == [] and log[0]["error"] is None
 
 
 def test_a_failed_call_is_an_error_line_and_logged(store_root, paper):
