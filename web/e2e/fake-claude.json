@@ -34,5 +34,10 @@
       }
     ]
   },
-  "define": []
+  "define": [],
+  "ask": [
+    "{\"answer\": \"Depth helps once r",
+    "esidual learning removes the degradation problem: the deeper",
+    " ResNets are more accurate, not less.\", \"grounds\": [{\"span\": \"p7-r3\", \"quote\": \"The 50/101/152-layer ResNets are more accurate than the 34-layer ones by considerable margins\"}], \"notes\": []}"
+  ]
 }

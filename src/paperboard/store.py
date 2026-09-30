@@ -108,7 +108,7 @@ class Store:
     # same version can both read it, both pass the check, and both succeed.
     _board_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
     _ai_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
-    # Guards only the append itself (never a Claude call): distinct from _ai_lock,
+    # Guards only the appends to ai-log.jsonl and chat.jsonl (never a Claude call): distinct from _ai_lock,
     # which guards the read-modify-write of ai.json.
     _ai_log_lock: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False, compare=False)
 
@@ -257,8 +257,14 @@ class Store:
         """Append one JSON line to `papers/<id>/ai-log.jsonl`. The file only grows:
         this never rewrites it, and the lock here guards only the append, never a
         Claude call (the caller writes after its call to Claude has already ended)."""
-        path = self.paper_dir(paper_id) / "ai-log.jsonl"
-        line = entry.model_dump_json(by_alias=True) + "\n"
+        self._append_line(self.paper_dir(paper_id) / "ai-log.jsonl", entry)
+
+    def append_chat(self, paper_id: str, turn: BaseModel) -> None:
+        """Append one finished Ask turn to `papers/<id>/chat.jsonl` (Ask spec): only ever appended."""
+        self._append_line(self.paper_dir(paper_id) / "chat.jsonl", turn)
+
+    def _append_line(self, path: Path, record: BaseModel) -> None:
+        line = record.model_dump_json(by_alias=True) + "\n"
         with self._ai_log_lock, open(path, "a", encoding="utf-8") as handle:
             handle.write(line)
             handle.flush()

@@ -4,7 +4,14 @@ import anthropic
 import httpx
 import pytest
 
-from paperboard.ai_client import ASK_MODEL, DEFINER_MODEL, READER_MODEL, AiError, AnthropicClaude, NoClaude
+from paperboard.ai_client import (
+    ASK_MODEL,
+    DEFINER_MODEL,
+    READER_MODEL,
+    AiError,
+    AnthropicClaude,
+    NoClaude,
+)
 
 REQUEST = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 
