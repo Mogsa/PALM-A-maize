@@ -156,8 +156,9 @@ class _Writer:
     or a note is written once, at its first place (addendum 6.1)."""
 
     def __init__(self, doc: SourceDocument, board: Board, notes: dict[str, str],
-                 tags: list[str], tag_names: dict[str, str], sketches: AbstractSet[str]):
+                 tags: list[str], tag_names: dict[str, str], sketches: AbstractSet[str], ids: bool = False):
         self.doc, self.board, self.notes, self.sketches = doc, board, notes, sketches
+        self.ids = ids
         self.tags, self.tag_names = tags, tag_names
         self.out: list[str] = []
         self.written: set[str] = set()
@@ -169,6 +170,11 @@ class _Writer:
 
     def para(self, text: str) -> None:
         self.out += [text, ""]
+
+    def id_of(self, thing_id: str) -> None:
+        """With `ids`, the id of what was just written, as a comment a reader never sees (board.md)."""
+        if self.ids:
+            self.para(f"<!-- id: {thing_id} -->")
 
     def header(self) -> None:
         title = self.doc.sections[0].title if self.doc.sections else self.doc.paper_id
@@ -189,6 +195,7 @@ class _Writer:
         if body:
             # An AI's words are never passed off as the reader's (D14). The reader drew the sketch, so it is unlabelled.
             self.para(f"**AI:** {body}" if self.by_id[note_id].data.origin == "ai" else body)
+        self.id_of(note_id)
         self.written.add(note_id)
 
     def notes_of(self, owner: str) -> None:
@@ -203,6 +210,7 @@ class _Writer:
             meta.append(", ".join(names))
         if meta:
             self.para(f"*{' · '.join(meta)}*")
+        self.id_of(highlight.id)
         self.written.add(highlight.id)
         self.notes_of(highlight.id)
 
@@ -213,6 +221,7 @@ class _Writer:
         if not _wanted(self.tags, node.data.tags) and not any(_wanted(self.tags, h.tags) for h in inside):
             return
         self.para(f"{'#' * level} {_title(node)} (p. {_page_of(node)})")
+        self.id_of(node.id)
         if isinstance(node, FigureNode):
             if node.data.clip:
                 self.para(f"![{_title(node)}]({node.data.clip})")
@@ -266,12 +275,14 @@ class _Writer:
 
 def export_markdown(doc: SourceDocument, board: Board, notes: dict[str, str], pdf: pymupdf.Document,
                     tags: list[str], order: ExportOrder = "paper",
-                    tag_names: dict[str, str] | None = None, sketches: AbstractSet[str] = frozenset()) -> str:
+                    tag_names: dict[str, str] | None = None, sketches: AbstractSet[str] = frozenset(),
+                    ids: bool = False) -> str:
     """The literature note (addendum 6.1). `tags` filters; `order` is the paper's
     (default) or the template's (D19). `tag_names` maps tag ids to the names
     written after a quote; an id it lacks is a deleted tag and is left out (4.3).
-    `sketches` holds the ids of the notes that have a sketch (D23)."""
-    writer = _Writer(doc, board, notes, tags, tag_names or {}, sketches)
+    `sketches` holds the ids of the notes that have a sketch (D23). `ids` writes each
+    highlight's, piece's and note's id after it (board.md, for an agent)."""
+    writer = _Writer(doc, board, notes, tags, tag_names or {}, sketches, ids)
     writer.header()
     if order == "template":
         writer.template_body()
