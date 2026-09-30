@@ -10,6 +10,9 @@ export type NoteStore = {
   save: (nodeId: string, markdown: string) => Promise<void>;
   /** A keystroke: every view shows the text at once, and it is written SAVE_DELAY_MS after the last one. */
   edit: (nodeId: string, markdown: string) => void;
+  /** A note just made here has no saved text: it is empty at once, so its field takes typing before any load answers.
+   *  Text already here (written before the note was put on the board) is kept. */
+  created: (nodeId: string) => void;
   /** Writes this note's pending edit now (the field lost focus). Resolves once written; never rejects. */
   commit: (nodeId: string) => Promise<void>;
   /** Writes every pending edit now, tries failed writes again, and waits for every write. Never rejects: a failure
@@ -83,6 +86,12 @@ export function createNoteStore(io: NoteIO, delayMs = SAVE_DELAY_MS): NoteStore 
   const write = (id: string): Promise<void> =>
     save(id, texts.get(id) ?? "").catch((error: unknown) => console.error(`Could not save note ${id}`, error));
   const commit = (id: string): Promise<void> => (pending.has(id) ? write(id) : Promise.resolve());
+  const created = (id: string) => {
+    if (texts.has(id)) return;
+    texts.set(id, "");
+    if (!sketches.has(id)) sketches.set(id, 0);
+    emit();
+  };
   const edit = (id: string, markdown: string) => {
     cancelPending(id);
     texts.set(id, markdown);
@@ -98,7 +107,7 @@ export function createNoteStore(io: NoteIO, delayMs = SAVE_DELAY_MS): NoteStore 
     if (failedIds.size) throw new Error(`${failedIds.size} note${failedIds.size === 1 ? "" : "s"} could not be saved.`);
   });
   return {
-    peek: (id) => texts.get(id), load, save, edit, commit, flush, settled,
+    peek: (id) => texts.get(id), load, save, created, edit, commit, flush, settled,
     hasUnsaved: () => pending.size > 0 || inFlight > 0 || failedIds.size > 0,
     failed: (id) => failedIds.has(id),
     sketchVersion: (id) => sketches.get(id) ?? 0,

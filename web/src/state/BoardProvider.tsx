@@ -162,7 +162,15 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
   const activity = useActivity(paperId, source !== null, view);
   // The views dispatch the reader's changes through this, so each is logged in one place. The provider's own
   // dispatches (load, save, first-open layout, Add missing sections) are not the reader's building and are not logged.
-  const readerDispatch = useMemo(() => loggedDispatch(dispatch, () => latest.current, activity.log), [activity]);
+  // A note the reader just made is empty at once: its field must not wait read-only for a GET of a file that does not
+  // exist, or what is typed straight away is lost.
+  const readerDispatch = useMemo(() => {
+    const logged = loggedDispatch(dispatch, () => latest.current, activity.log);
+    return (action: BoardAction) => {
+      for (const id of newNoteIds(action, latest.current.board.nodes)) notes.created(id);
+      logged(action);
+    };
+  }, [activity, notes]);
 
   const words = useMemo(() => paperWords(source?.page_text ?? []), [source]);
   const value = useMemo(() => (source
@@ -179,6 +187,13 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
   }
   if (!value) return <p className="loading">Loading</p>;
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
+}
+
+/** The notes an `add` puts on the board that were not on it: made just now, so no text of theirs is saved yet. */
+function newNoteIds(action: BoardAction, onBoard: BoardNode[]): string[] {
+  if (action.type !== "add") return [];
+  const known = new Set(onBoard.map((n) => n.id));
+  return (action.nodes ?? []).filter((n) => n.type === "note" && !known.has(n.id)).map((n) => n.id);
 }
 
 export function useBoard(): Ctx {

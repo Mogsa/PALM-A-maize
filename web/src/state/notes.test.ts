@@ -142,6 +142,29 @@ describe("the note store, while typing (I1)", () => {
   });
 });
 
+describe("the note store, a note just made", () => {
+  it("created: the note is empty at once, with nothing to load and nothing to write", async () => {
+    const get = vi.fn(async () => file("never read"));
+    const put = vi.fn(async () => undefined);
+    const store = createNoteStore({ get, put });
+    const listener = vi.fn();
+    store.subscribe(listener);
+    store.created("n-1");
+    expect(store.peek("n-1")).toBe("");
+    expect(listener).toHaveBeenCalled();
+    expect(await store.load("n-1")).toBe("");
+    expect(get).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+    expect(store.hasUnsaved()).toBe(false);
+  });
+  it("created leaves a note's text already here alone", async () => {
+    const store = createNoteStore({ get: vi.fn(), put: vi.fn(async () => undefined) });
+    await store.save("n-1", "written first");
+    store.created("n-1");
+    expect(store.peek("n-1")).toBe("written first");
+  });
+});
+
 describe("the note store, sketches (D23)", () => {
   it("a loaded note says whether it has a sketch", async () => {
     const store = createNoteStore({ get: vi.fn(async (id: string) => file("", id === "n-drawn")), put: vi.fn() });
