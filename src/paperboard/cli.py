@@ -19,7 +19,8 @@ from paperboard.store import atomic_write
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
-DEFAULT_WEB = Path("web") / "dist"
+# web/dist beside the package (src/paperboard/ → repo root), so serve finds it from any folder.
+DEFAULT_WEB = Path(__file__).resolve().parents[2] / "web" / "dist"
 # TEST ONLY: names a JSON answer for a canned Claude (e2e). Unset, serve talks to the real API.
 FAKE_CLAUDE_ENV = "PAPERBOARD_FAKE_CLAUDE"
 API_KEY_ENV = "ANTHROPIC_API_KEY"
@@ -76,7 +77,8 @@ def build_app(root: Path, web: Path = DEFAULT_WEB, claude: ClaudeClient | None =
     else:
         @application.get("/")
         def placeholder():
-            return {"message": "paperboard API is running; the web build is not present"}
+            return {"message": f"paperboard API is running, but no web build was found at {web}. "
+                               "Run `cd web && npm run build`, or pass --web <folder>."}
     return application
 
 

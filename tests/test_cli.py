@@ -177,3 +177,12 @@ def test_nothing_available_fails_plainly_on_each_call(tmp_path):
             call()
         assert err.value.code == "no_claude"
         assert str(err.value) == "no Claude available: log in to Claude Code, or save an API key"
+
+
+def test_the_default_web_build_is_found_next_to_the_code_from_any_folder(tmp_path, monkeypatch):
+    """`paperboard serve` run outside the repo folder still finds web/dist beside the package."""
+    from paperboard.cli import DEFAULT_WEB
+    monkeypatch.chdir(tmp_path)
+    assert DEFAULT_WEB.is_absolute()
+    assert DEFAULT_WEB.parts[-2:] == ("web", "dist")
+    assert (DEFAULT_WEB.parent.parent / "src" / "paperboard" / "cli.py").is_file()
