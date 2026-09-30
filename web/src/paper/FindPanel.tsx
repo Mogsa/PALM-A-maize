@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { sectionRef } from "../model/sections";
 import type { PageRect } from "../model/types";
 import { useBoard } from "../state/BoardProvider";
@@ -8,16 +8,34 @@ import type { FindMark } from "./useFindMark";
 
 export const FIND_QUERY_MAX = 80;
 
-/** Find's state: the words searched for, and the hit last picked, which is marked on its page. */
-export function useFind(jumpTo: (at: PageRect) => void) {
+/** Find's state: the words searched for, and the hit last picked, which is marked on its page. `onRun` hears of a find
+ *  run, for the activity log: opened with words (from a selection or a card), or a result picked; once per query, since
+ *  the list updates at every keystroke. */
+export function useFind(jumpTo: (at: PageRect) => void, onRun: (text: string) => void = () => undefined) {
   const [query, setQuery] = useState<string | null>(null);
   const [findMark, setFindMark] = useState<FindMark | null>(null);
-  const open = useCallback((text: string) => setQuery(text.replace(/\s+/g, " ").trim().slice(0, FIND_QUERY_MAX)), []);
+  const lastRun = useRef<string | null>(null);
+  const onRunRef = useRef(onRun);
+  onRunRef.current = onRun;
+  const run = useCallback((text: string) => {
+    if (!text.trim() || text === lastRun.current) return;
+    lastRun.current = text;
+    onRunRef.current(text);
+  }, []);
+  const open = useCallback((text: string) => {
+    const words = text.replace(/\s+/g, " ").trim().slice(0, FIND_QUERY_MAX);
+    setQuery(words);
+    run(words);
+  }, [run]);
   return {
     query, findMark, open,
     edit: (text: string) => setQuery(text.slice(0, FIND_QUERY_MAX)),
-    pick: (hit: FindHit, nth: number) => { setFindMark({ page: hit.page, query: hit.match, nth }); jumpTo({ page: hit.page, rect: [0, 0, 0, 0] }); },
-    close: () => { setQuery(null); setFindMark(null); },
+    pick: (hit: FindHit, nth: number) => {
+      if (query !== null) run(query);
+      setFindMark({ page: hit.page, query: hit.match, nth });
+      jumpTo({ page: hit.page, rect: [0, 0, 0, 0] });
+    },
+    close: () => { setQuery(null); setFindMark(null); lastRun.current = null; },
   };
 }
 

@@ -49,7 +49,7 @@ export function PaperScreen({ focus, onFocusHandled, onOpenOnBoard, findRequest,
   const [error, setError] = useState<string | null>(null);
   const [jump, setJump] = useState<PageRect | null>(null);
   const connect = useConnect(setError);
-  const find = useFind(setJump);
+  const find = useFind(setJump, (text) => board.activity.log("read", "find", { text }));
   // Find in paper asked for from ⌘K or a card: a fresh object each time, consumed once.
   const openFind = find.open;
   useEffect(() => {
