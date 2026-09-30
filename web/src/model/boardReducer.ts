@@ -14,8 +14,8 @@ export type TagTarget = "node" | "highlight" | "edge";
 export type Removal = { nodeIds?: string[]; edgeIds?: string[]; highlightIds?: string[] };
 export type FigureClip = { id: string; clip: string; clip_size: { width: number; height: number } };
 /** Split here, Cut out and Join (addendum 4.10): `keep` replaces the chunk with its id, `add` goes in just after it,
- *  `removeIds` go, and their edges move to `keep`. */
-export type Reshape = { keep: ChunkNode; add?: ChunkNode[]; removeIds?: string[] };
+ *  `removeIds` go, and their edges move to `keep`. `op` names it for the activity log only; the reducer ignores it. */
+export type Reshape = { keep: ChunkNode; add?: ChunkNode[]; removeIds?: string[]; op?: "split" | "cutout" | "join" };
 
 /** What the reader made or changed: one undo step each, unless `merge` joins it to the gesture in progress. */
 type EditAction =

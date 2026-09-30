@@ -70,7 +70,7 @@ export function TextPopover({ selection, menuOpen = false, onClose }: { selectio
       const plan = recutPlan(chunk, await api.recut(paperId, chunk.data.region, selection.quote, mode));
       return plan ? { value: plan } : { problem: NOTHING_TO_DIVIDE[mode] };
     },
-    (plan) => { dispatch({ type: "reshape", ...plan }); closeAfter(); },
+    (plan) => { dispatch({ type: "reshape", ...plan, op: mode === "cut" ? "cutout" : "split" }); closeAfter(); },
   );
   /** Add note: the mark and a note of the reader's own connected to it, one undo step. */
   const addNote = () => run(

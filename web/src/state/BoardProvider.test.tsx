@@ -17,6 +17,7 @@ vi.mock("../api/client", () => ({
     putClip: vi.fn(),
     getNote: vi.fn(async () => ({ markdown: "" })),
     putNote: vi.fn(async () => undefined),
+    postActivity: vi.fn(async () => undefined),
   },
 }));
 
@@ -189,6 +190,30 @@ describe("useNote, sketches (D23)", () => {
     act(() => note!.sketchSaved(false));
     expect(note!.hasSketch).toBe(false);
     expect(ctx!.state.history.past).toHaveLength(0);
+  });
+});
+
+describe("BoardProvider activity log", () => {
+  const logged = () => vi.mocked(api.postActivity).mock.calls.flatMap((c) => c[1]).map((e) => `${e.kind}:${e.action}`);
+
+  it("logs the session and the reader's board changes, sent when the paper closes", async () => {
+    const { unmount } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    act(() => ctx!.dispatch({ type: "addHighlight", highlight }));
+    unmount();
+    await waitFor(() => expect(api.postActivity).toHaveBeenCalled());
+    expect(logged()).toEqual(["session:open", "build:highlight", "session:close"]);
+    expect(vi.mocked(api.postActivity).mock.calls[0][0]).toBe("p");
+  });
+
+  it("logs nothing for a paper whose log is off", async () => {
+    vi.mocked(api.getView).mockResolvedValueOnce({ ...defaultPaperView, log: false });
+    const { unmount } = render(<BoardProvider paperId="p"><Probe /></BoardProvider>);
+    await waitFor(() => expect(ctx).not.toBeNull());
+    act(() => ctx!.dispatch({ type: "addHighlight", highlight }));
+    unmount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(api.postActivity).not.toHaveBeenCalled();
   });
 });
 

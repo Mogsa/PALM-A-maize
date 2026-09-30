@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { loggedDispatch } from "../activity/boardEvents";
 import { useActivity, type Activity } from "../activity/useActivity";
 import { api } from "../api/client";
 import { paperWords } from "../board/marks";
@@ -159,10 +160,15 @@ export function BoardProvider({ paperId, children }: { paperId: string; children
   }, [paperId, source, flush, storeClips]);
 
   const activity = useActivity(paperId, source !== null, view);
+  // The views dispatch the reader's changes through this, so each is logged in one place. The provider's own
+  // dispatches (load, save, first-open layout, Add missing sections) are not the reader's building and are not logged.
+  const readerDispatch = useMemo(() => loggedDispatch(dispatch, () => latest.current, activity.log), [activity]);
 
   const words = useMemo(() => paperWords(source?.page_text ?? []), [source]);
-  const value = useMemo(() => (source ? { state, dispatch, source, words, notice, paperId, notes, view, setView, flushView, flush, split, activity } : null),
-    [state, source, words, notice, paperId, notes, view, setView, flushView, flush, split, activity]);
+  const value = useMemo(() => (source
+    ? { state, dispatch: readerDispatch, source, words, notice, paperId, notes, view, setView, flushView, flush, split, activity }
+    : null),
+  [state, readerDispatch, source, words, notice, paperId, notes, view, setView, flushView, flush, split, activity]);
   if (!value && failure) {
     return (
       <div className="loading load-failed" role="alert">

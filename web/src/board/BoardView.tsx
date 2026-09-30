@@ -180,7 +180,7 @@ function Inner({ onOpenInPaper, active = true, focusNode, onFocusHandled, noteRe
     offerCut(async (at) => {
       const pieces = await api.recut(paperId, chunk.data.region, words.quote, "cut");
       const plan = recutPlan(chunk, pieces);
-      if (plan) dispatch({ type: "reshape", ...placePiece(plan, pieceIndexOf(pieces, words.quote), at) });
+      if (plan) dispatch({ type: "reshape", ...placePiece(plan, pieceIndexOf(pieces, words.quote), at), op: "cutout" });
     });
   };
   const onDragOver = (event: React.DragEvent) => { if (isCutDrag(event.dataTransfer.types)) event.preventDefault(); };
