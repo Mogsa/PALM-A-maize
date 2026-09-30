@@ -16,10 +16,11 @@ const groups: KeySentenceGroup[] = [
 const goTo = vi.fn();
 const dispatch = vi.fn();
 vi.mock("../ai/AiProvider", () => ({ useAi: () => ({ keySentences: groups, goTo }) }));
-vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ dispatch }) }));
+const board = vi.hoisted(() => ({ highlights: [] as unknown[] }));
+vi.mock("../state/BoardProvider", () => ({ useBoard: () => ({ dispatch, state: { board } }) }));
 import { KeySentences } from "./KeySentences";
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); board.highlights = []; });
 
 describe("KeySentences panel", () => {
   it("lists the sentences grouped by slot, in order, each with its page, marked AI", () => {
@@ -50,5 +51,12 @@ describe("KeySentences panel", () => {
       anchor: { rects: [r(2, 100), r(2, 112)], quote: { exact: "Deep nets degrade.", prefix: "", suffix: "" }, position: 0, state: "anchored" },
     } });
     expect(goTo).not.toHaveBeenCalled();   // keeping is not a jump
+  });
+  it("a sentence already kept shows Kept instead of Keep, so it is never kept twice", () => {
+    board.highlights = [{ id: "h-1", tags: [], anchor: { rects: [r(2, 100), r(2, 112)], quote: { exact: "Deep nets degrade.", prefix: "", suffix: "" }, position: 0, state: "anchored" } }];
+    const { getAllByRole } = render(<KeySentences />);
+    const first = getAllByRole("listitem")[0];
+    expect(within(first).queryByRole("button", { name: /Keep/ })).toBeNull();
+    expect(first.textContent).toContain("Kept");
   });
 });

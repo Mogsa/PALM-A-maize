@@ -11,9 +11,13 @@ const keptHighlight = (k: KeySentence): Highlight => ({
   anchor: { rects: k.lines, quote: { exact: k.quote, prefix: "", suffix: "" }, position: 0, state: "anchored" },
 });
 
+/** Kept already: a highlight of the reader's own with the same words on the same first line. */
+const isKept = (k: KeySentence, highlights: Highlight[]) => highlights.some((h) => h.anchor.quote.exact === k.quote
+  && h.anchor.rects[0]?.page === k.lines[0]?.page);
+
 function Entry({ sentence }: { sentence: KeySentence }) {
   const { goTo } = useAi();
-  const { dispatch } = useBoard();
+  const { dispatch, state } = useBoard();
   const where = sentence.lines[0] ?? sentence.at;
   return (
     <li>
@@ -21,7 +25,8 @@ function Entry({ sentence }: { sentence: KeySentence }) {
         <span className="quote">{sentence.quote}</span> <span className="where">p. {sentence.page + 1}</span>
       </button>
       {/* Without its lines there is nothing to mark: Keep would make a highlight with no place on the page. */}
-      {sentence.lines.length > 0 && (
+      {sentence.lines.length > 0 && isKept(sentence, state.board.highlights) && <span className="kept">Kept</span>}
+      {sentence.lines.length > 0 && !isKept(sentence, state.board.highlights) && (
         <button type="button" className="quiet keep" onClick={() => dispatch({ type: "addHighlight", highlight: keptHighlight(sentence) })}
                 title="Make it a highlight of your own">Keep</button>
       )}
