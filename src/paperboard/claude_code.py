@@ -7,7 +7,7 @@ Same ClaudeClient protocol as AnthropicClaude. Each call runs the `claude` CLI o
 - with the prompt on stdin and a list argv, never through a shell.
 
 Claude Code answers a --json-schema by calling its StructuredOutput tool. The whole read takes
-`structured_output` from the result envelope; Define streams that tool's JSON as it is written.
+`structured_output` from the result envelope; Define and Ask stream that tool's JSON as it is written.
 """
 
 import json
@@ -18,6 +18,8 @@ import threading
 from collections.abc import Callable, Iterator, Mapping
 
 from paperboard.ai_client import (
+    ASK_EFFORT,
+    ASK_MODEL,
     DEFINER_EFFORT,
     DEFINER_MODEL,
     READER_EFFORT,
@@ -29,6 +31,7 @@ from paperboard.ai_client import (
 CLAUDE_EXE = "claude"
 READ_TIMEOUT = 600      # seconds: the whole-paper read
 DEFINE_TIMEOUT = 60     # seconds: one quick definition
+ASK_TIMEOUT = 180       # seconds: one question about the whole paper
 STRUCTURED_TOOL = "StructuredOutput"
 STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL")
 # Without this, Claude Code tends to write prose first and only then call the tool.
@@ -129,11 +132,12 @@ class ClaudeCodeClaude:
 
     def __init__(self, run: Callable = subprocess.run, popen: Callable = subprocess.Popen,
                  env: Mapping[str, str] | None = None, define_timeout: float = DEFINE_TIMEOUT,
-                 stderr_factory: Callable = _default_stderr_file):
+                 stderr_factory: Callable = _default_stderr_file, ask_timeout: float = ASK_TIMEOUT):
         self._run = run            # seams: tests pass fakes, so no test starts a real process
         self._popen = popen
         self._env = env
         self._define_timeout = define_timeout
+        self._ask_timeout = ask_timeout
         self._stderr_factory = stderr_factory   # a real file, never a pipe: see define()
 
     def _child_env(self) -> dict[str, str]:
@@ -159,7 +163,17 @@ class ClaudeCodeClaude:
         return ReadResult(_structured(result), done.stdout)
 
     def define(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
-        argv = _argv(DEFINER_MODEL, DEFINER_EFFORT, system, schema, stream=True)
+        yield from self._streamed(DEFINER_MODEL, DEFINER_EFFORT, self._define_timeout, "a minute",
+                                  system, prompt, schema)
+
+    def ask(self, system: str, prompt: str, schema: dict) -> Iterator[str]:
+        yield from self._streamed(ASK_MODEL, ASK_EFFORT, self._ask_timeout, "three minutes", system, prompt, schema)
+
+    def _streamed(self, model: str, effort: str, timeout: float, said: str, system: str, prompt: str,
+                  schema: dict) -> Iterator[str]:
+        """One streamed call: the StructuredOutput JSON as it is written, then a plain AiError if it failed.
+        `said` is the timeout in words, for its message."""
+        argv = _argv(model, effort, system, schema, stream=True)
         # stderr goes to a real file, never a pipe: a pipe nobody reads fills up and blocks
         # the child once it writes enough to it, and we do want the child's stderr for the
         # failure message below, just not by continuously reading a pipe while streaming.
@@ -170,7 +184,7 @@ class ClaudeCodeClaude:
             except FileNotFoundError as exc:
                 raise AiError("no_claude", "the `claude` command was not found") from exc
             expired = threading.Event()
-            timer = threading.Timer(self._define_timeout, lambda: (expired.set(), proc.kill()))
+            timer = threading.Timer(timeout, lambda: (expired.set(), proc.kill()))
             timer.start()
             try:
                 result = yield from self._stream(proc, prompt)
@@ -181,7 +195,7 @@ class ClaudeCodeClaude:
             stderr_file.seek(0)
             stderr_text = stderr_file.read(DETAIL_CHARS)
         if expired.is_set():
-            raise AiError("timeout", "Claude Code took longer than a minute")
+            raise AiError("timeout", f"Claude Code took longer than {said}")
         if result is None:
             raise _failure(stderr_text)
         _structured(result)
