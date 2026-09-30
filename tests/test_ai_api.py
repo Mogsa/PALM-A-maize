@@ -240,6 +240,37 @@ def test_a_quote_the_paper_does_not_have_has_no_lines(store_root, paper):
     assert _lines(store, pid, spans, "Protein folding is solved by attention alone, we claim.") == []
 
 
+def _key_sentence_answer():
+    return {"terms": [], "where_to_look": [{"slot": "Problem", "spans": [{"span": "p1-r8", "quote": WRAPPED}]}]}
+
+
+def test_a_pass_saves_each_key_sentence_with_its_lines(store_root, paper):
+    store, pid, _ = paper
+    client = _client(store_root, FakeClaude(paper=_key_sentence_answer()))
+    _turn_on(client, pid)
+    [ground] = client.post(f"/api/papers/{pid}/ai").json()["ai"]["reader"]["where_to_look"][0]["spans"]
+    assert len(ground["lines"]) == 3
+    assert len(store.read_ai(pid).reader.where_to_look[0].spans[0].lines) == 3
+
+
+def test_get_fills_lines_for_a_pass_saved_without_them_and_writes_nothing(store_root, paper):
+    store, pid, _ = paper
+    import pymupdf
+
+    from paperboard.ai import run_pass
+    from paperboard.ai_model import AiFile
+    doc = store.read_source(pid)
+    with pymupdf.open(store.pdf_path(pid)) as pdf:
+        reader = run_pass(doc, pdf, ["Problem"], FakeClaude(paper=_key_sentence_answer()))
+    old = reader.model_copy(update={"where_to_look": [s.model_copy(update={
+        "spans": [g.model_copy(update={"lines": []}) for g in s.spans]}) for s in reader.where_to_look]})
+    store.update_ai(pid, lambda _: AiFile(extracted_at=doc.extracted_at, reader=old))
+    fake = FakeClaude()
+    body = _client(store_root, fake).get(f"/api/papers/{pid}/ai").json()
+    assert len(body["ai"]["reader"]["where_to_look"][0]["spans"][0]["lines"]) == 3
+    assert fake.calls == [] and store.read_ai(pid).reader.where_to_look[0].spans[0].lines == []
+
+
 def test_an_ai_pass_never_clears_a_question(store_root, paper):
     _, pid, spans = paper
     client = _client(store_root, FakeClaude(paper=_answer(spans[0])))

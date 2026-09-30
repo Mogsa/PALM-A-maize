@@ -23,7 +23,9 @@ from paperboard.ai import (
     define_prompt,
     define_stream,
     log_entry,
+    missing_lines,
     run_pass,
+    with_lines,
     word_key,
 )
 from paperboard.ai_client import DEFINER_MODEL, AiError, AnthropicClaude, ClaudeClient
@@ -523,7 +525,15 @@ def create_app(root: Path, claude: ClaudeClient | None = None) -> FastAPI:
         status = "running" if paper_id in ai_running else ("done" if ai and ai.reader else "none")
         if ai is None and status == "none":
             return _error(404, "ai_not_found", f"no AI pass for {paper_id}")
-        return ai_status(paper_id, status, ai)
+        return ai_status(paper_id, status, with_key_sentence_lines(paper_id, ai))
+
+    def with_key_sentence_lines(paper_id: str, ai: AiFile | None) -> AiFile | None:
+        """A pass saved before key sentences had lines, shown with them; ai.json is left as it is."""
+        if not missing_lines(ai and ai.reader):
+            return ai
+        with opened(paper_id) as pdf:
+            where = with_lines(ai.reader.where_to_look, build_index(store.read_source(paper_id)), pdf)
+        return ai.model_copy(update={"reader": ai.reader.model_copy(update={"where_to_look": where})})
 
     def _turn_ai_off(paper_id: str) -> None:
         """Read-modify-write of view.json's `ai` flag, kept as short as possible

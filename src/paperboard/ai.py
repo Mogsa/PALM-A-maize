@@ -20,8 +20,9 @@ from paperboard.ai_model import (
     Definition,
     Ground,
     ReaderPass,
+    SlotSpans,
 )
-from paperboard.anchoring import PageIndex, find_quote, global_position, matched_lines
+from paperboard.anchoring import PageIndex, build_index, find_quote, global_position, matched_lines
 from paperboard.board_model import QuoteSelector
 from paperboard.geometry import Rect
 from paperboard.grounding import ground_all, ground_pass, normalise
@@ -102,6 +103,7 @@ def run_pass(doc: SourceDocument, pdf: pymupdf.Document, slot_names: list[str], 
         raise err from exc
     pages = words_by_page(pdf)
     terms = [t.model_copy(update={"occurrences": term_occurrences(t.term, pages)}) for t in terms]
+    where = with_lines(where, build_index(doc), pdf)
     reader = ReaderPass(model=READER_MODEL, made_at=datetime.now(UTC), terms=terms, where_to_look=where)
     _log(read.raw, reader.model_dump(mode="json"), None)
     return reader
@@ -116,6 +118,18 @@ def quote_lines(ground: Ground, index: list[PageIndex], pdf: pymupdf.Document) -
     page = ground.at.page if ground.at else 0
     match = find_quote(index, QuoteSelector(exact=ground.quote), global_position(index, page, 0), page)
     return (matched_lines(pdf, index, match) or []) if match else []
+
+
+def with_lines(where: list[SlotSpans], index: list[PageIndex], pdf: pymupdf.Document) -> list[SlotSpans]:
+    """Every key sentence with its lines, finding only those it lacks: a pass saved
+    before key sentences had lines gets them without asking the model again."""
+    def filled(ground: Ground) -> Ground:
+        return ground if ground.lines else ground.model_copy(update={"lines": quote_lines(ground, index, pdf)})
+    return [slot.model_copy(update={"spans": [filled(g) for g in slot.spans]}) for slot in where]
+
+
+def missing_lines(reader: ReaderPass | None) -> bool:
+    return bool(reader) and any(not g.lines for slot in reader.where_to_look for g in slot.spans)
 
 
 def word_key(word: str) -> str:
